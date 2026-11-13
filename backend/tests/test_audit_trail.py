@@ -497,3 +497,40 @@ async def test_audit_rows_exist_in_the_database(
         )
     ).scalars().all()
     assert stored, "the audit row must be persisted in the same transaction"
+
+
+async def test_audit_list_resolves_actor_to_username_and_public_id(
+    client, admin_token, customer_token, db_session
+):
+    """界面上要给用户名与用户编号，而不是裸 actor_id。
+
+    租户审计表只存 actor_id（不存冗余名字），所以接口必须 join 出可读信息；
+    用户被删时保持 None，前端自己显示「已删除」。
+    """
+    order_id = await _place_order(client, customer_token, db_session)
+    rows = await _logs(client, admin_token, action="order.created", target_id=order_id)
+    assert rows
+    row = rows[0]
+    assert row["actor_id"] is not None
+    assert row["actor_username"], "列表必须带出操作人用户名"
+    assert row["actor_public_id"], "列表必须带出对外用户编号"
+    assert row["actor_public_id"].startswith("usr_")
+
+
+async def test_audit_list_tolerates_missing_actor(client, admin_token, db_session):
+    """没有 actor 的系统行（如种子数据 / 后台任务）不能因此报错。"""
+    db_session.add(
+        AuditLog(
+            tenant_id=1,
+            actor_id=None,
+            action="system.placeholder",
+            target_type="tenant",
+            target_id="1",
+        )
+    )
+    await db_session.flush()
+
+    rows = await _logs(client, admin_token, action="system.placeholder")
+    assert rows
+    assert rows[0]["actor_id"] is None
+    assert rows[0]["actor_username"] is None

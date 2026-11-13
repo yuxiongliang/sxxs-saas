@@ -390,6 +390,9 @@ export const saveNotificationTemplate = (
 export interface PlatformAuditRecord {
   id: number;
   actor_id: number | null;
+  /** 操作人用户名 / 对外用户编号（后端 join 出来，用户被删时为空） */
+  actor_username?: string | null;
+  actor_public_id?: string | null;
   action: string;
   target_type: string;
   target_id: string;

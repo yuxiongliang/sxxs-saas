@@ -19,17 +19,22 @@ async def list_platform_audit(
     db: AsyncSession = Depends(get_db),
 ):
     rows, total = await audit_service.list_platform_logs(db, current, pageSize)
-    items = [
-        {
-            "id": row.id,
-            "actor_id": row.actor_id,
-            "action": row.action,
-            "target_type": row.target_type,
-            "target_id": row.target_id,
-            "before": row.before,
-            "after": row.after,
-            "created_at": row.created_at,
-        }
-        for row in rows
-    ]
+    items = []
+    actors = await audit_service.actor_directory(db, rows)
+    for row in rows:
+        username, public_id = actors.get(row.actor_id or 0, (None, None))
+        items.append(
+            {
+                "id": row.id,
+                "actor_id": row.actor_id,
+                "actor_username": username,
+                "actor_public_id": public_id,
+                "action": row.action,
+                "target_type": row.target_type,
+                "target_id": row.target_id,
+                "before": row.before,
+                "after": row.after,
+                "created_at": row.created_at,
+            }
+        )
     return ok(page_data(items, total, current, pageSize))

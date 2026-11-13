@@ -11,6 +11,7 @@ import {
   Table,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
@@ -37,6 +38,7 @@ const AuditPage: React.FC = () => {
   const [targetId, setTargetId] = useState<string>();
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<AuditLogRecord>();
+  const { token } = theme.useToken();
 
   const actions = useQuery({
     queryKey: ['audit-actions'],
@@ -56,10 +58,29 @@ const AuditPage: React.FC = () => {
 
   const columns: ColumnsType<AuditLogRecord> = [
     {
-      title: '时间',
-      dataIndex: 'created_at',
-      width: 190,
-      render: (value: string) => new Date(value).toLocaleString(),
+      // 裸 actor_id 对运营没意义；用对外用户编号（与用户管理页同一套）
+      title: '用户ID',
+      dataIndex: 'actor_public_id',
+      width: 220,
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Text code copyable={{ text: value }}>
+            {value}
+          </Typography.Text>
+        ) : (
+          <Typography.Text type="secondary">—</Typography.Text>
+        ),
+    },
+    {
+      title: '用户名',
+      dataIndex: 'actor_username',
+      width: 140,
+      render: (value: string | null, record) =>
+        value ?? (
+          <Typography.Text type="secondary">
+            {record.actor_id ? '已删除' : '系统'}
+          </Typography.Text>
+        ),
     },
     {
       title: '动作',
@@ -80,8 +101,13 @@ const AuditPage: React.FC = () => {
         </Space>
       ),
     },
-    { title: '操作人', dataIndex: 'actor_id', width: 100 },
-    { title: '租户', dataIndex: 'tenant_id', width: 90 },
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      width: 190,
+      render: (value: string) => new Date(value).toLocaleString(),
+    },
+    // 租户列已删除：这个页面本来就是当前租户自己的审计，一列相同的值没信息量
     {
       title: '来源 IP',
       dataIndex: 'ip',
@@ -179,10 +205,12 @@ const AuditPage: React.FC = () => {
                 {detail.target_type} / {detail.target_id}
               </Descriptions.Item>
               <Descriptions.Item label="操作人">
-                {detail.actor_id ?? '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="租户">
-                {detail.tenant_id ?? '-'}
+                {detail.actor_username ?? (detail.actor_id ? '已删除' : '系统')}
+                {detail.actor_public_id ? (
+                  <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                    {detail.actor_public_id}
+                  </Typography.Text>
+                ) : null}
               </Descriptions.Item>
               <Descriptions.Item label="IP">
                 {detail.ip ?? '-'}
@@ -198,13 +226,21 @@ const AuditPage: React.FC = () => {
               变更前
             </Typography.Title>
             <pre
-              style={{ background: '#fafafa', padding: 12, borderRadius: 8 }}
+              style={{
+                background: token.colorFillQuaternary,
+                padding: 12,
+                borderRadius: 8,
+              }}
             >
               {JSON.stringify(detail.before ?? null, null, 2)}
             </pre>
             <Typography.Title level={5}>变更后</Typography.Title>
             <pre
-              style={{ background: '#fafafa', padding: 12, borderRadius: 8 }}
+              style={{
+                background: token.colorFillQuaternary,
+                padding: 12,
+                borderRadius: 8,
+              }}
             >
               {JSON.stringify(detail.after ?? null, null, 2)}
             </pre>

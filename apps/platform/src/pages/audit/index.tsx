@@ -37,10 +37,17 @@ const columns: ColumnsType<PlatformAuditRecord> = [
     ),
   },
   {
-    title: '操作人 ID',
-    dataIndex: 'actor_id',
-    width: 110,
-    render: (value: number | null) => value ?? '—',
+    title: '用户ID',
+    dataIndex: 'actor_public_id',
+    width: 220,
+    render: (value: string | null) => value ?? '—',
+  },
+  {
+    title: '用户名',
+    dataIndex: 'actor_username',
+    width: 140,
+    render: (value: string | null, record) =>
+      value ?? (record.actor_id ? '已删除' : '系统'),
   },
   {
     title: '变更后',

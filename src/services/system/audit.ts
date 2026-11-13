@@ -5,6 +5,10 @@ export interface AuditLogRecord {
   id: number;
   tenant_id?: number | null;
   actor_id?: number | null;
+  /** 操作人用户名（后端 join 出来；用户已删时为空） */
+  actor_username?: string | null;
+  /** 操作人对外用户编号（随机 20 位） */
+  actor_public_id?: string | null;
   action: string;
   target_type: string;
   target_id: string;

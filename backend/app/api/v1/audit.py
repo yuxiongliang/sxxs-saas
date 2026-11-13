@@ -41,22 +41,29 @@ async def list_audit_logs(
         actor_id=actor_id,
         tenant_id=tenant_id,
     )
-    items = [
-        {
-            "id": row.id,
-            "tenant_id": row.tenant_id,
-            "actor_id": row.actor_id,
-            "action": row.action,
-            "target_type": row.target_type,
-            "target_id": row.target_id,
-            "before": row.before,
-            "after": row.after,
-            "ip": row.ip,
-            "trace_id": row.trace_id,
-            "created_at": row.created_at,
-        }
-        for row in rows
-    ]
+    items = []
+    actors = await audit_service.actor_directory(db, rows)
+    for row in rows:
+        username, public_id = actors.get(row.actor_id or 0, (None, None))
+        items.append(
+            {
+                "id": row.id,
+                "tenant_id": row.tenant_id,
+                "actor_id": row.actor_id,
+                # 裸 actor_id 对运营没有可读性：直接给出用户名与对外用户编号。
+                # 用户被删就保持 None，前端显示 '-'。
+                "actor_username": username,
+                "actor_public_id": public_id,
+                "action": row.action,
+                "target_type": row.target_type,
+                "target_id": row.target_id,
+                "before": row.before,
+                "after": row.after,
+                "ip": row.ip,
+                "trace_id": row.trace_id,
+                "created_at": row.created_at,
+            }
+        )
     return ok(page_data(items, total, current, pageSize))
 
 

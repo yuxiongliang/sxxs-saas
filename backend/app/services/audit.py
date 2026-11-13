@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.request_context import get_request_meta
 from app.models.audit import AuditLog
+from app.models.user import User
 from app.services.auth import AuthContext
 
 logger = structlog.get_logger(__name__)
@@ -97,6 +98,21 @@ def is_platform_viewer(context: AuthContext) -> bool:
     across tenants.
     """
     return "platform_admin" in context.roles or "platform:tenant:read" in context.permissions
+
+
+async def actor_directory(
+    db: AsyncSession, rows: list[AuditLog]
+) -> dict[int, tuple[str, str]]:
+    """把 `actor_id` 批量解析成 `(username, public_id)`。
+
+    审计表只存 actor_id（不存冗余名字）：改了名字应该显示新名字，而不是当时的快照。
+    用户被删/不存在时查不到，调用方要能容忍缺失（前端显示 `-`）。
+    """
+    ids = {row.actor_id for row in rows if row.actor_id}
+    if not ids:
+        return {}
+    users = (await db.scalars(select(User).where(User.id.in_(ids)))).all()
+    return {user.id: (user.username, user.public_id) for user in users}
 
 
 async def list_logs(
