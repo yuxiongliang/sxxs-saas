@@ -10,6 +10,7 @@ from app.models.seller import Seller, Shop
 from app.models.user import User
 from app.schemas.commerce import (
     ProductSkuUpdate,
+    ProductSpecsUpdate,
     ProductStatusRequest,
     ProductUpdate,
     RefundCreateRequest,
@@ -20,6 +21,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.order import OrderCreateRequest
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
+from app.services import catalog_specs
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
@@ -71,6 +73,9 @@ def _product_dict(
         "status": product.status,
         "main_image": product.main_image,
         "images": product.images or [],
+        "video_url": product.video_url,
+        "commission_bps": product.commission_bps,
+        "commission_locked": bool(product.commission_locked),
         "reject_reason": product.reject_reason,
         "created_at": product.created_at.isoformat() if product.created_at else None,
         "updated_at": product.updated_at.isoformat() if product.updated_at else None,
@@ -90,6 +95,9 @@ def _product_dict(
                 "stock": item.stock,
                 "locked_stock": item.locked_stock,
                 "status": item.status,
+                "specs": item.specs or {},
+                "image_url": item.image_url,
+                "video_url": item.video_url,
             }
             for item in sku_list
         ],
@@ -323,13 +331,61 @@ async def admin_product_detail(
     context: AuthContext = Depends(require_permission("product:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    """商品详情（含全部 SKU）。编辑弹窗要靠它回显描述/图片/价格/库存。"""
+    """商品详情（含全部 SKU 与规格树）。编辑弹窗要靠它回显描述/图片/规格/价格/库存。"""
     product = await _load_product(db, context, product_id)
     skus = (await _product_skus(db, [product.id])).get(product.id, [])
     seller = await db.get(Seller, product.seller_id)
     shop = await db.get(Shop, product.shop_id)
     owner = await db.get(User, seller.owner_user_id) if seller else None
-    return ok(_product_dict(product, skus=skus, seller=seller, shop=shop, owner=owner))
+    payload = _product_dict(product, skus=skus, seller=seller, shop=shop, owner=owner)
+    payload["spec_groups"] = await catalog_specs.load_spec_groups(db, product.id)
+    return ok(payload)
+
+
+@router.put("/admin/products/{product_id}/specs")
+async def save_product_specs(
+    product_id: int,
+    payload: ProductSpecsUpdate,
+    context: AuthContext = Depends(require_permission("product:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    """整体保存规格树：笛卡尔积生成 SKU，老组合保留价/库存，消失的组合只停用。"""
+    product = await _load_product(db, context, product_id)
+    skus = await catalog_specs.save_specs(db, product, payload, context.tenant.id)
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_UPDATED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product_specs",
+        target_id=product.id,
+        before=None,
+        after={
+            "groups": ",".join(group.name for group in payload.groups),
+            "sku_count": str(len(skus)),
+        },
+    )
+    await db.commit()
+    await db.refresh(product)
+    return ok(
+        {
+            "id": product.id,
+            "status": product.status,
+            "skus": [
+                {
+                    "id": sku.id,
+                    "sku_code": sku.sku_code,
+                    "name": sku.name,
+                    "price_cents": sku.price_cents,
+                    "stock": sku.stock,
+                    "status": sku.status,
+                    "specs": sku.specs or {},
+                }
+                for sku in skus
+            ],
+        },
+        "规格已保存",
+    )
 
 
 # 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。

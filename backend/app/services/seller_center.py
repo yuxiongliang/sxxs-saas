@@ -113,9 +113,29 @@ async def update_seller_product(
             db, context.tenant.id, product.main_image
         )
 
-    sku = (
-        await db.scalars(select(ProductSku).where(ProductSku.product_id == product.id))
-    ).first()
+    # 多规格后不能“猜第一条 SKU”：卖家改价/改库存必须指明 sku_id，
+    # 否则会静默改到别的规格上（库存流水也跟着错）。
+    all_skus = list(
+        (
+            await db.scalars(
+                select(ProductSku)
+                .where(ProductSku.product_id == product.id)
+                .order_by(ProductSku.id)
+            )
+        ).all()
+    )
+    wanted_sku_id = data.pop("sku_id", None)
+    if wanted_sku_id is not None:
+        sku = next((item for item in all_skus if item.id == wanted_sku_id), None)
+        if sku is None:
+            raise HTTPException(status_code=404, detail="SKU 不存在")
+    elif len(all_skus) > 1 and ("price_cents" in data or "stock" in data):
+        raise HTTPException(
+            status_code=400,
+            detail="多规格商品改价/改库存请指定 sku_id",
+        )
+    else:
+        sku = all_skus[0] if all_skus else None
     price_changed = False
     stock_changed = False
     if sku is not None:

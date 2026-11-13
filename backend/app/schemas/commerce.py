@@ -56,14 +56,46 @@ class SellerProductUpdate(BaseModel):
 
     在售商品改了内容（名称/描述/主图/价格）会**自动打回待审核** —— 否则先提交个
     合规商品过审，再把标题和主图换成违禁内容，审核就白做了。
+
+    多规格后价格/库存必须指明 `sku_id`（不再猜「第一个 SKU」）。
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     subtitle: str | None = Field(default=None, max_length=255)
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
+    sku_id: int | None = Field(default=None, description="要改价/改库存的 SKU；单规格可省略")
     price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
     stock: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class SpecValueIn(BaseModel):
+    value: str = Field(min_length=1, max_length=64)
+    image_url: str | None = Field(default=None, max_length=512)
+    video_url: str | None = Field(default=None, max_length=512)
+
+
+class SpecGroupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    values: list[SpecValueIn] = Field(min_length=1)
+
+
+class SpecSkuIn(BaseModel):
+    """一个规格组合（笛卡尔积）对应的 SKU。`specs` = {组名: 值}。"""
+
+    specs: dict[str, str] = Field(default_factory=dict)
+    price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
+    stock: int | None = Field(default=None, ge=0, le=1_000_000)
+    image_url: str | None = Field(default=None, max_length=512)
+    video_url: str | None = Field(default=None, max_length=512)
+    status: str = Field(default="active", pattern="^(active|inactive)$")
+
+
+class ProductSpecsUpdate(BaseModel):
+    """整体保存规格树 + 每个组合的 SKU。最多三级规格。"""
+
+    groups: list[SpecGroupIn] = Field(default_factory=list, max_length=3)
+    skus: list[SpecSkuIn] = Field(default_factory=list)
 
 
 class SellerProductStatusRequest(BaseModel):

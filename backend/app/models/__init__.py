@@ -3,7 +3,14 @@ from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.billing import Invoice, Plan, TenantSubscription
 from app.models.cart import Address, CartItem
-from app.models.catalog import Category, InventoryLog, Product, ProductSku
+from app.models.catalog import (
+    Category,
+    InventoryLog,
+    Product,
+    ProductSku,
+    ProductSpecGroup,
+    ProductSpecValue,
+)
 from app.models.department import Department
 from app.models.finance import CommissionRule, LedgerEntry, Payout, SettlementBatch
 from app.models.im import Conversation, ConversationMember, ImReport, Message
@@ -51,6 +58,8 @@ __all__ = [
     "PlatformSetting",
     "Product",
     "ProductSku",
+    "ProductSpecGroup",
+    "ProductSpecValue",
     "Refund",
     "Role",
     "RolePermission",

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -50,6 +50,14 @@ class Product(Base, TimestampMixin):
     # 审核驳回原因：卖家要知道为什么被驳回，否则只能反复重提。
     # 上架/重新提交时清空。
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 商品视频（主图/多图之外的展示素材）
+    video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 租户向卖家抽佣的商品级比例（万分比）；NULL = 继承分类默认值。
+    # commission_locked = 已由运营调整过，卖家不能再改回去。
+    commission_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    commission_locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 
@@ -60,7 +68,8 @@ class ProductSku(Base, TimestampMixin):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     seller_id: Mapped[int] = mapped_column(ForeignKey("sellers.id"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
-    sku_code: Mapped[str] = mapped_column(String(64), index=True)
+    # 全局唯一：多规格后一个商品会有 N 条 SKU，旧的 `SKU-{product_id}` 会重复
+    sku_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     price_cents: Mapped[int] = mapped_column(Integer)
     market_price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -68,7 +77,35 @@ class ProductSku(Base, TimestampMixin):
     stock: Mapped[int] = mapped_column(Integer, default=0)
     locked_stock: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(16), default="active")
+    # {"尺码": "XL", "颜色": "黑色"}：规格组名 → 规格值，多规格的商品靠它反查组合
     specs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # SKU 级覆盖图/视频：优先级高于规格值图，再高于商品主图
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+
+class ProductSpecGroup(Base, TimestampMixin):
+    """商品的规格组：尺码 / 颜色 / 款式（最多三级）。"""
+
+    __tablename__ = "product_spec_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    name: Mapped[str] = mapped_column(String(32))
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ProductSpecValue(Base, TimestampMixin):
+    """规格值：XL / 黑色 / 薄款；每个值可挂 1 图或 1 视频。"""
+
+    __tablename__ = "product_spec_values"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("product_spec_groups.id"), index=True)
+    value: Mapped[str] = mapped_column(String(64))
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class InventoryLog(Base):
