@@ -4,6 +4,22 @@ export interface SellerRecord {
   seller_type: string;
   status: string;
   kyc_status: string;
+  /** 卖家归属的登录用户（后台列用） */
+  owner_user_id?: number;
+  owner_username?: string | null;
+  owner_public_id?: string | null;
+}
+
+export interface CategoryRecord {
+  id: number;
+  name: string;
+  slug: string;
+  sort: number;
+  status: string;
+  /** 分类默认抽佣比例（万分比，500 = 5%） */
+  default_commission_bps: number;
+  /** 被多少商品引用（删除前的判据） */
+  product_count: number;
 }
 
 export interface ProductSkuRecord {
@@ -31,6 +47,9 @@ export interface ProductRecord {
   updated_at?: string | null;
   /** 列表里 join 出来的可读名字，不用再显示裸 ID */
   seller_name?: string | null;
+  /** 卖家登录用户名（商品列表第一列用） */
+  seller_owner_username?: string | null;
+  seller_owner_public_id?: string | null;
   shop_name?: string | null;
   sku_count?: number;
   /** 全部 SKU 库存合计 */

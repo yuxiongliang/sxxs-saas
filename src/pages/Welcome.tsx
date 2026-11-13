@@ -119,7 +119,7 @@ export default function WelcomePage() {
               <Link to="/orders">
                 <ShoppingCartOutlined /> {'订单管理'}
               </Link>
-              <Link to="/commerce/products">
+              <Link to="/commerce/products/list">
                 <ShopOutlined /> {'商品管理'}
               </Link>
               <Link to="/finance">

@@ -7,6 +7,7 @@ from app.core.response import ok
 from app.models.catalog import InventoryLog, Product, ProductSku
 from app.models.order import Order, OrderItem, SellerOrder
 from app.models.seller import Seller, Shop
+from app.models.user import User
 from app.schemas.commerce import (
     ProductSkuUpdate,
     ProductStatusRequest,
@@ -15,9 +16,11 @@ from app.schemas.commerce import (
     SellerReviewRequest,
     ShipmentCreateRequest,
 )
+from app.schemas.common import ApiResponse
 from app.schemas.order import OrderCreateRequest
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
+from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
 from app.services.auth import AuthContext
@@ -25,13 +28,21 @@ from app.services.auth import AuthContext
 router = APIRouter(tags=["C2C 商城"])
 
 
-def _seller_dict(seller: Seller) -> dict:
+def _seller_dict(seller: Seller, owner: User | None = None) -> dict:
+    """卖家对外形状。
+
+    `display_name` 是店铺/卖家名，`owner_username` 是登录用户名 —— 后台列表两列都要，
+    只给裸 `owner_user_id` 运营没法判断是谁。
+    """
     return {
         "id": seller.id,
         "display_name": seller.display_name,
         "seller_type": seller.seller_type,
         "status": seller.status,
         "kyc_status": seller.kyc_status,
+        "owner_user_id": seller.owner_user_id,
+        "owner_username": owner.username if owner else None,
+        "owner_public_id": owner.public_id if owner else None,
     }
 
 
@@ -41,6 +52,7 @@ def _product_dict(
     skus: list[ProductSku] | None = None,
     seller: Seller | None = None,
     shop: Shop | None = None,
+    owner: User | None = None,
 ) -> dict:
     """商品对外的统一形状。
 
@@ -63,6 +75,8 @@ def _product_dict(
         "created_at": product.created_at.isoformat() if product.created_at else None,
         "updated_at": product.updated_at.isoformat() if product.updated_at else None,
         "seller_name": seller.display_name if seller else None,
+        "seller_owner_username": owner.username if owner else None,
+        "seller_owner_public_id": owner.public_id if owner else None,
         "shop_name": shop.name if shop else None,
         "sku_count": len(sku_list),
         "stock": sum(item.stock for item in sku_list),
@@ -97,14 +111,17 @@ async def admin_sellers(
     context: AuthContext = Depends(require_permission("seller:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    sellers = list(
+    rows = list(
         (
-            await db.scalars(
-                select(Seller).where(Seller.tenant_id == context.tenant.id).order_by(Seller.id)
+            await db.execute(
+                select(Seller, User)
+                .join(User, User.id == Seller.owner_user_id, isouter=True)
+                .where(Seller.tenant_id == context.tenant.id)
+                .order_by(Seller.id)
             )
         ).all()
     )
-    return ok([_seller_dict(item) for item in sellers])
+    return ok([_seller_dict(seller, owner) for seller, owner in rows])
 
 
 @router.get("/admin/orders/{order_id}")
@@ -259,6 +276,15 @@ async def _load_product(db: AsyncSession, context: AuthContext, product_id: int)
     return product
 
 
+@router.get("/admin/categories", response_model=ApiResponse[list[dict]])
+async def admin_categories(
+    context: AuthContext = Depends(require_permission("product:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """租户端只读：商品分类是平台统一定的，租户只负责选。"""
+    return ok(await category_service.list_categories(db, include_archived=False))
+
+
 @router.get("/admin/products")
 async def admin_products(
     context: AuthContext = Depends(require_permission("product:read")),
@@ -267,9 +293,10 @@ async def admin_products(
     rows = list(
         (
             await db.execute(
-                select(Product, Seller, Shop)
+                select(Product, Seller, Shop, User)
                 .join(Seller, Seller.id == Product.seller_id, isouter=True)
                 .join(Shop, Shop.id == Product.shop_id, isouter=True)
+                .join(User, User.id == Seller.owner_user_id, isouter=True)
                 .where(Product.tenant_id == context.tenant.id)
                 .order_by(Product.id.desc())
             )
@@ -278,8 +305,14 @@ async def admin_products(
     skus = await _product_skus(db, [row[0].id for row in rows])
     return ok(
         [
-            _product_dict(product, skus=skus.get(product.id, []), seller=seller, shop=shop)
-            for product, seller, shop in rows
+            _product_dict(
+                product,
+                skus=skus.get(product.id, []),
+                seller=seller,
+                shop=shop,
+                owner=owner,
+            )
+            for product, seller, shop, owner in rows
         ]
     )
 
@@ -295,7 +328,8 @@ async def admin_product_detail(
     skus = (await _product_skus(db, [product.id])).get(product.id, [])
     seller = await db.get(Seller, product.seller_id)
     shop = await db.get(Shop, product.shop_id)
-    return ok(_product_dict(product, skus=skus, seller=seller, shop=shop))
+    owner = await db.get(User, seller.owner_user_id) if seller else None
+    return ok(_product_dict(product, skus=skus, seller=seller, shop=shop, owner=owner))
 
 
 # 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。
@@ -311,16 +345,24 @@ async def update_product(
 ):
     product = await _load_product(db, context, product_id)
     data = payload.model_dump(exclude_unset=True)
+    if "category_id" in data:
+        await category_service.ensure_category_usable(db, data["category_id"])
     applied: dict[str, object] = {}
     for key in PRODUCT_EDITABLE_FIELDS:
         if key in data:
             setattr(product, key, data[key])
             applied[key] = data[key]
+    if "category_id" in data:
+        product.category_id = data["category_id"]
+        applied["category_id"] = data["category_id"]
     if "main_image" in applied:
         # 商品主图要给匿名访客看：引用的附件必须发布，否则前台只显示破图
         await attachment_service.publish_by_public_url(
             db, context.tenant.id, product.main_image
         )
+    if "images" in applied:
+        for image in product.images or []:
+            await attachment_service.publish_by_public_url(db, context.tenant.id, image)
     if applied:
         await audit_service.record(
             db,

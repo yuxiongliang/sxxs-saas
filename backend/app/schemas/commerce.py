@@ -27,6 +27,7 @@ class ProductUpdate(BaseModel):
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
     images: list[str] | None = None
+    category_id: int | None = None
 
 
 class ProductStatusRequest(BaseModel):

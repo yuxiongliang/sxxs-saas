@@ -93,6 +93,21 @@ export default [
     component: './moderation',
   },
   {
+    // 商品分类与「租户分类」(/tenants/categories) 不是一回事：前者是商品目录，
+    // 后者是租户的业务类目（决定平台向租户抽佣）。分开挂，避免侧边栏两个「分类」。
+    path: '/catalog',
+    name: 'catalog',
+    icon: 'TagsOutlined',
+    routes: [
+      { path: '/catalog', redirect: '/catalog/categories' },
+      {
+        path: '/catalog/categories',
+        name: 'productCategories',
+        component: './catalog/categories',
+      },
+    ],
+  },
+  {
     path: '/settings',
     name: 'settings',
     icon: 'SettingOutlined',

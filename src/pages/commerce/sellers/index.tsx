@@ -1,6 +1,15 @@
 import { ReloadOutlined, ShopOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { App, Button, Card, Popconfirm, Space, Table, Tag } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Popconfirm,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React from 'react';
 import { listAdminSellers, reviewSeller } from '@/services/commerce/api';
@@ -11,6 +20,11 @@ import SettingPage from '../../system/components/SettingPage';
 const statusColor = (status: string) =>
   status === 'active' ? 'success' : status === 'pending' ? 'gold' : 'default';
 
+const SELLER_TYPE_LABEL: Record<string, string> = {
+  individual: '个人',
+  company: '企业',
+};
+
 const SellerManagementPage: React.FC = () => {
   const { message } = App.useApp();
   const { data, isLoading, refetch } = useQuery({
@@ -20,7 +34,26 @@ const SellerManagementPage: React.FC = () => {
 
   const columns: ColumnsType<SellerRecord> = [
     {
-      title: '卖家',
+      title: '用户ID',
+      dataIndex: 'owner_public_id',
+      width: 220,
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Text code copyable={{ text: value }}>
+            {value}
+          </Typography.Text>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      title: '用户名',
+      dataIndex: 'owner_username',
+      width: 140,
+      render: (value: string | null) => value ?? '—',
+    },
+    {
+      title: '卖家名',
       dataIndex: 'display_name',
       render: (_, record) => (
         <Space>
@@ -29,7 +62,12 @@ const SellerManagementPage: React.FC = () => {
         </Space>
       ),
     },
-    { title: '类型', dataIndex: 'seller_type' },
+    {
+      title: '类型',
+      dataIndex: 'seller_type',
+      width: 100,
+      render: (value: string) => SELLER_TYPE_LABEL[value] ?? value,
+    },
     {
       title: 'KYC',
       dataIndex: 'kyc_status',

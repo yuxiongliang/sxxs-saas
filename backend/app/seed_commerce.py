@@ -98,14 +98,21 @@ async def seed_commerce_data(db: AsyncSession) -> None:
             )
         )
 
+    # 分类是平台级的（tenant_id IS NULL）：幂等判据必须按「平台级」找，
+    # 否则每次重建库都会再插一条同名分类（slug 现在有唯一索引，会直接报错）。
     category = (
         await db.scalars(
-            select(Category).where(Category.tenant_id == tenant.id, Category.slug == "digital")
+            select(Category).where(Category.tenant_id.is_(None), Category.slug == "digital")
         )
     ).first()
     if category is None:
         category = Category(
-            tenant_id=tenant.id, name="数码", slug="digital", sort=10, status="active"
+            tenant_id=None,
+            name="数码",
+            slug="digital",
+            sort=10,
+            status="active",
+            default_commission_bps=1000,
         )
         db.add(category)
         await db.flush()

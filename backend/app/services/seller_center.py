@@ -13,7 +13,9 @@ from app.schemas.commerce import (
     SellerProductStatusRequest,
     SellerProductUpdate,
 )
+from app.services import attachment as attachment_service
 from app.services import audit as audit_service
+from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services.auth import AuthContext
 
@@ -105,6 +107,11 @@ async def update_seller_product(
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
             content_changed = True
+    if content_changed and "main_image" in data:
+        # 卖家上传的主图也要发布给匿名访客看（原来只有控制台路径做了，卖家路径漏了）
+        await attachment_service.publish_by_public_url(
+            db, context.tenant.id, product.main_image
+        )
 
     sku = (
         await db.scalars(select(ProductSku).where(ProductSku.product_id == product.id))
@@ -214,6 +221,7 @@ async def create_seller_product(
     seller, shop = await current_seller(db, context)
     if shop is None:
         raise HTTPException(status_code=400, detail="卖家店铺不存在")
+    await category_service.ensure_category_usable(db, payload.category_id)
     product = Product(
         tenant_id=context.tenant.id,
         seller_id=seller.id,

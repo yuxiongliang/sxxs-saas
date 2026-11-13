@@ -7,15 +7,29 @@ from app.models.base import Base, TimestampMixin
 
 
 class Category(Base, TimestampMixin):
+    """商品分类（平台级，全租户共用）。
+
+    `tenant_id` 保留列但**可空**：NULL = 平台级分类（唯一形态）。
+    平台统一建分类并在上面设「分类默认抽佣比例」，租户只能选，不能自建——
+    否则每家租户一套分类，平台的抽佣口径和商品筛选全部碎片化。
+    """
+
     __tablename__ = "categories"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id"), nullable=True, index=True
+    )
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(64))
-    slug: Mapped[str] = mapped_column(String(64))
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     sort: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(16), default="active")
+    # 分类默认抽佣比例（万分比，500=5%）：卖家未在商品上单独填时用它。
+    # 注意与 `service_categories.commission_bps`（平台向**租户**抽）不是一回事。
+    default_commission_bps: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
 
 
 class Product(Base, TimestampMixin):

@@ -2,6 +2,7 @@ import { request } from '@umijs/max';
 import type { ApiResponse } from '@/services/system/types';
 import type {
   AddressRecord,
+  CategoryRecord,
   CartItemRecord,
   CartSummary,
   CommissionRuleRecord,
@@ -152,6 +153,11 @@ export async function confirmPortalOrder(id: number) {
 
 export async function listAdminSellers() {
   return unwrap<SellerRecord[]>(request('/api/v1/admin/sellers', { method: 'GET' }));
+}
+
+/** 商品分类：平台统一定义，租户端只读。 */
+export async function listAdminCategories() {
+  return unwrap<CategoryRecord[]>(request('/api/v1/admin/categories', { method: 'GET' }));
 }
 
 export async function listAdminProducts() {

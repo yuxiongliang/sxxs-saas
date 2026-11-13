@@ -574,3 +574,42 @@ export const verifyTenantDomain = (tenantId: number, domainId: number) =>
 
 export const deleteTenantDomain = (tenantId: number, domainId: number) =>
   apiDelete<null>(`/platform/tenants/${tenantId}/domains/${domainId}`);
+
+// ---------------------------------------------------------------------------
+// 商品分类（平台级，全租户共用；带「租户向卖家抽佣」的分类默认比例）
+// ---------------------------------------------------------------------------
+
+export interface ProductCategoryRecord {
+  id: number;
+  name: string;
+  slug: string;
+  sort: number;
+  status: string;
+  default_commission_bps: number;
+  product_count: number;
+}
+
+export const listProductCategories = () =>
+  apiGet<ProductCategoryRecord[]>('/platform/categories');
+
+export const createProductCategory = (data: {
+  name: string;
+  slug: string;
+  sort?: number;
+  status?: string;
+  default_commission_bps?: number;
+}) => apiPost<ProductCategoryRecord>('/platform/categories', data);
+
+export const updateProductCategory = (
+  id: number,
+  data: {
+    name?: string;
+    slug?: string;
+    sort?: number;
+    status?: string;
+    default_commission_bps?: number;
+  },
+) => apiPut<ProductCategoryRecord>(`/platform/categories/${id}`, data);
+
+export const deleteProductCategory = (id: number) =>
+  apiDelete<null>(`/platform/categories/${id}`);

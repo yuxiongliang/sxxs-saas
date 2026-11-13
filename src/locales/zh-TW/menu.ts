@@ -52,6 +52,8 @@ export default {
   'menu.user-management': '用户管理',
   'menu.seller-management': '卖家管理',
   'menu.product-management': '商品管理',
+  'menu.productList': '商品列表',
+  'menu.productCategories': '商品分類',
   'menu.order-management': '订单管理',
   'menu.message-center': '消息中心',
   'menu.finance-management': '财务结算',

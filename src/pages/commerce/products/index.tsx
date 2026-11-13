@@ -218,6 +218,27 @@ const ProductManagementPage: React.FC = () => {
 
   const columns: ColumnsType<ProductRecord> = [
     {
+      title: '卖家',
+      dataIndex: 'seller_owner_username',
+      width: 140,
+      // 用户 > 卖家名：卖家名是店铺对外名，用户名才是账号主体
+      render: (value: string | null, record) => (
+        <div style={{ fontSize: 12 }}>
+          <div>{value ?? '—'}</div>
+          <div style={{ color: '#8c8c8c' }}>
+            {record.seller_name ?? `卖家 #${record.seller_id}`}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '店铺',
+      dataIndex: 'shop_name',
+      width: 160,
+      render: (value: string | null, record) =>
+        value ?? `店铺 #${record.shop_id}`,
+    },
+    {
       title: '商品',
       dataIndex: 'name',
       render: (_, record) => (
@@ -239,18 +260,6 @@ const ProductManagementPage: React.FC = () => {
             </div>
           </div>
         </Space>
-      ),
-    },
-    {
-      title: '卖家 / 店铺',
-      width: 180,
-      render: (_, record) => (
-        <div style={{ fontSize: 12 }}>
-          <div>{record.seller_name ?? `卖家 #${record.seller_id}`}</div>
-          <div style={{ color: '#8c8c8c' }}>
-            {record.shop_name ?? `店铺 #${record.shop_id}`}
-          </div>
-        </div>
       ),
     },
     {

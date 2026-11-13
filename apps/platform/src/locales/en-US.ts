@@ -26,6 +26,8 @@ export default {
   'menu.billingCommission': 'Commission Ledger',
   'menu.platformUsers': 'Users',
   'menu.moderation': 'Content Review',
+  'menu.catalog': 'Catalog',
+  'menu.productCategories': 'Product Categories',
   'menu.services': 'Service Config',
   'menu.settings': 'Platform Settings',
   'menu.platformSetting': 'Platform Info',

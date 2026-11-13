@@ -16,6 +16,7 @@ from app.api.v1 import (
     platform,
     platform_audit,
     platform_auth,
+    platform_categories,
     platform_domains,
     platform_moderation,
     platform_notification_templates,
@@ -53,6 +54,7 @@ api_router.include_router(platform_moderation.router)
 api_router.include_router(platform_overview.router)
 api_router.include_router(platform_domains.router)
 api_router.include_router(platform_service_categories.router)
+api_router.include_router(platform_categories.router)
 api_router.include_router(platform_users.router)
 api_router.include_router(platform_notification_templates.router)
 api_router.include_router(media.router)

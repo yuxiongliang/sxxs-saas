@@ -320,7 +320,24 @@ export default [
     name: 'product-management',
     icon: 'shopping',
     access: 'canProductManage',
-    component: './commerce/products',
+    routes: [
+      { path: '/commerce/products', redirect: '/commerce/products/list' },
+      {
+        path: '/commerce/products/list',
+        name: 'productList',
+        icon: 'unorderedList',
+        access: 'canProductManage',
+        component: './commerce/products',
+      },
+      {
+        // 分类是平台定的，租户只能看/选；放这里只是让运营知道商品能归哪几类
+        path: '/commerce/products/categories',
+        name: 'productCategories',
+        icon: 'tags',
+        access: 'canProductManage',
+        component: './commerce/products/categories',
+      },
+    ],
   },
   {
     path: '/orders',

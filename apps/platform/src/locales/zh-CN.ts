@@ -28,6 +28,8 @@ export default {
   'menu.billingCommission': '抽佣台账',
   'menu.platformUsers': '用户',
   'menu.moderation': '内容审核',
+  'menu.catalog': '商品目录',
+  'menu.productCategories': '商品分类',
   'menu.services': '服务配置',
   'menu.settings': '平台配置',
   'menu.platformSetting': '平台信息',
