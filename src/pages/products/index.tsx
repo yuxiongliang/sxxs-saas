@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useIntl } from '@umijs/max';
 import { Col, Empty, Row, Spin } from 'antd';
-import { listPublicProducts } from '@/services/commerce/api';
 import useStyles from '@/pages/site/style';
+import { listPublicProducts } from '@/services/commerce/api';
 import MallShell from './components/MallShell';
 import ProductCard from './components/ProductCard';
 

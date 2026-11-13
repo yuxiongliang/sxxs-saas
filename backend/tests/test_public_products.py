@@ -68,6 +68,11 @@ async def test_response_is_whitelisted(client):
         "shop_name",
         "seller_name",
         "sku",
+        # 多规格：列表卡片用起售价 + 是否有货 + 规格数
+        "price_min_cents",
+        "price_max_cents",
+        "sku_count",
+        "in_stock",
     }
     assert set(item) == allowed
     assert set(item["sku"] or {}) <= {"id", "name", "price_cents", "stock"}
@@ -118,7 +123,18 @@ async def test_anonymous_can_read_product_detail(client):
     assert detail["id"] == product_id
     assert detail["status"] == "on_sale"
     assert isinstance(detail["skus"], list) and detail["skus"], "详情应带 SKU 列表"
-    assert set(detail["skus"][0]) == {"id", "sku_code", "name", "price_cents", "stock"}
+    assert set(detail["skus"][0]) == {
+        "id",
+        "sku_code",
+        "name",
+        "price_cents",
+        "stock",
+        "specs",
+        "image_url",
+        "video_url",
+    }
+    # 多规格选择器要能拿到规格树
+    assert isinstance(detail["spec_groups"], list)
 
 
 async def test_product_detail_hides_off_shelf_items(client, db_session):

@@ -14,9 +14,9 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useMemo, useState } from 'react';
-import { addCartItem, getPublicProductDetail } from '@/services/commerce/api';
+import { useEffect, useMemo, useState } from 'react';
 import useStyles from '@/pages/site/style';
+import { addCartItem, getPublicProductDetail } from '@/services/commerce/api';
 import MallShell from '../components/MallShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
@@ -37,6 +37,8 @@ export default function ProductDetailPage() {
 
   const [skuId, setSkuId] = useState<number>();
   const [quantity, setQuantity] = useState(1);
+  // 多规格：每个规格组选中的值（未选全 = 还没确定 SKU）
+  const [selected, setSelected] = useState<Record<string, string>>({});
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-product-detail', productId],
@@ -44,10 +46,46 @@ export default function ProductDetailPage() {
     enabled: Number.isFinite(productId),
   });
 
+  const specGroups = data?.spec_groups ?? [];
+  const hasSpecs = specGroups.length > 0;
+
   const activeSku = useMemo(() => {
     if (!data?.skus?.length) return data?.sku ?? undefined;
-    return data.skus.find((item) => item.id === skuId) ?? data.skus[0];
-  }, [data, skuId]);
+    if (!hasSpecs) {
+      return data.skus.find((item) => item.id === skuId) ?? data.skus[0];
+    }
+    // 规格未选全就不确定 SKU（不能默默拿第一条去下单）
+    const complete = specGroups.every((group) => selected[group.name]);
+    if (!complete) return undefined;
+    return data.skus.find((item) =>
+      specGroups.every(
+        (group) => item.specs?.[group.name] === selected[group.name],
+      ),
+    );
+  }, [data, skuId, hasSpecs, specGroups, selected]);
+
+  // 切规格后数量可能超过新 SKU 库存，得裁回去，否则后端 409
+  useEffect(() => {
+    if (!activeSku) return;
+    const max = Math.max(1, activeSku.stock);
+    setQuantity((prev) => (prev > max ? max : prev));
+  }, [activeSku]);
+
+  const pickSpec = (groupName: string, value: string) => {
+    setSelected((prev) => ({ ...prev, [groupName]: value }));
+  };
+
+  const skuImage =
+    data?.skus?.find((item) => item.id === activeSku?.id)?.image_url ??
+    (hasSpecs
+      ? specGroups
+          .map((group) =>
+            group.values.find((item) => item.value === selected[group.name]),
+          )
+          .find((value) => value?.image_url)?.image_url
+      : null) ??
+    data?.main_image ??
+    '';
 
   const loginPath = `/user/login?redirect=${encodeURIComponent(`/products/${productId}`)}`;
 
@@ -87,7 +125,8 @@ export default function ProductDetailPage() {
     }
   };
 
-  const outOfStock = (activeSku?.stock ?? 0) <= 0;
+  const outOfStock = Boolean(activeSku) && (activeSku?.stock ?? 0) <= 0;
+  const needPickSpec = hasSpecs && !activeSku;
 
   return (
     <MallShell activeKey="products">
@@ -110,9 +149,9 @@ export default function ProductDetailPage() {
                 <Card
                   styles={{ body: { padding: 0 } }}
                   cover={
-                    data.main_image ? (
+                    skuImage ? (
                       <img
-                        src={data.main_image}
+                        src={skuImage}
                         alt={data.name}
                         style={{
                           width: '100%',
@@ -189,7 +228,57 @@ export default function ProductDetailPage() {
                       </Tag>
                     </Space>
 
-                    {(data.skus?.length ?? 0) > 1 ? (
+                    {hasSpecs ? (
+                      <Space
+                        orientation="vertical"
+                        size={10}
+                        style={{ width: '100%' }}
+                      >
+                        {specGroups.map((group) => (
+                          <Space key={group.name} size={8} wrap>
+                            <Typography.Text type="secondary">
+                              {group.name}：
+                            </Typography.Text>
+                            {group.values.map((value) => {
+                              // 同一组下其它值是否还会形成可售组合（不会则置灰）
+                              const candidate = {
+                                ...selected,
+                                [group.name]: value.value,
+                              };
+                              const sellable = (data.skus ?? []).some((sku) =>
+                                specGroups.every(
+                                  (item) =>
+                                    sku.specs?.[item.name] ===
+                                    candidate[item.name],
+                                ),
+                              );
+                              return (
+                                <Button
+                                  key={value.value}
+                                  size="small"
+                                  disabled={!sellable}
+                                  type={
+                                    selected[group.name] === value.value
+                                      ? 'primary'
+                                      : 'default'
+                                  }
+                                  onClick={() =>
+                                    pickSpec(group.name, value.value)
+                                  }
+                                >
+                                  {value.value}
+                                </Button>
+                              );
+                            })}
+                          </Space>
+                        ))}
+                        {needPickSpec ? (
+                          <Typography.Text type="warning">
+                            请先选择完整的规格，才能加入购物车
+                          </Typography.Text>
+                        ) : null}
+                      </Space>
+                    ) : (data.skus?.length ?? 0) > 1 ? (
                       <Space size={8} wrap>
                         <Typography.Text>
                           {t({
@@ -232,7 +321,7 @@ export default function ProductDetailPage() {
                       <Button
                         type="primary"
                         size="large"
-                        disabled={outOfStock}
+                        disabled={outOfStock || needPickSpec}
                         onClick={buyNow}
                       >
                         {t({
@@ -242,7 +331,7 @@ export default function ProductDetailPage() {
                       </Button>
                       <Button
                         size="large"
-                        disabled={outOfStock}
+                        disabled={outOfStock || needPickSpec}
                         onClick={addToCart}
                       >
                         {t({

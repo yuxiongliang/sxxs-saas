@@ -1,9 +1,9 @@
 import { useIntl } from '@umijs/max';
 import type { ReactNode } from 'react';
-import type { SearchEntry } from '@/pages/site/search';
+import SiteFooter from '@/pages/site/components/SiteFooter';
 import type { SiteNavItem } from '@/pages/site/components/SiteHeader';
 import SiteHeader from '@/pages/site/components/SiteHeader';
-import SiteFooter from '@/pages/site/components/SiteFooter';
+import type { SearchEntry } from '@/pages/site/search';
 import useStyles from '@/pages/site/style';
 
 /**

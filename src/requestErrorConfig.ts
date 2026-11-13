@@ -109,7 +109,13 @@ export const errorConfig: RequestConfig = {
           return;
         }
 
-        message.error(`Response status:${status}`);
+        // 业务错误：后端统一返回 {code, message}，直接把中文提示给用户，
+        // 不要再弹 “Response status:409” 这种对买家无信息量的状态码
+        const body = error.response?.data as
+          | { message?: string; detail?: string }
+          | undefined;
+        const detail = body?.message || body?.detail;
+        message.error(detail || `Response status:${status}`);
       } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
         message.error(
           getIntl().formatMessage({

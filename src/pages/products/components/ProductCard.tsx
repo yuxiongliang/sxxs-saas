@@ -1,8 +1,8 @@
 import { ShoppingCartOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { useModel } from '@umijs/max';
 import { App, Button, Card, Tag, Typography } from 'antd';
-import { addCartItem } from '@/services/commerce/api';
 import type { PublicProduct } from '@/services/commerce/api';
+import { addCartItem } from '@/services/commerce/api';
 
 const { Text } = Typography;
 
@@ -24,9 +24,10 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
   const signedIn = Boolean(initialState?.currentUser);
 
   const detailPath = `/products/${product.id}`;
-  const sku = product.sku;
-  const stock = sku?.stock ?? 0;
-  const soldOut = !sku || stock <= 0;
+  const multiSpec = (product.sku_count ?? 0) > 1;
+  const inStock = product.in_stock ?? (product.sku?.stock ?? 0) > 0;
+  const priceMin = product.price_min_cents ?? product.sku?.price_cents ?? 0;
+  const priceMax = product.price_max_cents ?? priceMin;
 
   /** 未登录就带去登录页，登录后回到该商品详情 */
   const ensureSignedIn = () => {
@@ -38,6 +39,12 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
   };
 
   const handleAddCart = async () => {
+    // 多规格不能从列表卡直接加购：买家没选规格就下单，语义不成立
+    if (multiSpec) {
+      window.location.assign(detailPath);
+      return;
+    }
+    const sku = product.sku;
     if (!ensureSignedIn() || !sku) return;
     try {
       await addCartItem({ sku_id: sku.id, quantity: 1 });
@@ -101,13 +108,18 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
             fontWeight: 700,
           }}
         >
-          ¥{yuan(sku?.price_cents ?? 0)}
+          ¥{yuan(priceMin)}
+          {multiSpec && priceMax > priceMin ? ' 起' : ''}
         </span>
         <Tag
-          color={stock > 0 ? 'green' : 'default'}
+          color={inStock ? 'green' : 'default'}
           style={{ marginInlineEnd: 0 }}
         >
-          {stock > 0 ? `库存 ${stock}` : '已售罄'}
+          {inStock
+            ? multiSpec
+              ? `${product.sku_count} 种规格`
+              : '有货'
+            : '已售罄'}
         </Tag>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>
@@ -122,15 +134,15 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
         <Button
           size="small"
           icon={<ShoppingCartOutlined />}
-          disabled={soldOut}
+          disabled={!inStock}
           onClick={handleAddCart}
         >
-          加入购物车
+          {multiSpec ? '选规格' : '加入购物车'}
         </Button>
         <Button
           size="small"
           type="primary"
-          disabled={soldOut}
+          disabled={!inStock}
           onClick={handleBuyNow}
         >
           立即购买

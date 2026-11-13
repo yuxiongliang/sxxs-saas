@@ -506,18 +506,39 @@ export interface PublicProduct {
   shop_id: number;
   name: string;
   subtitle?: string | null;
+  description?: string | null;
   status: string;
   main_image?: string | null;
+  images?: string[];
+  video_url?: string | null;
   shop_name?: string;
   seller_name?: string;
   sku?: { id: number; name: string; price_cents: number; stock: number } | null;
-  /** 详情接口才有：该商品的全部 SKU */
+  /** 列表：可用 SKU 的起售价/最高价（多规格展示「¥xx 起」） */
+  price_min_cents?: number | null;
+  price_max_cents?: number | null;
+  sku_count?: number;
+  in_stock?: boolean;
+  /** 详情接口才有：该商品的全部可用 SKU */
   skus?: Array<{
     id: number;
     sku_code: string;
     name: string;
     price_cents: number;
     stock: number;
+    /** {规格组名: 规格值} */
+    specs?: Record<string, string>;
+    image_url?: string | null;
+    video_url?: string | null;
+  }>;
+  /** 详情：规格树（多规格选择器） */
+  spec_groups?: Array<{
+    name: string;
+    values: Array<{
+      value: string;
+      image_url?: string | null;
+      video_url?: string | null;
+    }>;
   }>;
 }
 

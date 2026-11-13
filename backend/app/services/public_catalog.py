@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import Product, ProductSku
 from app.models.seller import Seller, Shop
 from app.models.tenant import Tenant
+from app.services import catalog_specs
 
 DEFAULT_TENANT_SLUG = "demo"
 DEFAULT_LIMIT = 48
@@ -68,7 +69,12 @@ def _product_public_dict(product, shop, seller, sku) -> dict:
 async def list_public_products(
     db: AsyncSession, slug: str = DEFAULT_TENANT_SLUG, limit: int = DEFAULT_LIMIT
 ) -> list[dict]:
-    """在售商品列表（公开）。价格/库存取该商品的第一个 SKU，与 Portal 展示一致。"""
+    """在售商品列表（公开）。
+
+    多规格后不能再拿「第一条 SKU」当报价：那条可能是下架的/售罄的。
+    列表统一用**可用 SKU 的起售价**（`price_min_cents`），并给出价格区间与规格数，
+    卡片据此显示「¥xx 起」。
+    """
     tenant = await _resolve_tenant(db, slug)
     bounded = max(1, min(limit, MAX_LIMIT))
 
@@ -87,17 +93,38 @@ async def list_public_products(
         )
     ).all()
 
+    if not rows:
+        return []
+
+    product_ids = [row[0].id for row in rows]
+    all_skus = list(
+        (
+            await db.scalars(
+                select(ProductSku)
+                .where(
+                    ProductSku.tenant_id == tenant.id,
+                    ProductSku.product_id.in_(product_ids),
+                    ProductSku.status == "active",
+                )
+                .order_by(ProductSku.id)
+            )
+        ).all()
+    )
+    skus_by_product: dict[int, list[ProductSku]] = {}
+    for sku in all_skus:
+        skus_by_product.setdefault(sku.product_id, []).append(sku)
+
     result: list[dict] = []
     for product, shop, seller in rows:
-        sku = (
-            await db.scalars(
-                select(ProductSku).where(
-                    ProductSku.tenant_id == tenant.id,
-                    ProductSku.product_id == product.id,
-                )
-            )
-        ).first()
-        result.append(_product_public_dict(product, shop, seller, sku))
+        skus = skus_by_product.get(product.id, [])
+        payload = _product_public_dict(product, shop, seller, skus[0] if skus else None)
+        prices = [sku.price_cents for sku in skus]
+        payload["price_min_cents"] = min(prices) if prices else None
+        payload["price_max_cents"] = max(prices) if prices else None
+        payload["sku_count"] = len(skus)
+        # 列表卡片用：是否还有可买的 SKU（多规格时引导去详情选）
+        payload["in_stock"] = any(sku.stock > 0 for sku in skus)
+        result.append(payload)
     return result
 
 
@@ -130,6 +157,7 @@ async def get_public_product(
                 .where(
                     ProductSku.tenant_id == tenant.id,
                     ProductSku.product_id == product.id,
+                    ProductSku.status == "active",
                 )
                 .order_by(ProductSku.id)
             )
@@ -143,7 +171,15 @@ async def get_public_product(
             "name": sku.name,
             "price_cents": sku.price_cents,
             "stock": sku.stock,
+            # 多规格选择器要靠这两个字段反查组合与切图
+            "specs": sku.specs or {},
+            "image_url": sku.image_url,
+            "video_url": sku.video_url,
         }
         for sku in skus
     ]
+    payload["spec_groups"] = await catalog_specs.load_spec_groups(db, product.id)
+    prices = [sku.price_cents for sku in skus]
+    payload["price_min_cents"] = min(prices) if prices else None
+    payload["price_max_cents"] = max(prices) if prices else None
     return payload
