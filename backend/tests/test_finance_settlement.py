@@ -9,11 +9,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import select
 
 from app.models.catalog import Product, ProductSku
-from app.models.finance import CommissionRule
 from app.models.order import Order, SellerOrder
 from app.models.seller import Seller
 from app.models.tenant import Tenant
@@ -66,16 +64,6 @@ async def _place_and_pay(client, customer_token, db_session, quantity: int = 1) 
     return order
 
 
-async def _preview(client, admin_token, payload: dict) -> dict:
-    response = await client.post(
-        "/api/v1/admin/commission-rules/preview",
-        headers=bearer(admin_token),
-        json=payload,
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["data"]
-
-
 async def _complete(db_session, order: Order) -> None:
     seller_order = (
         await db_session.execute(
@@ -86,132 +74,6 @@ async def _complete(db_session, order: Order) -> None:
     seller_order.status = "completed"
     seller_order.completed_at = datetime.now(UTC)
     await db_session.flush()
-
-
-# --------------------------------------------------------------------------- #
-# Commission rules
-# --------------------------------------------------------------------------- #
-
-
-async def test_default_commission_rule_is_seeded(client, admin_token):
-    response = await client.get("/api/v1/admin/commission-rules", headers=bearer(admin_token))
-    assert response.status_code == 200, response.text
-    rules = response.json()["data"]
-    assert any(rule["seller_id"] is None and rule["category_id"] is None for rule in rules)
-
-
-async def test_commission_preview_uses_default_rate(client, admin_token):
-    response = await client.post(
-        "/api/v1/admin/commission-rules/preview",
-        headers=bearer(admin_token),
-        json={"subtotal_cents": 10000},
-    )
-    assert response.status_code == 200, response.text
-    data = response.json()["data"]
-    assert data["rate_bps"] == 1000
-    assert data["commission_cents"] == 1000
-    assert data["payable_to_seller_cents"] == 9000
-
-
-async def test_seller_specific_rule_overrides_the_default(
-    client, admin_token, customer_token, db_session
-):
-    seller = await _seller(db_session)
-    created = await client.post(
-        "/api/v1/admin/commission-rules",
-        headers=bearer(admin_token),
-        json={
-            "name": "测试卖家专享 2%",
-            "seller_id": seller.id,
-            "rate_bps": 200,
-            "priority": 10,
-        },
-    )
-    assert created.status_code == 200, created.text
-
-    preview = await _preview(client, admin_token, {"seller_id": seller.id, "subtotal_cents": 10000})
-    assert preview["rate_bps"] == 200
-    assert preview["commission_cents"] == 200
-
-    # The order pipeline must use the same rule, not a hardcoded 10%.
-    order = await _place_and_pay(client, customer_token, db_session)
-    seller_order = (
-        await db_session.execute(
-            select(SellerOrder).where(SellerOrder.order_id == order.id)
-        )
-    ).scalars().first()
-    assert seller_order is not None
-    expected = seller_order.goods_amount_cents * 200 // 10_000
-    assert seller_order.commission_amount_cents == expected
-
-
-async def test_fixed_fee_is_added_to_the_rate(client, admin_token):
-    created = await client.post(
-        "/api/v1/admin/commission-rules",
-        headers=bearer(admin_token),
-        json={"name": "固定费规则", "rate_bps": 500, "fixed_fee_cents": 300, "priority": 5},
-    )
-    assert created.status_code == 200, created.text
-
-    preview = await _preview(client, admin_token, {"subtotal_cents": 10000})
-    assert preview["commission_cents"] == 500 + 300
-
-
-async def test_disabled_rule_is_ignored(client, admin_token):
-    created = await client.post(
-        "/api/v1/admin/commission-rules",
-        headers=bearer(admin_token),
-        json={"name": "停用规则", "rate_bps": 9999, "priority": 99, "status": "disabled"},
-    )
-    assert created.status_code == 200
-
-    preview = await _preview(client, admin_token, {"subtotal_cents": 10000})
-    assert preview["rate_bps"] == 1000, "a disabled rule must never be applied"
-
-
-async def test_rule_crud_roundtrip(client, admin_token):
-    created = (
-        await client.post(
-            "/api/v1/admin/commission-rules",
-            headers=bearer(admin_token),
-            json={"name": "待改规则", "rate_bps": 800},
-        )
-    ).json()["data"]
-
-    updated = await client.put(
-        f"/api/v1/admin/commission-rules/{created['id']}",
-        headers=bearer(admin_token),
-        json={"rate_bps": 1200, "name": "已改规则"},
-    )
-    assert updated.status_code == 200
-    assert updated.json()["data"]["rate_bps"] == 1200
-
-    deleted = await client.delete(
-        f"/api/v1/admin/commission-rules/{created['id']}", headers=bearer(admin_token)
-    )
-    assert deleted.status_code == 200
-    remaining = (
-        await client.get("/api/v1/admin/commission-rules", headers=bearer(admin_token))
-    ).json()["data"]
-    assert all(rule["id"] != created["id"] for rule in remaining)
-
-
-@pytest.mark.parametrize("payload", [{"rate_bps": 0, "fixed_fee_cents": 0}, {"rate_bps": -1}])
-async def test_invalid_commission_rule_is_rejected(client, admin_token, payload):
-    response = await client.post(
-        "/api/v1/admin/commission-rules", headers=bearer(admin_token), json=payload
-    )
-    assert response.status_code in {400, 422}
-
-
-async def test_operator_cannot_manage_commission_rules(client, operator_token):
-    response = await client.post(
-        "/api/v1/admin/commission-rules",
-        headers=bearer(operator_token),
-        json={"name": "越权", "rate_bps": 100},
-    )
-    assert response.status_code == 403
-
 
 # --------------------------------------------------------------------------- #
 # 账期：settlement hold period
@@ -486,34 +348,6 @@ async def test_settlement_batches_are_tenant_scoped(client, admin_token, platfor
     response = await client.get("/api/v1/admin/settlement-batches", headers=bearer(other))
     assert response.status_code == 200
     assert response.json()["data"] == []
-
-
-async def test_commission_rule_rows_are_tenant_scoped(client, admin_token, db_session, platform_token):
-    await client.post(
-        "/api/v1/platform/tenants",
-        headers=bearer(platform_token),
-        json={
-            "name": "Rule Other Tenant",
-            "slug": "rule-other",
-            "email": "rule-other@example.com",
-            "nickname": "Other",
-            "password": "Other@123456",
-        },
-    )
-    other = (
-        await client.post(
-            "/api/v1/auth/login",
-            json={"username": "rule-other@example.com", "password": "Other@123456"},
-        )
-    ).json()["data"]["access_token"]
-
-    rules = await client.get("/api/v1/admin/commission-rules", headers=bearer(other))
-    assert rules.status_code == 200
-    demo_rules = (
-        await db_session.execute(select(CommissionRule).where(CommissionRule.tenant_id == 1))
-    ).scalars().all()
-    returned_ids = {rule["id"] for rule in rules.json()["data"]}
-    assert returned_ids.isdisjoint({rule.id for rule in demo_rules})
 
 
 async def test_ledger_buckets_reconcile_after_a_payout(

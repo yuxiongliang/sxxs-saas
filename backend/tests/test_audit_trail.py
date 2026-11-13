@@ -237,37 +237,6 @@ async def test_payout_and_settlement_events_are_audited(
     assert await _logs(client, admin_token, action="payout.paid", target_id=payout_id)
 
 
-async def test_commission_rule_changes_are_audited(client, admin_token):
-    created = (
-        await client.post(
-            "/api/v1/admin/commission-rules",
-            headers=bearer(admin_token),
-            json={"name": "审计佣金", "rate_bps": 700},
-        )
-    ).json()["data"]
-    assert await _logs(
-        client, admin_token, action="commission_rule.created", target_id=created["id"]
-    )
-
-    await client.put(
-        f"/api/v1/admin/commission-rules/{created['id']}",
-        headers=bearer(admin_token),
-        json={"rate_bps": 900},
-    )
-    updated = await _logs(
-        client, admin_token, action="commission_rule.updated", target_id=created["id"]
-    )
-    assert updated and updated[0]["before"]["rate_bps"] == 700
-    assert updated[0]["after"]["rate_bps"] == 900
-
-    await client.delete(
-        f"/api/v1/admin/commission-rules/{created['id']}", headers=bearer(admin_token)
-    )
-    assert await _logs(
-        client, admin_token, action="commission_rule.deleted", target_id=created["id"]
-    )
-
-
 async def test_tenant_suspend_and_resume_are_audited(client, admin_token, platform_token):
     created = (
         await client.post(

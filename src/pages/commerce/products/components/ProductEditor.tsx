@@ -20,6 +20,7 @@ import AttachmentPicker from '@/components/AttachmentPicker';
 import {
   getAdminProduct,
   listAdminCategories,
+  unlockAdminProductCommission,
   updateAdminProduct,
   updateAdminProductSpecs,
 } from '@/services/commerce/api';
@@ -138,6 +139,10 @@ export default function ProductEditor({
           category_id: data.category_id ?? undefined,
           main_image: data.main_image ?? '',
           video_url: data.video_url ?? '',
+          commission_percent:
+            data.commission_bps === null || data.commission_bps === undefined
+              ? undefined
+              : data.commission_bps / 100,
         });
         const draft: DraftGroup[] = (data.spec_groups ?? []).map((group) => ({
           key: uid(),
@@ -277,6 +282,18 @@ export default function ProductEditor({
     ]);
   };
 
+  const handleUnlock = async () => {
+    if (!productId) return;
+    try {
+      await unlockAdminProductCommission(productId);
+      message.success('已解除锁定，卖家可自行修改佣金比例');
+      const data = await getAdminProduct(productId);
+      setDetail(data);
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
   const handleSave = async () => {
     if (!productId) return;
     try {
@@ -288,6 +305,9 @@ export default function ProductEditor({
         description: values.description,
         category_id: values.category_id ?? null,
         main_image: values.main_image ?? '',
+        ...(typeof values.commission_percent === 'number'
+          ? { commission_bps: Math.round(values.commission_percent * 100) }
+          : {}),
       });
       const usableGroups = groups
         .filter(
@@ -391,6 +411,25 @@ export default function ProductEditor({
               }))}
             />
           </Form.Item>
+          <Form.Item
+            label="卖家佣金比例（%）"
+            name="commission_percent"
+            extra={
+              detail?.commission_locked
+                ? '该比例已被运营调整并锁定，保存后卖家不自行修改；需要放开请点下方「解除锁定」'
+                : '默认继承分类比例；填了就以这里为准（下限 1%）。卖家自己也能改'
+            }
+          >
+            <InputNumber min={1} max={100} step={0.5} style={{ width: 220 }} />
+          </Form.Item>
+          {detail?.commission_locked ? (
+            <Space style={{ marginBottom: 16 }}>
+              <Tag color="orange">已锁定</Tag>
+              <Button size="small" onClick={handleUnlock}>
+                解除锁定
+              </Button>
+            </Space>
+          ) : null}
           <Flex gap={24} wrap>
             <Form.Item label="主图" name="main_image" style={{ flex: 1 }}>
               <Input readOnly placeholder="点右侧按钮从附件中心选图" />

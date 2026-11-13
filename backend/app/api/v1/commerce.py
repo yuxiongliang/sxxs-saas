@@ -342,6 +342,32 @@ async def admin_product_detail(
     return ok(payload)
 
 
+@router.post("/admin/products/{product_id}/commission-unlock", response_model=ApiResponse[dict])
+async def unlock_product_commission(
+    product_id: int,
+    context: AuthContext = Depends(require_permission("product:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    """解除佣金锁定，把比例的决定权还给卖家（运营误调时的回退口）。"""
+    product = await _load_product(db, context, product_id)
+    product.commission_locked = False
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_UPDATED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product",
+        target_id=product.id,
+        before={"commission_locked": "True"},
+        after={"commission_locked": "False"},
+    )
+    await db.commit()
+    return ok(
+        {"id": product.id, "commission_locked": False, "commission_bps": product.commission_bps},
+        "已解除锁定，卖家可自行修改佣金比例",
+    )
+
+
 @router.put("/admin/products/{product_id}/specs")
 async def save_product_specs(
     product_id: int,
@@ -411,6 +437,11 @@ async def update_product(
     if "category_id" in data:
         product.category_id = data["category_id"]
         applied["category_id"] = data["category_id"]
+    if data.get("commission_bps") is not None:
+        # 运营改比例 → 锁定，卖家不能再改回去（Q7）
+        product.commission_bps = data["commission_bps"]
+        product.commission_locked = True
+        applied["commission_bps"] = data["commission_bps"]
     if "main_image" in applied:
         # 商品主图要给匿名访客看：引用的附件必须发布，否则前台只显示破图
         await attachment_service.publish_by_public_url(

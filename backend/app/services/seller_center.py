@@ -77,6 +77,10 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
                 "status": product.status,
                 # 驳回原因要给卖家看，否则只能反复重提
                 "reject_reason": product.reject_reason,
+                # 卖家要看得到自己设的佣金比例，以及是否被运营锁住
+                "category_id": product.category_id,
+                "commission_bps": product.commission_bps,
+                "commission_locked": bool(product.commission_locked),
                 "price_cents": sku.price_cents if sku else 0,
                 "stock": sku.stock if sku else 0,
                 "sku_id": sku.id if sku else None,
@@ -112,6 +116,15 @@ async def update_seller_product(
         await attachment_service.publish_by_public_url(
             db, context.tenant.id, product.main_image
         )
+
+    if data.get("commission_bps") is not None:
+        # 运营调过比例就锁住，卖家不能再改回去（否则锁定等于没锁）
+        if product.commission_locked:
+            raise HTTPException(
+                status_code=403,
+                detail="该商品的佣金比例已被运营调整，卖家不能再改；如有异议请联系运营",
+            )
+        product.commission_bps = data["commission_bps"]
 
     # 多规格后不能“猜第一条 SKU”：卖家改价/改库存必须指明 sku_id，
     # 否则会静默改到别的规格上（库存流水也跟着错）。

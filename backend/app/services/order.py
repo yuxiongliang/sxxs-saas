@@ -90,11 +90,9 @@ async def create_order(
             await db.flush()
             seller_orders[seller.id] = seller_order
         seller_order.goods_amount_cents += subtotal
-        # Commission is configured per tenant / seller / category.
-        rule = await finance_service.resolve_commission_rule(
-            db, context.tenant.id, seller.id, product.category_id
-        )
-        commission = finance_service.compute_commission(subtotal, rule)
+        # 租户向卖家抽佣：商品级比例 > 分类默认 > 系统 10%（比例与来源落快照）
+        rate_bps, rate_source = await finance_service.resolve_commission_rate(db, product)
+        commission = finance_service.compute_commission(subtotal, rate_bps)
         seller_order.commission_amount_cents += commission
         seller_order.payable_to_seller_cents += subtotal - commission
         db.add(
@@ -107,10 +105,13 @@ async def create_order(
                 sku_id=sku.id,
                 product_name=product.name,
                 sku_name=sku.name,
-                image=product.main_image,
+                # 订单快照的图要取**选中 SKU 的图**，否则买家收到的图和买的对不上
+                image=sku.image_url or product.main_image,
                 price_cents=sku.price_cents,
                 quantity=quantity,
                 subtotal_cents=subtotal,
+                commission_rate_bps=rate_bps,
+                commission_source=rate_source,
             )
         )
         sku.stock -= quantity

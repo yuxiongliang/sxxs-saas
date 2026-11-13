@@ -20,29 +20,6 @@ PAYOUT_STATUSES = ("pending", "approved", "rejected", "paid")
 BATCH_STATUSES = ("draft", "confirmed", "paid")
 
 
-class CommissionRule(Base, TimestampMixin):
-    """A configurable commission rule.
-
-    Resolution order (most specific win, then highest ``priority``, then newest):
-    seller + category > seller > category > tenant default (both NULL).
-    ``effective_from`` / ``effective_to`` bound the rule to an accounting period.
-    """
-
-    __tablename__ = "commission_rules"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    name: Mapped[str] = mapped_column(
-        String(64), default="默认佣金规则", server_default="默认佣金规则"
-    )
-    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
-    seller_id: Mapped[int | None] = mapped_column(ForeignKey("sellers.id"), nullable=True)
-    rate_bps: Mapped[int] = mapped_column(Integer, default=DEFAULT_COMMISSION_BPS)
-    fixed_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
-    priority: Mapped[int] = mapped_column(Integer, default=0)
-    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="active")
 
 
 class LedgerEntry(Base):

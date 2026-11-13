@@ -2,7 +2,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import Category, Product, ProductSku
-from app.models.finance import CommissionRule
 from app.models.order import Order, OrderItem, SellerOrder
 from app.models.permission import MemberRole
 from app.models.role import Role
@@ -207,30 +206,3 @@ async def seed_commerce_data(db: AsyncSession) -> None:
 
     await db.commit()
 
-async def seed_commission_rule(db: AsyncSession) -> None:
-    """Guarantee a tenant-wide default commission rule (10%)."""
-    tenant = (await db.scalars(select(Tenant).where(Tenant.slug == "demo"))).first()
-    if tenant is None:
-        return
-    existing = (
-        await db.scalars(
-            select(CommissionRule).where(
-                CommissionRule.tenant_id == tenant.id,
-                CommissionRule.seller_id.is_(None),
-                CommissionRule.category_id.is_(None),
-            )
-        )
-    ).first()
-    if existing is not None:
-        return
-    db.add(
-        CommissionRule(
-            tenant_id=tenant.id,
-            name="默认佣金规则",
-            rate_bps=1000,
-            fixed_fee_cents=0,
-            priority=0,
-            status="active",
-        )
-    )
-    await db.commit()

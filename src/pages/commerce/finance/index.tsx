@@ -1,9 +1,7 @@
 import {
   AccountBookOutlined,
   AuditOutlined,
-  PlusOutlined,
   ReloadOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -13,11 +11,8 @@ import {
   DatePicker,
   Form,
   Input,
-  InputNumber,
   Modal,
-  Popconfirm,
   Space,
-  Switch,
   Table,
   Tabs,
   Tag,
@@ -29,13 +24,10 @@ import React, { useState } from 'react';
 import {
   approvePayout,
   confirmSettlementBatch,
-  createCommissionRule,
   createSellerPayout,
   createSettlementBatch,
-  deleteCommissionRule,
   getSellerLedger,
   listAdminSellers,
-  listCommissionRules,
   listPayouts,
   listSettlementBatches,
   payPayout,
@@ -43,7 +35,6 @@ import {
   rejectPayout,
 } from '@/services/commerce/api';
 import type {
-  CommissionRuleRecord,
   PayoutRecord,
   SellerRecord,
   SettlementBatchRecord,
@@ -71,9 +62,7 @@ const payoutColor = (status: string) =>
 
 const FinancePage: React.FC = () => {
   const { message } = App.useApp();
-  const [ruleOpen, setRuleOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
-  const [ruleForm] = Form.useForm();
   const [batchForm] = Form.useForm();
 
   const {
@@ -99,11 +88,6 @@ const FinancePage: React.FC = () => {
     },
   });
 
-  const { data: rules, refetch: refetchRules } = useQuery({
-    queryKey: ['commission-rules'],
-    queryFn: listCommissionRules,
-  });
-
   const { data: payouts, refetch: refetchPayouts } = useQuery({
     queryKey: ['payouts'],
     queryFn: () => listPayouts(),
@@ -115,12 +99,7 @@ const FinancePage: React.FC = () => {
   });
 
   const refreshAll = async () => {
-    await Promise.all([
-      refetch(),
-      refetchRules(),
-      refetchPayouts(),
-      refetchBatches(),
-    ]);
+    await Promise.all([refetch(), refetchPayouts(), refetchBatches()]);
   };
 
   const handlePayout = async (record: SellerFinance) => {
@@ -130,26 +109,6 @@ const FinancePage: React.FC = () => {
       await refreshAll();
     } catch (error: any) {
       message.error(error?.message || '提现申请失败');
-    }
-  };
-
-  const submitRule = async () => {
-    const values = await ruleForm.validateFields();
-    try {
-      await createCommissionRule({
-        name: values.name,
-        rate_bps: Math.round((values.rate_percent ?? 0) * 100),
-        fixed_fee_cents: Math.round((values.fixed_fee_yuan ?? 0) * 100),
-        seller_id: values.seller_id ?? null,
-        priority: values.priority ?? 0,
-        status: values.status === false ? 'disabled' : 'active',
-      });
-      message.success('佣金规则已创建');
-      setRuleOpen(false);
-      ruleForm.resetFields();
-      await refetchRules();
-    } catch (error: any) {
-      message.error(error?.message || '创建失败');
     }
   };
 
@@ -234,62 +193,6 @@ const FinancePage: React.FC = () => {
         >
           申请提现
         </Button>
-      ),
-    },
-  ];
-
-  const ruleColumns: ColumnsType<CommissionRuleRecord> = [
-    { title: '名称', dataIndex: 'name' },
-    {
-      title: '费率',
-      dataIndex: 'rate_bps',
-      width: 110,
-      render: (value: number) => `${(value / 100).toFixed(2)}%`,
-    },
-    {
-      title: '固定费',
-      dataIndex: 'fixed_fee_cents',
-      width: 110,
-      render: (value: number) => yuan(value),
-    },
-    {
-      title: '作用域',
-      key: 'scope',
-      width: 160,
-      render: (_, record) =>
-        record.seller_id
-          ? `卖家 #${record.seller_id}`
-          : record.category_id
-            ? `分类 #${record.category_id}`
-            : '租户默认',
-    },
-    { title: '优先级', dataIndex: 'priority', width: 90 },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 100,
-      render: (value: string) => (
-        <Tag color={value === 'active' ? 'success' : 'default'}>
-          {labelOf(ACTIVITY_STATUS, value)}
-        </Tag>
-      ),
-    },
-    {
-      title: '操作',
-      width: 100,
-      render: (_, record) => (
-        <Popconfirm
-          title="删除该佣金规则？"
-          onConfirm={async () => {
-            await deleteCommissionRule(record.id);
-            message.success('已删除');
-            await refetchRules();
-          }}
-        >
-          <Button type="link" danger size="small">
-            删除
-          </Button>
-        </Popconfirm>
       ),
     },
   ];
@@ -461,33 +364,6 @@ const FinancePage: React.FC = () => {
             ),
           },
           {
-            key: 'rules',
-            label: '佣金规则',
-            children: (
-              <Card
-                extra={
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      ruleForm.resetFields();
-                      setRuleOpen(true);
-                    }}
-                  >
-                    新增规则
-                  </Button>
-                }
-              >
-                <Table
-                  rowKey="id"
-                  columns={ruleColumns}
-                  dataSource={rules ?? []}
-                  pagination={false}
-                />
-              </Card>
-            ),
-          },
-          {
             key: 'payouts',
             label: '提现审核',
             children: (
@@ -530,59 +406,6 @@ const FinancePage: React.FC = () => {
           },
         ]}
       />
-
-      <Modal
-        title="新增佣金规则"
-        open={ruleOpen}
-        onCancel={() => setRuleOpen(false)}
-        onOk={submitRule}
-        okText="保存"
-      >
-        <Form
-          form={ruleForm}
-          layout="vertical"
-          initialValues={{ priority: 0, status: true }}
-        >
-          <Form.Item
-            label="规则名称"
-            name="name"
-            rules={[{ required: true, message: '请输入规则名称' }]}
-          >
-            <Input placeholder="例如：数码类 3%" />
-          </Form.Item>
-          <Form.Item
-            label="费率（%）"
-            name="rate_percent"
-            rules={[{ required: true, message: '请输入费率' }]}
-          >
-            <InputNumber
-              min={0}
-              max={100}
-              step={0.1}
-              style={{ width: '100%' }}
-            />
-          </Form.Item>
-          <Form.Item label="固定费用（元）" name="fixed_fee_yuan">
-            <InputNumber min={0} step={1} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="卖家 ID（留空表示租户默认）" name="seller_id">
-            <InputNumber min={1} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="优先级" name="priority">
-            <InputNumber min={0} max={100} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="启用" name="status" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-        <Space size={6}>
-          <SettingOutlined />
-          <span style={{ color: '#8c8c8c' }}>
-            作用域越具体优先级越高：卖家+分类 &gt; 卖家 &gt; 分类 &gt;
-            租户默认。
-          </span>
-        </Space>
-      </Modal>
 
       <Modal
         title="生成结算批次"

@@ -134,6 +134,10 @@ const SellerPage: React.FC = () => {
       description: record.description ?? '',
       price_yuan: record.price_cents / 100,
       stock: record.stock,
+      commission_percent:
+        record.commission_bps === null || record.commission_bps === undefined
+          ? undefined
+          : record.commission_bps / 100,
     });
     setEditOpen(true);
   };
@@ -148,6 +152,9 @@ const SellerPage: React.FC = () => {
         description: values.description,
         price_cents: Math.round(Number(values.price_yuan) * 100),
         stock: Number(values.stock),
+        ...(typeof values.commission_percent === 'number'
+          ? { commission_bps: Math.round(values.commission_percent * 100) }
+          : {}),
       });
       if (result.bounced_to_review) {
         message.info('在售商品改动后已自动重新提交审核');
@@ -485,6 +492,24 @@ const SellerPage: React.FC = () => {
               rules={[{ required: true, message: '请输入库存' }]}
             >
               <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              label="佣金比例（%）"
+              name="commission_percent"
+              extra={
+                editing?.commission_locked
+                  ? '已被运营调整并锁定，暂不可修改；有异议请联系运营'
+                  : '平台按这个比例从成交额里抽佣；留空则用分类默认比例（下限 1%）'
+              }
+              rules={[{ type: 'number', min: 1, message: '最低 1%' }]}
+            >
+              <InputNumber
+                min={1}
+                max={100}
+                step={0.5}
+                style={{ width: '100%' }}
+                disabled={Boolean(editing?.commission_locked)}
+              />
             </Form.Item>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               在售商品改了内容或价格会自动重新进入审核，审核通过后恢复在售。

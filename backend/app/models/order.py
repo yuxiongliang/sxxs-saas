@@ -62,6 +62,9 @@ class OrderItem(Base):
     price_cents: Mapped[int] = mapped_column(Integer)
     quantity: Mapped[int] = mapped_column(Integer)
     subtotal_cents: Mapped[int] = mapped_column(Integer)
+    # 下单时的抽佣快照：卖家之后改了商品比例，历史订单也能说清当时按什么扣的
+    commission_rate_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    commission_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class Payment(Base):

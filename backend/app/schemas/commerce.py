@@ -28,6 +28,8 @@ class ProductUpdate(BaseModel):
     main_image: str | None = Field(default=None, max_length=512)
     images: list[str] | None = None
     category_id: int | None = None
+    # 租户向卖家抽佣的比例（万分比）：>=100 即 1%；不传 = 保持原值
+    commission_bps: int | None = Field(default=None, ge=100, le=100_000)
 
 
 class ProductStatusRequest(BaseModel):
@@ -67,6 +69,8 @@ class SellerProductUpdate(BaseModel):
     sku_id: int | None = Field(default=None, description="要改价/改库存的 SKU；单规格可省略")
     price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
     stock: int | None = Field(default=None, ge=0, le=1_000_000)
+    # 卖家自填的佣金比例（万分比，下限 1%）；商品被运营锁定后不可再改
+    commission_bps: int | None = Field(default=None, ge=100, le=100_000)
 
 
 class SpecValueIn(BaseModel):

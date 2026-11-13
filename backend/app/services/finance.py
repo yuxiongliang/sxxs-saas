@@ -2,17 +2,16 @@
 
 Money rules in one place:
 
-* **Commission** comes from ``commission_rules`` (basis points + fixed fee).
-  Resolution order: seller+category > seller > category > tenant default, then
-  highest ``priority``, then newest. A tenant with no rule falls back to
-  ``DEFAULT_COMMISSION_BPS`` (10%).
+* **租户向卖家抽佣（甲线）**：比例 = 商品级 `products.commission_bps` >
+  分类默认 `categories.default_commission_bps` > 系统默认
+  ``DEFAULT_COMMISSION_BPS`` (10%)。卖家填商品比例（下限 1%），租户可覆盖并锁定。
+  旧的 `commission_rules` 规则体系已下线。
+* **平台向租户抽佣（乙线）**另在 `services/commission.py`，不要混。
 * **账期 (hold period)**: money from an order only becomes withdrawable once the
   seller_order is ``completed`` *and* ``settlement_hold_days`` have elapsed.
   Everything else is reported as ``pending_cents``.
-* **提现审核**: ``pending`` -> ``approved`` / ``rejected`` -> ``paid``. A rejected
-  payout is terminal and never leaves the ledger.
-* **结算批次**: a batch sweeps ``approved`` payouts of an accounting period and
-  moves them to ``paid``.
+* **提现审核**: ``pending`` -> ``approved`` / ``rejected`` -> ``paid``.
+* **结算批次**: a batch sweeps ``approved`` payouts of an accounting period.
 """
 
 from __future__ import annotations
@@ -23,9 +22,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.catalog import Category
 from app.models.finance import (
     DEFAULT_COMMISSION_BPS,
-    CommissionRule,
     LedgerEntry,
     Payout,
     SettlementBatch,
@@ -37,99 +36,29 @@ from app.services import audit as audit_service
 from app.services.auth import AuthContext
 
 # --------------------------------------------------------------------------- #
-# Commission rules
+# Commission（租户向卖家抽）
 # --------------------------------------------------------------------------- #
 
 
-async def resolve_commission_rule(
-    db: AsyncSession,
-    tenant_id: int,
-    seller_id: int | None,
-    category_id: int | None,
-    at: datetime | None = None,
-) -> CommissionRule | None:
-    """Pick the most specific active rule for this order."""
-    moment = at or datetime.now(UTC)
-    rules = list(
-        (
-            await db.scalars(
-                select(CommissionRule).where(
-                    CommissionRule.tenant_id == tenant_id,
-                    CommissionRule.status == "active",
-                )
-            )
-        ).all()
-    )
+async def resolve_commission_rate(db: AsyncSession, product) -> tuple[int, str]:
+    """租户向卖家抽佣的比例与来源：商品级 > 分类默认 > 系统默认。
 
-    def _in_window(rule: CommissionRule) -> bool:
-        if rule.effective_from and rule.effective_from > moment:
-            return False
-        return not (rule.effective_to and rule.effective_to < moment)
-
-    def _specificity(rule: CommissionRule) -> tuple[int, int, int]:
-        score = 0
-        if rule.seller_id is not None:
-            score += 2
-        if rule.category_id is not None:
-            score += 1
-        return (score, rule.priority, rule.id)
-
-    candidates = [
-        rule
-        for rule in rules
-        if _in_window(rule)
-        and (rule.seller_id is None or rule.seller_id == seller_id)
-        and (rule.category_id is None or rule.category_id == category_id)
-    ]
-    if not candidates:
-        return None
-    return max(candidates, key=_specificity)
+    下限 1% 在**写入商品**时校验（`ProductUpdate` / 卖家表单），这里只负责解析。
+    返回 `(bps, source)`，`source` 随订单明细一起落库，供事后对账。
+    """
+    if product.commission_bps is not None:
+        return max(0, int(product.commission_bps)), "product"
+    if product.category_id is not None:
+        category = await db.get(Category, product.category_id)
+        if category is not None and int(category.default_commission_bps or 0) > 0:
+            return int(category.default_commission_bps), "category"
+    return DEFAULT_COMMISSION_BPS, "system"
 
 
-def effective_rate_bps(rule: CommissionRule | None) -> int:
-    return rule.rate_bps if rule is not None else DEFAULT_COMMISSION_BPS
-
-
-def effective_fixed_fee(rule: CommissionRule | None) -> int:
-    return rule.fixed_fee_cents if rule is not None else 0
-
-
-def compute_commission(subtotal_cents: int, rule: CommissionRule | None) -> int:
-    """Commission in cents, rounding down in favour of the seller."""
-    rate = effective_rate_bps(rule)
-    commission = subtotal_cents * rate // 10_000 + effective_fixed_fee(rule)
-    # Never let fees exceed the goods amount.
+def compute_commission(subtotal_cents: int, rate_bps: int) -> int:
+    """佣金（分）：向下取整，且不超过货款本身。"""
+    commission = subtotal_cents * rate_bps // 10_000
     return max(0, min(commission, subtotal_cents))
-
-
-async def list_commission_rules(db: AsyncSession, tenant_id: int) -> list[CommissionRule]:
-    return list(
-        (
-            await db.scalars(
-                select(CommissionRule)
-                .where(CommissionRule.tenant_id == tenant_id)
-                .order_by(CommissionRule.priority.desc(), CommissionRule.id.desc())
-            )
-        ).all()
-    )
-
-
-async def ensure_default_rule(db: AsyncSession, tenant_id: int) -> CommissionRule:
-    """Guarantee a tenant-wide default rule exists."""
-    rule = await resolve_commission_rule(db, tenant_id, None, None)
-    if rule is not None:
-        return rule
-    rule = CommissionRule(
-        tenant_id=tenant_id,
-        name="默认佣金规则",
-        rate_bps=DEFAULT_COMMISSION_BPS,
-        fixed_fee_cents=0,
-        priority=0,
-        status="active",
-    )
-    db.add(rule)
-    await db.flush()
-    return rule
 
 
 # --------------------------------------------------------------------------- #

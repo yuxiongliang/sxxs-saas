@@ -48,7 +48,6 @@ async def test_cross_tenant_commerce_writes_are_rejected(client, platform_token,
     order_id = await _first_id(client, admin_token, "/api/v1/admin/orders?pageSize=5")
     seller_id = await _first_id(client, admin_token, "/api/v1/admin/sellers")
     payout_id = await _first_id(client, admin_token, "/api/v1/admin/payouts")
-    rule_id = await _first_id(client, admin_token, "/api/v1/admin/commission-rules")
 
     assert product_id and order_id and seller_id, "demo 站需要有商品/订单/卖家数据"
 
@@ -81,14 +80,6 @@ async def test_cross_tenant_commerce_writes_are_rejected(client, platform_token,
         )
         assert approved.status_code == 404, approved.text
 
-    # 抽佣规则：不能改别人租户的规则
-    if rule_id:
-        rule = await client.put(
-            f"/api/v1/admin/commission-rules/{rule_id}",
-            headers=bearer(outsider),
-            json={"rate_bps": 9999},
-        )
-        assert rule.status_code == 404, rule.text
 
 
 async def test_cross_tenant_attachments_are_rejected(client, platform_token, admin_token):

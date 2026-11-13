@@ -137,6 +137,10 @@ export interface SellerProductRecord {
   status: string;
   /** 被驳回时运营给的原因，重新提交后清空 */
   reject_reason?: string | null;
+  /** 佣金比例（万分比）与锁定状态：被运营调过就锁住，卖家不能改 */
+  commission_bps?: number | null;
+  commission_locked?: boolean;
+  category_id?: number | null;
   price_cents: number;
   stock: number;
   sku_id?: number | null;
@@ -240,17 +244,6 @@ export interface AddressRecord {
   district: string;
   detail: string;
   is_default: boolean;
-}
-
-export interface CommissionRuleRecord {
-  id: number;
-  name: string;
-  category_id?: number | null;
-  seller_id?: number | null;
-  rate_bps: number;
-  fixed_fee_cents: number;
-  priority: number;
-  status: string;
 }
 
 export interface PayoutRecord {

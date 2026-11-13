@@ -5,7 +5,6 @@ import type {
   CategoryRecord,
   CartItemRecord,
   CartSummary,
-  CommissionRuleRecord,
   OrderDetail,
   OrderRecord,
   PortalOrder,
@@ -61,6 +60,7 @@ export async function updateSellerProduct(
     main_image?: string;
     price_cents?: number;
     stock?: number;
+    commission_bps?: number;
   },
 ) {
   return unwrap<{
@@ -186,10 +186,18 @@ export async function updateAdminProduct(
     main_image?: string;
     images?: string[];
     category_id?: number | null;
+    commission_bps?: number;
   },
 ) {
   return unwrap<ProductRecord>(
     request(`/api/v1/admin/products/${id}`, { method: 'PUT', data }),
+  );
+}
+
+/** 运营改过的佣金比例会锁定，卖家不能再改；这个接口把决定权还给卖家。 */
+export async function unlockAdminProductCommission(id: number) {
+  return unwrap<{ id: number; commission_locked: boolean; commission_bps: number | null }>(
+    request(`/api/v1/admin/products/${id}/commission-unlock`, { method: 'POST' }),
   );
 }
 
@@ -387,43 +395,8 @@ export async function deleteAddress(id: number) {
 }
 
 // ---------------------------------------------------------------------------
-// 财务中心：佣金规则 / 提现审核 / 结算批次
+// 财务中心：提现审核 / 结算批次（佣金规则已下线，比例改挂在商品与分类上）
 // ---------------------------------------------------------------------------
-
-export async function listCommissionRules() {
-  return unwrap<CommissionRuleRecord[]>(
-    request('/api/v1/admin/commission-rules', { method: 'GET' }),
-  );
-}
-
-export async function createCommissionRule(data: {
-  name: string;
-  rate_bps: number;
-  fixed_fee_cents?: number;
-  seller_id?: number | null;
-  category_id?: number | null;
-  priority?: number;
-  status?: string;
-}) {
-  return unwrap<CommissionRuleRecord>(
-    request('/api/v1/admin/commission-rules', { method: 'POST', data }),
-  );
-}
-
-export async function updateCommissionRule(
-  id: number,
-  data: Partial<Omit<CommissionRuleRecord, 'id'>>,
-) {
-  return unwrap<CommissionRuleRecord>(
-    request(`/api/v1/admin/commission-rules/${id}`, { method: 'PUT', data }),
-  );
-}
-
-export async function deleteCommissionRule(id: number) {
-  return unwrap<null>(
-    request(`/api/v1/admin/commission-rules/${id}`, { method: 'DELETE' }),
-  );
-}
 
 export async function listPayouts(status?: string) {
   return unwrap<PayoutRecord[]>(

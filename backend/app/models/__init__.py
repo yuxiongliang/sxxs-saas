@@ -12,7 +12,7 @@ from app.models.catalog import (
     ProductSpecValue,
 )
 from app.models.department import Department
-from app.models.finance import CommissionRule, LedgerEntry, Payout, SettlementBatch
+from app.models.finance import LedgerEntry, Payout, SettlementBatch
 from app.models.im import Conversation, ConversationMember, ImReport, Message
 from app.models.moderation import ModerationCache, ModerationLog
 from app.models.notification import Notification
@@ -35,7 +35,6 @@ __all__ = [
     "Base",
     "CartItem",
     "Category",
-    "CommissionRule",
     "Conversation",
     "ConversationMember",
     "Department",
