@@ -1,9 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Card, Space, Switch, Table, Tag, Typography } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Space,
+  Switch,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
 import React from 'react';
 import {
   getNotificationPrefs,
   type NotificationCategorySetting,
+  type NotificationPrefs,
   saveNotificationPref,
 } from '@/services/auth/api';
 
@@ -12,6 +23,8 @@ const CHANNEL_LABEL: Record<string, string> = {
   email: '邮件',
   inbox: '站内信',
 };
+
+const PREFS_KEY = ['account-notification-prefs'];
 
 /**
  * 新消息通知：按「分类 × 渠道」保存到后端，并在群发时真实生效。
@@ -24,29 +37,73 @@ const NotificationView: React.FC = () => {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
-  const prefs = useQuery({
-    queryKey: ['account-notification-prefs'],
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: PREFS_KEY,
     queryFn: getNotificationPrefs,
   });
 
   const save = useMutation({
     mutationFn: saveNotificationPref,
-    onSuccess: () => {
-      message.success('通知设置已保存');
-      queryClient.invalidateQueries({
-        queryKey: ['account-notification-prefs'],
-      });
+    // 乐观更新：开关立刻停在用户点的位置，不等往返。失败再回滚。
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: PREFS_KEY });
+      const previous = queryClient.getQueryData<NotificationPrefs>(PREFS_KEY);
+      queryClient.setQueryData<NotificationPrefs>(PREFS_KEY, (old) =>
+        old
+          ? {
+              ...old,
+              categories: old.categories.map((category) =>
+                category.category !== input.category
+                  ? category
+                  : {
+                      ...category,
+                      channels: category.channels.map((item) =>
+                        item.channel === input.channel
+                          ? { ...item, enabled: input.enabled }
+                          : item,
+                      ),
+                    },
+              ),
+            }
+          : old,
+      );
+      return { previous };
     },
-    onError: (error: Error) => message.error(error.message),
+    onError: (mutationError: Error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(PREFS_KEY, context.previous);
+      }
+      message.error(mutationError.message);
+    },
+    onSuccess: () => message.success('通知设置已保存'),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: PREFS_KEY }),
   });
 
-  const categories = prefs.data?.categories ?? [];
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="通知设置加载失败"
+        description={String((error as Error)?.message ?? '未知错误')}
+        action={
+          <Button size="small" onClick={() => refetch()}>
+            重试
+          </Button>
+        }
+      />
+    );
+  }
+
+  const categories = data?.categories ?? [];
 
   const channelEnabled = (
     record: NotificationCategorySetting,
     channel: string,
   ) =>
     record.channels.find((item) => item.channel === channel)?.enabled ?? true;
+
+  const pendingKey = save.isPending ? save.variables : undefined;
 
   const toggle = (
     record: NotificationCategorySetting,
@@ -68,7 +125,7 @@ const NotificationView: React.FC = () => {
       <Table<NotificationCategorySetting>
         rowKey="category"
         size="small"
-        loading={prefs.isLoading}
+        loading={isLoading}
         dataSource={categories}
         pagination={false}
         columns={[
@@ -88,7 +145,7 @@ const NotificationView: React.FC = () => {
           {
             title: '站内信',
             dataIndex: 'inbox',
-            width: 120,
+            width: 130,
             render: () => (
               <Space size={6}>
                 <Switch checked disabled size="small" />
@@ -104,7 +161,10 @@ const NotificationView: React.FC = () => {
               <Switch
                 size="small"
                 checked={channelEnabled(record, channel)}
-                loading={save.isPending}
+                loading={
+                  pendingKey?.category === record.category &&
+                  pendingKey?.channel === channel
+                }
                 onChange={(checked) => toggle(record, channel, checked)}
               />
             ),
@@ -115,14 +175,14 @@ const NotificationView: React.FC = () => {
       <Card size="small" title="当前联系方式">
         <Typography.Text>
           邮箱：
-          {prefs.data?.contact.email ? (
-            <Tag color="green">{prefs.data.contact.email}</Tag>
+          {data?.contact.email ? (
+            <Tag color="green">{data.contact.email}</Tag>
           ) : (
             <Tag>未绑定</Tag>
           )}
           手机号：
-          {prefs.data?.contact.phone ? (
-            <Tag color="green">{prefs.data.contact.phone}</Tag>
+          {data?.contact.phone ? (
+            <Tag color="green">{data.contact.phone}</Tag>
           ) : (
             <Tag>未绑定</Tag>
           )}

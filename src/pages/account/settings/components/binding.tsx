@@ -1,6 +1,7 @@
 import { MailOutlined, MobileOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Divider,
@@ -31,7 +32,10 @@ const BindingView: React.FC = () => {
   const [kind, setKind] = useState<BindingKind | null>(null);
   const [form] = Form.useForm<BindingForm>();
 
-  const { data } = useQuery({ queryKey: ['account-me'], queryFn: me });
+  const { data, isError, error, refetch } = useQuery({
+    queryKey: ['account-me'],
+    queryFn: me,
+  });
   const user = data?.user;
 
   const save = useMutation({
@@ -86,9 +90,26 @@ const BindingView: React.FC = () => {
     },
   ];
 
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="绑定信息加载失败"
+        description={String((error as Error)?.message ?? '未知错误')}
+        action={
+          <Button size="small" onClick={() => refetch()}>
+            重试
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
     <>
       <Flex vertical>
+        {' '}
         {rows.map((item, index) => (
           <div key={item.key}>
             {index > 0 ? <Divider style={{ margin: '12px 0' }} /> : null}

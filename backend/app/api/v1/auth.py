@@ -9,6 +9,7 @@ from app.schemas.auth import (
     ContactUpdate,
     LoginRequest,
     MeResponse,
+    NotificationPrefUpdate,
     PasswordChange,
     ProfileUpdate,
     RegisterRequest,
@@ -112,7 +113,7 @@ async def get_notification_prefs(
 
 @router.put("/me/notification-prefs", response_model=ApiResponse[dict])
 async def save_notification_pref(
-    payload: dict,
+    payload: NotificationPrefUpdate,
     context: AuthContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ):
@@ -120,9 +121,9 @@ async def save_notification_pref(
         await account_service.save_notification_pref(
             db,
             context,
-            category=str(payload.get("category") or ""),
-            channel=str(payload.get("channel") or ""),
-            enabled=bool(payload.get("enabled", True)),
+            category=payload.category,
+            channel=payload.channel,
+            enabled=payload.enabled,
         ),
         "通知设置已保存",
     )

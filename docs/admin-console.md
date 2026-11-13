@@ -113,10 +113,11 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 几个刻意的取舍：
 
 - **`/auth/me*` 不挂权限码**：能登录就能改自己的资料，查询条件永远是 `context.user`，从不接受外部传入的 `user_id`。
-- **用户名 / 用户ID 不可自助修改**，昵称由管理员在「用户管理」维护 —— 个人设置页因此没有昵称、手机号输入框（模板里那些字段后端根本没有落点）。
-- **改邮箱/手机必须验密码**：项目没有短信/邮件验证码通道（`settings/sms` 的「测试连接」也只是参数校验），密码是当下唯一能证明本人的手段。
+- **用户名 / 用户ID 不可自助修改**，昵称由管理员在「用户管理」维护 —— 个人设置页因此没有**昵称**输入框；手机号字段本身存在（`users.phone`），只是不在基本设置里改，而是挪到「账号绑定」（需密码确认）。
+- **改邮箱/手机必须验密码**：项目没有短信/邮件验证码通道（`settings/sms` 的「测试连接」也只是参数校验），密码是当下唯一能证明本人的手段。自助注册的账号 `username == email`，换邮箱会**同步登录名**；管理员创建的账号不动 username。
 - **模板删掉的假入口**：头像上传（`users` 表无 `avatar` 列）、个人简介 / 国家 / 省市 / 街道（无字段）、密保问题 / MFA（无字段无校验）、淘宝 / 支付宝 / 钉钉绑定（无 OAuth 实体）。
-- **改密码不会踢掉其它会话**：没有 user→token 反向索引，旧 access token 最多再活 30 分钟，所以前端改完直接清 token 重新登录。
+- **改密码会踢掉本人所有会话**：`users.token_version` +1 写进 JWT claim，`context_from_payload` 与 `refresh` 都比对 —— 其它标签页/设备的 access token 立刻 401，Redis 里的 refresh token 也无法续期（否则最长还能再用 7 天）。管理员「重置密码」同样 +1。
+- **`/account/center`（个人中心）仍是模板演示页**，所以 `/account` 默认重定向到 `/account/settings`，避免一进来先撞到假数据页。
 
 ### 新消息通知的生效口径
 
@@ -127,8 +128,9 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 3. 用户分类偏好 —— `user_notification_prefs`（缺行 = 开）。
 
 群发记录里三个数字不要混用：`total` = 命中 audience 的真实成员数（成员与账号都 active），
-`skipped_count` = 被第 2/3 层挡掉的人数，`success_count` = 真会投递的人数。
-`audience` 也已经是真实展开（`all` / `role:<code>` → `tenant_members`），不再有写死的 1280。
+`skipped_count` = 渠道可用但**这些人本人**关掉了该分类的人数（只算用户偏好这一层），
+`success_count` = 真会投递的人数。渠道未配置/被租户关闭时整条记录是 `failed`，不记 `skipped`。
+`audience` 只接受 `all` 与 `role:<code>`（其它值 422，避免写错就静默发给全员）。
 
 > 真实投递（SMTP / 短信网关 / 站内信收件箱）仍未接入：这里落地的是「谁会收到」，
 > 不是「已经送达」。站内信目前只有群发记录，没有按用户的收件箱，所以 inbox 渠道强制不可关。

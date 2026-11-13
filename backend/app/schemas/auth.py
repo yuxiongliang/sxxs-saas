@@ -44,6 +44,8 @@ class AuthUser(BaseModel):
     gender: Gender | None = None
     birthday: date | None = None
     last_login_at: datetime | None = None
+    # 上一次登录（本次登录前的那个时间）：安全设置用它看异常登录
+    previous_login_at: datetime | None = None
     has_password: bool = True
     # 前端模板一直读 avatar，但 users 表没有这一列；保留字段是为了不打断既有类型，
     # 永远是 None。真要做头像需要先加列 + 上传归属，那是独立一件事。
@@ -73,9 +75,18 @@ class ContactUpdate(BaseModel):
     密码确认是当下唯一能真正验证「是本人」的手段。
     """
 
-    phone: str | None = Field(default=None, max_length=32)
+    phone: str | None = Field(default=None, max_length=32, pattern=r"^\+?[0-9][0-9\- ]{5,31}$")
     email: EmailStr | None = None
     password: str = Field(min_length=1, max_length=128)
+
+
+class NotificationPrefUpdate(BaseModel):
+    """用户级通知开关。用模型而不是裸 dict：`bool("false")` 是 True，
+    直接 `payload.get()` 会把「关」存成「开」。"""
+
+    category: str = Field(min_length=1, max_length=32)
+    channel: str = Field(min_length=1, max_length=16)
+    enabled: bool
 
 
 class AuthResponse(BaseModel):

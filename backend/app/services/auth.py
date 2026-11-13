@@ -47,6 +47,7 @@ def _auth_user(user: User) -> dict:
         "gender": user.gender,
         "birthday": user.birthday,
         "last_login_at": user.last_login_at,
+        "previous_login_at": user.previous_login_at,
         "has_password": bool(user.password_hash),
         "avatar": None,
     }
@@ -139,6 +140,18 @@ async def build_context(
     )
 
 
+def token_is_stale(payload: dict, user: User) -> bool:
+    """token 里的会话代次与库里不一致 → 改过密码，旧 token 作废。
+
+    缺这个 claim 的老 token 按过期处理：access token 只有 30 分钟寿命，
+    代价只是上线后需要重新登录一次，换来的是「改密码能踢掉其它标签页/设备」。
+    """
+    try:
+        return int(payload.get("token_version", -1)) != int(user.token_version or 0)
+    except (TypeError, ValueError):
+        return True
+
+
 async def context_from_payload(db: AsyncSession, payload: dict) -> AuthContext:
     try:
         user_id = int(payload.get("sub", 0))
@@ -148,6 +161,9 @@ async def context_from_payload(db: AsyncSession, payload: dict) -> AuthContext:
     user = await user_dao.get_user(db, user_id)
     if user is None or user.status != "active":
         raise HTTPException(status_code=401, detail="用户不存在或已停用")
+    if token_is_stale(payload, user):
+        # 改过密码 / 被重置过：上一代 token 一律不认。
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
     member = (
         await db.scalars(
             select(TenantMember).where(
@@ -171,13 +187,20 @@ async def _issue_tokens(context: AuthContext) -> tuple[str, str]:
         audience="admin",
         roles=context.roles,
         permission_version=context.permission_version,
+        token_version=context.user.token_version,
     )
     refresh_token = create_refresh_token()
     try:
         await redis_client.setex(
             f"refresh:{refresh_token}",
             settings.refresh_token_expire_days * 86400,
-            json.dumps({"user_id": context.user.id, "tenant_id": context.tenant.id}),
+            json.dumps(
+                {
+                    "user_id": context.user.id,
+                    "tenant_id": context.tenant.id,
+                    "token_version": context.user.token_version,
+                }
+            ),
         )
     except RedisError as exc:
         raise HTTPException(status_code=503, detail="会话服务不可用") from exc
@@ -259,8 +282,9 @@ async def login(
     else:
         raise HTTPException(status_code=400, detail="请选择要登录的租户")
     member, tenant = selected
-    # 登录成功才回写 last_login_at：个人设置页的「最近登录」要有真实数据源。
-    # 失败次数/锁定不在本次范围（没有 attempt 表）。
+    # 登录成功才回写：旧值先挤到 previous_login_at，页面上的「上次登录」
+    # 才真的是**上一次**，而不是刚刚这次（否刚永远看不出异常登录）。
+    user.previous_login_at = user.last_login_at
     user.last_login_at = datetime.now(UTC)
     await db.commit()
     context = await build_context(db, user, member, tenant)
@@ -318,6 +342,9 @@ async def refresh(
     user = await user_dao.get_user(db, user_id)
     tenant = await db.get(Tenant, tenant_id)
     if user is None or tenant is None:
+        raise HTTPException(status_code=401, detail="登录已过期")
+    if int(data.get("token_version", -1)) != int(user.token_version or 0):
+        # 改过密码：这枚 refresh token 属于上一代会话，不再续期。
         raise HTTPException(status_code=401, detail="登录已过期")
     member = (
         await db.scalars(

@@ -7,7 +7,9 @@ class NotificationCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     channel: str = "sms"
     template: str = ""
-    audience: str = "all"
+    # 只允许「全员」或「按角色」。写错/写空一律 400 —— 旧实现里任何不认识的值
+    # （包括 `custom`、`role:` 空尾巴）都会静默退化成全员，等于把内部提醒发给所有客户。
+    audience: str = Field(default="all", pattern=r"^(all|role:[a-z0-9_-]{1,32})$")
     # 通知分类：决定命中哪些用户的「新消息通知」偏好
     category: str = Field(default="system", pattern="^(transaction|finance|im|system|marketing)$")
     content: str = ""

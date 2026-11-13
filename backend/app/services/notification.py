@@ -201,8 +201,10 @@ async def _deliver(db: AsyncSession, record: Notification) -> Notification:
     不是「已送达」。三个数字各有含义，不要混用：
 
     * `total`   — 命中 audience 的真实成员数；
-    * `skipped` — 命中但被租户渠道开关或本人分类偏好挡掉的人；
-    * `success` — 真会被投递的人数。
+    * `failed`  — **渠道本身不可用**（未配置/被租户关闭），全员未发；
+    * `skipped` — 渠道可用，但这些人**本人**关掉了这个分类（只算第 3 层）。
+
+    因此 `skipped` 不包含「租户关渠道」的人，那种情况整条记录就是 `failed`。
     """
     # 保留一点延迟：前端拿到的是“已处理完”的结果，少一个轮询分支。
     await asyncio.sleep(0.35)
@@ -254,6 +256,9 @@ async def retry_notification(
         raise HTTPException(status_code=404, detail="通知记录不存在")
     if record.status == "success":
         return record
+    if record.status == "pending":
+        # 定时发送的通知还没到点，直接「重试」等于提前群发。
+        raise HTTPException(status_code=400, detail="定时通知尚未到发送时间，不能重试")
     # 重试不再“直接标成功”：按当前收件人与偏好重新算一次，
     # 否刚关掉短信的租户点一下重试就看到全员成功。
     return await _deliver(db, record)

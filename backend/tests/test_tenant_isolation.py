@@ -136,14 +136,23 @@ async def test_settings_are_written_per_tenant(client, admin_token, platform_tok
     assert demo_after["enabled"] == demo_before["enabled"]
 
 
-async def test_owner_cannot_act_inside_the_demo_tenant(client, admin_token, platform_token):
+async def test_owner_cannot_act_inside_the_demo_tenant(
+    client, admin_token, platform_token, db_session
+):
     """A token is bound to one tenant; it cannot be replayed against another."""
+    from sqlalchemy import select
+
     from app.core.security import create_access_token
+    from app.models.user import User
 
     await _create_tenant(client, platform_token)
     owner = (
         await client.get("/api/v1/auth/me", headers=bearer(await _owner_login(client)))
     ).json()["data"]
+    owner_row = (
+        await db_session.scalars(select(User).where(User.id == owner["user"]["id"]))
+    ).first()
+    assert owner_row is not None
 
     forged = create_access_token(
         user_id=owner["user"]["id"],
@@ -151,6 +160,9 @@ async def test_owner_cannot_act_inside_the_demo_tenant(client, admin_token, plat
         audience="admin",
         roles=["tenant_owner"],
         permission_version=1,
+        # 会话代次必须与库里一致，否则会先被 token_version 校验判 401，
+        # 测不到「租户边界」这条本来要测的东西。
+        token_version=owner_row.token_version,
     )
     response = await client.get("/api/v1/users", headers=bearer(forged))
     assert response.status_code == 403

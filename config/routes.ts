@@ -264,7 +264,9 @@ export default [
     routes: [
       {
         path: '/account',
-        redirect: '/account/center',
+        // `center` 仍是模板演示页（文章/应用/项目全是 mock 假数据），
+        // 个人设置才是真实页面 —— 默认落点改成它，别再让人先撞到假页。
+        redirect: '/account/settings',
       },
       {
         name: 'center',

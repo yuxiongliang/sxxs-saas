@@ -280,9 +280,14 @@ export async function sendNotification(data: {
 }
 
 export async function retryNotification(id: number) {
-  return unwrap<NotificationRecord>(
-    request(`${API_PREFIX}/notifications/${id}/retry`, { method: 'POST' }),
+  // 重试不再无条件成功（渠道还关着就还是失败），所以把后端的 message 一起带回来，
+  // 调用方据此提示，而不是固定弹「已重新发送」。
+  const response = await request<ApiResponse<NotificationRecord>>(
+    `${API_PREFIX}/notifications/${id}/retry`,
+    { method: 'POST' },
   );
+  if (response.code !== 200) throw new Error(response.message || '重试失败');
+  return { record: response.data, message: response.message };
 }
 
 export interface TenantBrandRecord {

@@ -28,6 +28,7 @@ def create_access_token(
     audience: str,
     roles: list[str],
     permission_version: int,
+    token_version: int = 0,
 ) -> str:
     now = datetime.now(UTC)
     payload = {
@@ -36,6 +37,8 @@ def create_access_token(
         "aud": audience,
         "roles": roles,
         "permission_version": permission_version,
+        # 改密码 / 被重置时 +1；旧 token 进来会被 context_from_payload 判 401。
+        "token_version": token_version,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
     }

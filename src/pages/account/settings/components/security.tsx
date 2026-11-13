@@ -1,6 +1,7 @@
 import { LockOutlined } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Divider,
@@ -39,7 +40,10 @@ const SecurityView: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<PasswordForm>();
 
-  const { data } = useQuery({ queryKey: ['account-me'], queryFn: me });
+  const { data, isError, error, refetch } = useQuery({
+    queryKey: ['account-me'],
+    queryFn: me,
+  });
   const user = data?.user;
 
   const save = useMutation({
@@ -47,18 +51,25 @@ const SecurityView: React.FC = () => {
     onSuccess: async () => {
       setOpen(false);
       form.resetFields();
-      message.success('密码已修改，请用新密码重新登录');
-      // 只清本地 token 不够：refresh cookie 还在，刷新页面会自动恢复会话。
-      // 先调 logout 让服务端删掉这条 refresh token，再整页跳登录页。
+      // 改密码会让 token_version +1，服务端已经把本人所有会话作废。
+      // 这里只负责清掉本地痕迹并回登录页；清不掉 refresh cookie 就明确告知。
+      let loggedOut = true;
       try {
         await logout();
       } catch {
-        // 改密已在服务端完成，登出失败不应阻断后续跳转
+        loggedOut = false;
       }
       clearAccessToken();
-      window.setTimeout(() => {
-        window.location.replace('/user/login');
-      }, 800);
+      if (loggedOut) {
+        message.success('密码已修改，请用新密码重新登录');
+        window.setTimeout(() => {
+          window.location.replace('/user/login');
+        }, 800);
+      } else {
+        message.warning(
+          '密码已修改；但当前浏览器会话未能安全终止，请手动退出登录后再用新密码登录',
+        );
+      }
     },
     onError: (error: Error) => message.error(error.message),
   });
@@ -110,11 +121,36 @@ const SecurityView: React.FC = () => {
       actions: [],
     },
     {
-      title: '最近登录',
-      description: `上次登录时间：${formatTime(user?.last_login_at)}`,
+      title: '登录记录',
+      description: (
+        <>
+          上次登录：{formatTime(user?.previous_login_at)}
+          <br />
+          本次登录：{formatTime(user?.last_login_at)}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            （发现不是你本人操作？立即改密码，旧会话会全部失效）
+          </Typography.Text>
+        </>
+      ),
       actions: [],
     },
   ];
+
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="安全设置加载失败"
+        description={String((error as Error)?.message ?? '未知错误')}
+        action={
+          <Button size="small" onClick={() => refetch()}>
+            重试
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <>

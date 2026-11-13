@@ -21,6 +21,8 @@ export interface AuthUser {
   gender?: 'male' | 'female' | 'other' | 'unknown' | null;
   birthday?: string | null;
   last_login_at?: string | null;
+  /** 上一次登录（本次登录前的时间），「安全设置」用它看异常登录 */
+  previous_login_at?: string | null;
   has_password?: boolean;
   avatar?: string | null;
 }

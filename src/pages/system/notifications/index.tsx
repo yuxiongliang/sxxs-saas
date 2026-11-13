@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -22,7 +23,6 @@ import {
   Tabs,
   Tag,
 } from 'antd';
-import { Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
 import {
@@ -34,8 +34,8 @@ import type { NotificationRecord } from '@/services/system/types';
 import SettingPage from '../components/SettingPage';
 import {
   CHANNEL_OPTIONS,
-  NOTIFICATION_STATUS_OPTIONS,
   formatDateTime,
+  NOTIFICATION_STATUS_OPTIONS,
   optionColor,
   optionLabel,
 } from '../utils';
@@ -46,8 +46,16 @@ const AUDIENCE_OPTIONS = [
   { label: '管理员', value: 'role:admin' },
   { label: '运营人员', value: 'role:operator' },
   { label: '只读用户', value: 'role:viewer' },
-  { label: '自定义人群', value: 'custom' },
 ];
+
+// 与后端 `Notification.category` 一一对应（用户可在「个人设置→新消息通知」按分类关短信/邮件）
+const CATEGORY_LABEL: Record<string, string> = {
+  transaction: '交易动态',
+  finance: '结算与账单',
+  im: '消息提醒',
+  system: '系统与安全',
+  marketing: '营销活动',
+};
 
 const channelIcon = (channel: string) => {
   if (channel === 'sms') return <MessageOutlined />;
@@ -79,10 +87,14 @@ const NotificationsPage: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: ['notification-stats'] });
   };
 
-const handleRetry = async (record: NotificationRecord) => {
+  const handleRetry = async (record: NotificationRecord) => {
     try {
-      await retryNotification(record.id);
-      message.success('已重新发送');
+      const result = await retryNotification(record.id);
+      if (result.record.status === 'success') {
+        message.success(result.message || '已重新发送');
+      } else {
+        message.warning(result.message || '重试后仍未发出');
+      }
       refresh();
     } catch (error: any) {
       message.error(error?.message || '重试失败');
@@ -125,6 +137,14 @@ const handleRetry = async (record: NotificationRecord) => {
         AUDIENCE_OPTIONS.find((item) => item.value === value)?.label ?? value,
     },
     {
+      title: '分类',
+      dataIndex: 'category',
+      width: 120,
+      render: (value: string) => (
+        <Tag>{CATEGORY_LABEL[value] ?? value ?? '—'}</Tag>
+      ),
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       width: 110,
@@ -135,10 +155,14 @@ const handleRetry = async (record: NotificationRecord) => {
       ),
     },
     {
-      title: '成功 / 总数',
+      title: '成功 / 跳过 / 总数',
       dataIndex: 'success_count',
-      width: 120,
-      render: (_, record) => `${record.success_count} / ${record.total}`,
+      width: 150,
+      render: (_, record) => (
+        <span title="跳过来自：用户在自己的「新消息通知」里关掉了这个分类，或租户关了这个渠道">
+          {record.success_count} / {record.skipped_count ?? 0} / {record.total}
+        </span>
+      ),
     },
     {
       title: '发送时间',
@@ -228,7 +252,7 @@ const handleRetry = async (record: NotificationRecord) => {
           activeKey={activeTab}
           onChange={setActiveTab}
           items={[
-{
+            {
               key: 'records',
               label: '发送记录',
               children: (

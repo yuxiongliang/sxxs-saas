@@ -22,6 +22,7 @@ from app.core.security import create_access_token, create_refresh_token, verify_
 from app.dao import user as user_dao
 from app.models.permission import Permission
 from app.models.user import User
+from app.services.auth import token_is_stale
 
 logger = structlog.get_logger(__name__)
 
@@ -79,6 +80,8 @@ async def platform_context_from_payload(db: AsyncSession, payload: dict) -> Plat
     user = await user_dao.get_user(db, user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="用户不存在")
+    if token_is_stale(payload, user):
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
     return await build_platform_context(db, user)
 
 
@@ -89,13 +92,20 @@ async def _issue_tokens(context: PlatformContext) -> tuple[str, str]:
         audience=PLATFORM_AUDIENCE,
         roles=context.roles,
         permission_version=context.permission_version,
+        token_version=context.user.token_version,
     )
     refresh_token = create_refresh_token()
     try:
         await redis_client.setex(
             f"refresh:{refresh_token}",
             settings.refresh_token_expire_days * 86400,
-            json.dumps({"user_id": context.user.id, "scope": "platform"}),
+            json.dumps(
+                {
+                    "user_id": context.user.id,
+                    "scope": "platform",
+                    "token_version": context.user.token_version,
+                }
+            ),
         )
     except RedisError as exc:
         raise HTTPException(status_code=503, detail="会话服务不可用") from exc
@@ -148,6 +158,9 @@ async def refresh(db: AsyncSession, refresh_token: str) -> dict:
         raise HTTPException(status_code=401, detail="登录已过期") from exc
     user = await user_dao.get_user(db, user_id)
     if user is None:
+        raise HTTPException(status_code=401, detail="登录已过期")
+    if int(data.get("token_version", -1)) != int(user.token_version or 0):
+        # 改过密码：平台会话也一起作废。
         raise HTTPException(status_code=401, detail="登录已过期")
     context = await build_platform_context(db, user)
     try:

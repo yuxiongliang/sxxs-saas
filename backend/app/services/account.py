@@ -57,10 +57,12 @@ async def update_profile(db: AsyncSession, context: AuthContext, payload: Profil
     """改性别/生日。字段白名单在 schema 层，这里只落库 + 留痕。"""
     user = context.user
     data = payload.model_dump(exclude_unset=True)
-    if not data:
+    changed = {key: value for key, value in data.items() if getattr(user, key) != value}
+    if not changed:
+        # 没真改就不写审计：否则每次点「保存」都多一条 before == after 的噪声。
         return user
-    before = {key: getattr(user, key) for key in data}
-    for key, value in data.items():
+    before = {key: getattr(user, key) for key in changed}
+    for key, value in changed.items():
         setattr(user, key, value)
     await audit_service.record(
         db,
@@ -70,7 +72,7 @@ async def update_profile(db: AsyncSession, context: AuthContext, payload: Profil
         target_type="user",
         target_id=user.id,
         before={k: str(v) if v is not None else None for k, v in before.items()},
-        after={k: str(v) if v is not None else None for k, v in data.items()},
+        after={k: str(v) if v is not None else None for k, v in changed.items()},
     )
     await db.commit()
     await db.refresh(user)
@@ -80,10 +82,11 @@ async def update_profile(db: AsyncSession, context: AuthContext, payload: Profil
 async def change_password(
     db: AsyncSession, context: AuthContext, payload: PasswordChange
 ) -> None:
-    """改密码：必须验当前密码，改完把本人所有 refresh token 作废。
+    """改密码：验当前密码 → 换 hash → 会话代次 +1。
 
-    这里没有 user→token 的反向索引，做不到「踢掉该用户全部会话」，所以退而求其次：
-    改密后前端主动登出（响应里 `relogin=true`），当前 access token 最多再活 30 分钟。
+    `token_version` +1 会同时作废：
+    * 其它标签页/设备的 access token（`context_from_payload` 每次请求比对）；
+    * Redis 里的 refresh token（刷新时比对），最长 7 天的续期窗口因此封死。
     """
     user = context.user
     if not user.password_hash:
@@ -93,6 +96,8 @@ async def change_password(
     if payload.old_password == payload.new_password:
         raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
     user.password_hash = hash_password(payload.new_password)
+    # 让本人已有的 access / refresh token 全部作废（其它标签页、其它设备）。
+    user.token_version = (user.token_version or 0) + 1
     await audit_service.record(
         db,
         action=audit_service.ACTION_PASSWORD_CHANGED,
@@ -119,8 +124,17 @@ async def update_contact(db: AsyncSession, context: AuthContext, payload: Contac
         exists = await user_dao.get_by_email(db, payload.email)
         if exists is not None and exists.id != user.id:
             raise HTTPException(status_code=409, detail="该邮箱已被其他账号使用")
-        before["email"] = user.email
-        changed["email"] = payload.email
+        before["email"] = _mask(user.email)
+        changed["email"] = _mask(payload.email)
+        # 自助注册的账号 `username == email`（见 `services.auth.register`），而登录
+        # 只认 username。不同步的话，界面说「用新邮箱登录」实际会 401。
+        if user.username == user.email:
+            taken = await user_dao.get_by_username(db, payload.email)
+            if taken is not None and taken.id != user.id:
+                raise HTTPException(status_code=409, detail="该邮箱已被其他账号用作登录名")
+            before["username"] = user.username
+            changed["username"] = payload.email
+            user.username = payload.email
         user.email = payload.email
 
     if payload.phone is not None and payload.phone != (user.phone or ""):
@@ -132,8 +146,8 @@ async def update_contact(db: AsyncSession, context: AuthContext, payload: Contac
         ).first()
         if taken is not None:
             raise HTTPException(status_code=409, detail="该手机号已被其他账号使用")
-        before["phone"] = user.phone
-        changed["phone"] = payload.phone
+        before["phone"] = _mask(user.phone)
+        changed["phone"] = _mask(payload.phone)
         user.phone = payload.phone
 
     if not changed:

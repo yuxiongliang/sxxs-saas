@@ -78,7 +78,11 @@ async def retry_notification(
     db: AsyncSession = Depends(get_db),
 ):
     record = await notification_service.retry_notification(db, notification_id, context.tenant.id)
-    return ok(NotificationOut.model_validate(record), "通知已重试")
+    message = "通知已重试"
+    if record.status != "success":
+        # 重试不再无条件标成功：渠道还关着就还是失败，提示要说真话。
+        message = f"重试后仍未发出：{record.error_message or '发送失败'}"
+    return ok(NotificationOut.model_validate(record), message)
 
 
 @router.get("/templates", response_model=ApiResponse[list[dict]])

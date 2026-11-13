@@ -136,6 +136,8 @@ export interface NotificationRecord {
   channel: NotificationChannel;
   template: string;
   audience: string;
+  /** transaction / finance / im / system / marketing */
+  category: string;
   content: string;
   status: NotificationStatus;
   scheduled_at?: string;
@@ -143,6 +145,8 @@ export interface NotificationRecord {
   total: number;
   success_count: number;
   failed_count: number;
+  /** 命中受众但被用户自己的通知偏好挡掉的人数 */
+  skipped_count: number;
   error_message?: string;
   created_at: string;
 }

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -45,7 +46,7 @@ const BaseView: React.FC = () => {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['account-me'],
     queryFn: me,
   });
@@ -70,6 +71,22 @@ const BaseView: React.FC = () => {
       birthday: values.birthday ? values.birthday.format('YYYY-MM-DD') : null,
     });
   };
+
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="个人资料加载失败"
+        description={String((error as Error)?.message ?? '未知错误')}
+        action={
+          <Button size="small" onClick={() => refetch()}>
+            重试
+          </Button>
+        }
+      />
+    );
+  }
 
   if (isLoading || !user) {
     return <Card loading size="small" />;
@@ -108,8 +125,19 @@ const BaseView: React.FC = () => {
           <Descriptions.Item label="手机号">
             {user.phone || '未绑定'}
           </Descriptions.Item>
-          <Descriptions.Item label="最近登录">
+          <Descriptions.Item label="本次登录">
             {formatTime(user.last_login_at)}
+          </Descriptions.Item>
+          <Descriptions.Item label="上次登录">
+            {formatTime(user.previous_login_at)}
+            {user.previous_login_at ? null : (
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 12, marginLeft: 8 }}
+              >
+                首次登录或历史数据未记录
+              </Typography.Text>
+            )}
           </Descriptions.Item>
         </Descriptions>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>

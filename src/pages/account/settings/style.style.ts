@@ -41,33 +41,6 @@ const useStyles = createStyles(({ token }) => {
       fontSize: '20px',
       lineHeight: '28px',
     },
-    taobao: {
-      display: 'block',
-      color: '#ff4000',
-      fontSize: '48px',
-      lineHeight: '48px',
-      borderRadius: token.borderRadius,
-    },
-    dingding: {
-      margin: '2px',
-      padding: '6px',
-      color: '#fff',
-      fontSize: '32px',
-      lineHeight: '32px',
-      backgroundColor: '#2eabff',
-      borderRadius: token.borderRadius,
-    },
-    alipay: {
-      color: '#2eabff',
-      fontSize: '48px',
-      lineHeight: '48px',
-      borderRadius: token.borderRadius,
-    },
-    ':global': {
-      'font.strong': { color: token.colorSuccess },
-      'font.medium': { color: token.colorWarning },
-      'font.weak': { color: token.colorError },
-    },
   };
 });
 

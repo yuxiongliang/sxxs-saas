@@ -185,5 +185,7 @@ async def reset_password(db: AsyncSession, user_id: int, tenant_id: int = 1) -> 
     user = await get_user_or_404(db, user_id, tenant_id)
     temporary_password = f"Antd@{secrets.token_urlsafe(8)}"
     user.password_hash = hash_password(temporary_password)
+    # 重置等于强制下线：不让旧会话拿着旧 token 继续用。
+    user.token_version = (user.token_version or 0) + 1
     await db.commit()
     return temporary_password

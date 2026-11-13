@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.ids import new_public_id
@@ -35,3 +35,14 @@ class User(Base, TimestampMixin):
         Boolean, default=False, server_default="false", index=True
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 上一次登录时间（本次登录时把旧值挪过来）：「安全设置」里要能看出异常登录，
+    # 只存一个 last_login_at 的话，页面上永远显示「刚刚」。
+    previous_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # 会话代次：改密码/被管理员重置时 +1，旧 token 立即失效。
+    # access token 里带这个值，`context_from_payload` 每次请求比对；
+    # refresh token 的 Redis 载荷也带一份，刷新时比对。
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
