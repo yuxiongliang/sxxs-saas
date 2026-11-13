@@ -31,6 +31,8 @@ const PortalShell: React.FC<PortalShellProps> = ({
   maxWidth = 1280,
 }) => {
   const { initialState } = useModel('@@initialState');
+  // 买家中心也跟租户品牌走：原来写死「C2C 商城」，换了站名这里不变很割裂
+  const brand = initialState?.brand;
   // 开店状态决定导航文案：未开店引导申请、审核中打标、通过后直接进店管理
   const { data: application } = useQuery({
     queryKey: ['seller-application'],
@@ -58,9 +60,25 @@ const PortalShell: React.FC<PortalShellProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <Link
             to="/products"
-            style={{ color: '#fff', fontSize: 24, fontWeight: 700 }}
+            style={{
+              color: '#fff',
+              fontSize: 24,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
           >
-            <ShopOutlined /> C2C 商城
+            {brand?.logo_url ? (
+              <img
+                src={brand.logo_url}
+                alt={brand.display_name}
+                style={{ height: 28, objectFit: 'contain' }}
+              />
+            ) : (
+              <ShopOutlined />
+            )}
+            {brand?.display_name || 'C2C 商城'}
           </Link>
           {title ? <span style={{ opacity: 0.85 }}>/ {title}</span> : null}
         </div>

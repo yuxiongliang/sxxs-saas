@@ -297,7 +297,6 @@ export interface TenantBrandRecord {
   display_name: string;
   logo_url?: string | null;
   favicon_url?: string | null;
-  theme_color?: string | null;
 }
 
 export async function getTenantBrand() {
@@ -310,7 +309,6 @@ export async function saveTenantBrand(data: {
   display_name?: string;
   logo_url?: string;
   favicon_url?: string;
-  theme_color?: string;
 }) {
   return unwrap<TenantBrandRecord>(
     request(`${API_PREFIX}/tenant/brand`, { method: 'PUT', data }),

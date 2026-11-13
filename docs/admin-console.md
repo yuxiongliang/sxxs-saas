@@ -139,6 +139,24 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 All module uploads should use `src/components/AttachmentUpload` and the `/api/v1/attachments/upload` endpoint. The shared upload component records metadata in PostgreSQL and writes the blob to `backend/uploads/` in this demo. Swap the storage adapter for OSS presigned uploads later without changing page code.
 
+## 站点品牌（`/system/brand`）
+
+租户维护自己的站点名称 / Logo / Favicon，落在 `tenants` 表（不落 settings —— 登录页与通知模板在配置未加载时就要用）。
+
+| 字段 | 怎么填 | 生效位置 |
+|---|---|---|
+| 全站名称 `display_name` | 文本 | 控制台头部标题、登录页标题、页脚、买家中心头部、`<title>`、通知模板 `{{tenant_name}}` |
+| 站点 Logo `logo_url` | **点「从附件中心选择」挑图**（`src/components/AttachmentPicker`） | 控制台左上角、登录页、买家商城头部、买家中心 |
+| Favicon `favicon_url` | 填图片地址 | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`） |
+
+几个必须知道的口径：
+
+- **选图存的是 `/api/v1/attachments/public/{id}` 相对直链**，不是附件表里的绝对 `url`——绝对地址指向后端 `public_base_url`，租户换了自己的域名就打错站。
+- **保存品牌时后端会把选中的附件标成 `visibility=public`**（`_publish_logo_attachment`）。附件中心上传出来的附件默认是 `tenant` 可见，不发布的话这条直链一直 404。只能发布**本租户自己的**附件，别人的 id 会 400。
+- **刚选完还没保存时**，`/public/{id}` 仍 404（附件还没变 public），所以选择器预览临时用附件的原始 `url`；保存后自动切到稳定直链。
+- **没有主题色**：原来那个「主题色」输入框存了 `tenants.theme_color` 但全站没有任何地方拿它去改主题，属于「填了不生效」；已从 UI / API / 模型 / DB 列一并移除（迁移 `e7a3c5d19b42`）。全站配色跟随控制台主题与深色模式。
+- 品牌数据来源：公开页用 `GET /api/v1/public/brand`（匿名可读，按 Host 解析租户），`getInitialState` 拉一次写进 `initialState.brand`。**不要把品牌写进 `settings`**：`SettingDrawer` 初始化时会 `delete settings.title` 并整体回写。
+
 ## API contract
 
 Successful response:

@@ -8,13 +8,15 @@ class TenantBrandOut(BaseModel):
     display_name: str
     logo_url: str | None = None
     favicon_url: str | None = None
-    theme_color: str | None = None
 
 
 class TenantBrandUpdate(BaseModel):
-    """租户维护自己的站点品牌。平台可覆盖（后续在平台端做）。"""
+    """租户维护自己的站点品牌。平台可覆盖（后续在平台端做）。
+
+    没有主题色：全站配色跟随控制台主题（antd token），按租户自定义颜色会和
+    深色模式 / 组件库色板冲突，产品上不提供这个开关。
+    """
 
     display_name: str | None = Field(default=None, max_length=64)
     logo_url: str | None = Field(default=None, max_length=512)
     favicon_url: str | None = Field(default=None, max_length=512)
-    theme_color: str | None = Field(default=None, max_length=16)

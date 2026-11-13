@@ -1,5 +1,6 @@
 import { GithubOutlined } from '@ant-design/icons';
 import packageJson from '@root/package.json';
+import { useModel } from '@umijs/max';
 import { Divider } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
@@ -65,11 +66,16 @@ const useStyles = createStyles(({ token, css }) => ({
 
 const Footer: React.FC = () => {
   const { styles } = useStyles();
+  const { initialState } = useModel('@@initialState');
   const year = new Date().getFullYear();
+  // 页脚原来写死「Ant Design Pro」，租户改了自己的站名也不会变。
+  const siteName = initialState?.brand?.display_name || 'Ant Design Pro';
 
   return (
     <div className={styles.footer}>
-      <div className={styles.copyright}>Ant Design Pro &copy; {year}</div>
+      <div className={styles.copyright}>
+        {siteName} &copy; {year}
+      </div>
       <div className={styles.meta}>
         <span className={styles.group}>
           <span className={styles.label}>ver</span>

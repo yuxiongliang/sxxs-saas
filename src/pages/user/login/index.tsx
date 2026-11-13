@@ -182,6 +182,9 @@ const Login: React.FC = () => {
     }
   };
   const { status, type: loginType } = userLoginState;
+  // 登录页也跟租户品牌走：logo 与标题从公开品牌接口来（取不到就用默认值）
+  const brand = initialState?.brand;
+  const siteTitle = brand?.display_name || Settings.title;
 
   return (
     <div className={styles.container}>
@@ -191,7 +194,7 @@ const Login: React.FC = () => {
             id: 'menu.login',
             defaultMessage: '登录页',
           })}
-          {Settings.title && ` - ${Settings.title}`}
+          {siteTitle && ` - ${siteTitle}`}
         </title>
       </Helmet>
       <Lang />
@@ -206,8 +209,8 @@ const Login: React.FC = () => {
             minWidth: 280,
             maxWidth: '75vw',
           }}
-          logo={<img alt="logo" src="/logo.svg" />}
-          title="Ant Design"
+          logo={<img alt="logo" src={brand?.logo_url || '/logo.svg'} />}
+          title={siteTitle}
           subTitle={intl.formatMessage({
             id: 'pages.layouts.userLayout.title',
           })}

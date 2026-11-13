@@ -21,6 +21,11 @@ import {
   VersionDropdown,
 } from '@/components';
 import { type AuthTenant, me as queryMe } from '@/services/auth/api';
+import {
+  applyBrandFavicon,
+  getPublicBrand,
+  type PublicBrand,
+} from '@/services/publicBrand';
 import { getTenantSubscription } from '@/services/tenantBilling';
 import { AppThemeProvider } from '@/theme';
 import { clearAccessToken, getAccessToken } from '@/utils/authToken';
@@ -75,6 +80,8 @@ export async function getInitialState(): Promise<{
   currentTenant?: AuthTenant;
   /** Feature keys of the tenant's plan; undefined when the plan is unknown. */
   features?: string[];
+  /** 站点品牌（公开接口）：logo / 全站名称 / favicon */
+  brand?: PublicBrand;
 }> {
   const redirectToLogin = () => {
     const { pathname, search, hash } = history.location;
@@ -160,10 +167,37 @@ export async function getInitialState(): Promise<{
     }
   };
 
+  /**
+   * 站点品牌。
+   *
+   * 控制台头部（ProLayout）的 logo 与标题原来写死在 `config/defaultSettings.ts`
+   * （永远是 Ant Design Pro + 支付宝的 alien logo），租户在「站点品牌」里上传了也没用。
+   * 这里拉一次公开品牌，把 `settings.logo` / `settings.title` 换掉；
+   * 取不到就用默认值，不能因为品牌接口挂了就打不开控制台。
+   */
+  const fetchBrand = async (): Promise<{
+    brand?: PublicBrand;
+    settings: Partial<LayoutSettings>;
+  }> => {
+    const brand = await getPublicBrand();
+    applyBrandFavicon(brand?.favicon_url);
+    return {
+      brand,
+      settings: {
+        ...defaultSettings,
+        logo: brand?.logo_url || defaultSettings.logo,
+        title: brand?.display_name || defaultSettings.title,
+      } as Partial<LayoutSettings>,
+    };
+  };
+
   // 如果不是登录页面，执行
   const { location } = history;
   if (!isPublicPath(location.pathname)) {
-    const session = await fetchSession();
+    const [session, { brand, settings }] = await Promise.all([
+      fetchSession(),
+      fetchBrand(),
+    ]);
     const features = session ? await fetchPlanFeatures() : undefined;
     return {
       fetchUserInfo,
@@ -173,12 +207,16 @@ export async function getInitialState(): Promise<{
       tenants: session?.tenants ?? [],
       currentTenant: session?.current_tenant,
       features,
-      settings: defaultSettings as Partial<LayoutSettings>,
+      brand,
+      settings,
       settingDrawerOpen: false,
     };
   }
   // 公开页面也要识别登录态：已登录时导航显示「进入控制台」
-  const publicSession = await tryRestoreSession();
+  const [publicSession, { brand, settings }] = await Promise.all([
+    tryRestoreSession(),
+    fetchBrand(),
+  ]);
   const publicFeatures = publicSession ? await fetchPlanFeatures() : undefined;
   return {
     fetchUserInfo,
@@ -188,7 +226,8 @@ export async function getInitialState(): Promise<{
     tenants: publicSession?.tenants ?? [],
     currentTenant: publicSession?.current_tenant,
     features: publicFeatures,
-    settings: defaultSettings as Partial<LayoutSettings>,
+    brand,
+    settings,
     settingDrawerOpen: false,
   };
 }
@@ -341,6 +380,12 @@ export const layout: RunTimeLayoutConfig = ({
       );
     },
     ...initialState?.settings,
+    // 站点品牌必须写在 `...initialState?.settings` **之后**：
+    //  1) ProLayout 用后出现的 key 覆盖前面的；
+    //  2) `SettingDrawer` 会在初始化时 `delete settings.title`（并整体回写 settings），
+    //     把品牌名放进 settings 会先显示品牌名再被动变回 'Ant Design Pro'。
+    logo: initialState?.brand?.logo_url || defaultSettings.logo,
+    title: initialState?.brand?.display_name || defaultSettings.title,
   };
 };
 

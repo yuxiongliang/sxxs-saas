@@ -75,6 +75,5 @@ async def public_brand(
             "display_name": record.display_name or record.name,
             "logo_url": record.logo_url,
             "favicon_url": record.favicon_url,
-            "theme_color": record.theme_color,
         }
     )
