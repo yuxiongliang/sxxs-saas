@@ -4,17 +4,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
 from app.core.response import ok
-from app.models.catalog import Product, ProductSku
+from app.models.catalog import InventoryLog, Product, ProductSku
 from app.models.order import Order, OrderItem, SellerOrder
-from app.models.seller import Seller
+from app.models.seller import Seller, Shop
 from app.schemas.commerce import (
-    ProductReviewRequest,
+    ProductSkuUpdate,
+    ProductStatusRequest,
     ProductUpdate,
     RefundCreateRequest,
     SellerReviewRequest,
     ShipmentCreateRequest,
 )
 from app.schemas.order import OrderCreateRequest
+from app.services import attachment as attachment_service
+from app.services import audit as audit_service
 from app.services import finance as finance_service
 from app.services import order as order_service
 from app.services.auth import AuthContext
@@ -32,22 +35,58 @@ def _seller_dict(seller: Seller) -> dict:
     }
 
 
-def _product_dict(product: Product, sku: ProductSku | None = None) -> dict:
+def _product_dict(
+    product: Product,
+    sku: ProductSku | None = None,
+    skus: list[ProductSku] | None = None,
+    seller: Seller | None = None,
+    shop: Shop | None = None,
+) -> dict:
+    """商品对外的统一形状。
+
+    带上了价格/库存/SKU 数与卖家店铺名：运营在商品管理页要直接看出「卖多少钱、还有几件」，
+    原来只回 name/subtitle/status，连改价改库存在界面上都无从下手。
+    """
+    sku_list = skus if skus is not None else ([sku] if sku is not None else [])
     data = {
         "id": product.id,
         "seller_id": product.seller_id,
         "shop_id": product.shop_id,
+        "category_id": product.category_id,
         "name": product.name,
         "subtitle": product.subtitle,
+        "description": product.description,
         "status": product.status,
         "main_image": product.main_image,
+        "images": product.images or [],
+        "created_at": product.created_at.isoformat() if product.created_at else None,
+        "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        "seller_name": seller.display_name if seller else None,
+        "shop_name": shop.name if shop else None,
+        "sku_count": len(sku_list),
+        "stock": sum(item.stock for item in sku_list),
+        "locked_stock": sum(item.locked_stock for item in sku_list),
+        "skus": [
+            {
+                "id": item.id,
+                "sku_code": item.sku_code,
+                "name": item.name,
+                "price_cents": item.price_cents,
+                "stock": item.stock,
+                "locked_stock": item.locked_stock,
+                "status": item.status,
+            }
+            for item in sku_list
+        ],
     }
-    if sku is not None:
+    if sku_list:
+        # 列表页只展示第一个 SKU 的价格（多规格商品由详情弹窗看全量）
+        data["price_cents"] = sku_list[0].price_cents
         data["sku"] = {
-            "id": sku.id,
-            "name": sku.name,
-            "price_cents": sku.price_cents,
-            "stock": sku.stock,
+            "id": sku_list[0].id,
+            "name": sku_list[0].name,
+            "price_cents": sku_list[0].price_cents,
+            "stock": sku_list[0].stock,
         }
     return data
 
@@ -169,19 +208,97 @@ async def review_seller(
     return ok(_seller_dict(seller), "卖家审核完成")
 
 
+# 商品状态机：每一步只允许这些迁移，不能让 review 端点任意跳。
+PRODUCT_STATUS_FLOW: dict[str, set[str]] = {
+    "draft": {"pending_review"},
+    "pending_review": {"on_sale", "rejected"},
+    "rejected": {"pending_review"},
+    "on_sale": {"off_sale"},
+    "off_sale": {"on_sale"},
+}
+# 审核类迁移需要 product:moderate；上下架类需要 product:manage。
+# 否则「有 manage 就能自行上架」= 审核形同虚设。
+REVIEW_TRANSITIONS: set[tuple[str, str]] = {
+    ("draft", "pending_review"),
+    ("pending_review", "on_sale"),
+    ("pending_review", "rejected"),
+    ("rejected", "pending_review"),
+}
+STATUS_LABEL = {
+    "draft": "草稿",
+    "pending_review": "待审核",
+    "on_sale": "在售",
+    "off_sale": "已下架",
+    "rejected": "已驳回",
+}
+
+
+async def _product_skus(db: AsyncSession, product_ids: list[int]) -> dict[int, list[ProductSku]]:
+    if not product_ids:
+        return {}
+    rows = list(
+        (
+            await db.scalars(
+                select(ProductSku)
+                .where(ProductSku.product_id.in_(product_ids))
+                .order_by(ProductSku.id)
+            )
+        ).all()
+    )
+    grouped: dict[int, list[ProductSku]] = {}
+    for row in rows:
+        grouped.setdefault(row.product_id, []).append(row)
+    return grouped
+
+
+async def _load_product(db: AsyncSession, context: AuthContext, product_id: int) -> Product:
+    product = await db.get(Product, product_id)
+    if product is None or product.tenant_id != context.tenant.id:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    return product
+
+
 @router.get("/admin/products")
 async def admin_products(
     context: AuthContext = Depends(require_permission("product:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    products = list(
+    rows = list(
         (
-            await db.scalars(
-                select(Product).where(Product.tenant_id == context.tenant.id).order_by(Product.id)
+            await db.execute(
+                select(Product, Seller, Shop)
+                .join(Seller, Seller.id == Product.seller_id, isouter=True)
+                .join(Shop, Shop.id == Product.shop_id, isouter=True)
+                .where(Product.tenant_id == context.tenant.id)
+                .order_by(Product.id.desc())
             )
         ).all()
     )
-    return ok([_product_dict(item) for item in products])
+    skus = await _product_skus(db, [row[0].id for row in rows])
+    return ok(
+        [
+            _product_dict(product, skus=skus.get(product.id, []), seller=seller, shop=shop)
+            for product, seller, shop in rows
+        ]
+    )
+
+
+@router.get("/admin/products/{product_id}")
+async def admin_product_detail(
+    product_id: int,
+    context: AuthContext = Depends(require_permission("product:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """商品详情（含全部 SKU）。编辑弹窗要靠它回显描述/图片/价格/库存。"""
+    product = await _load_product(db, context, product_id)
+    skus = (await _product_skus(db, [product.id])).get(product.id, [])
+    seller = await db.get(Seller, product.seller_id)
+    shop = await db.get(Shop, product.shop_id)
+    return ok(_product_dict(product, skus=skus, seller=seller, shop=shop))
+
+
+# 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。
+PRODUCT_EDITABLE_FIELDS = ("name", "subtitle", "description", "main_image", "images")
 
 
 @router.put("/admin/products/{product_id}")
@@ -191,30 +308,139 @@ async def update_product(
     context: AuthContext = Depends(require_permission("product:manage")),
     db: AsyncSession = Depends(get_db),
 ):
-    product = await db.get(Product, product_id)
-    if product is None or product.tenant_id != context.tenant.id:
-        raise HTTPException(status_code=404, detail="商品不存在")
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(product, key, value)
+    product = await _load_product(db, context, product_id)
+    data = payload.model_dump(exclude_unset=True)
+    applied: dict[str, object] = {}
+    for key in PRODUCT_EDITABLE_FIELDS:
+        if key in data:
+            setattr(product, key, data[key])
+            applied[key] = data[key]
+    if "main_image" in applied:
+        # 商品主图要给匿名访客看：引用的附件必须发布，否则前台只显示破图
+        await attachment_service.publish_by_public_url(
+            db, context.tenant.id, product.main_image
+        )
+    if applied:
+        await audit_service.record(
+            db,
+            action=audit_service.ACTION_PRODUCT_UPDATED,
+            tenant_id=context.tenant.id,
+            actor_id=context.user.id,
+            target_type="product",
+            target_id=product.id,
+            before=None,
+            after={key: str(value) for key, value in applied.items()},
+        )
     await db.commit()
     await db.refresh(product)
     return ok(_product_dict(product), "商品已更新")
 
 
-@router.post("/admin/products/{product_id}/review")
-async def review_product(
+@router.post("/admin/products/{product_id}/status")
+async def change_product_status(
     product_id: int,
-    payload: ProductReviewRequest,
-    context: AuthContext = Depends(require_permission("product:moderate")),
+    payload: ProductStatusRequest,
+    context: AuthContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ):
-    product = await db.get(Product, product_id)
-    if product is None or product.tenant_id != context.tenant.id:
-        raise HTTPException(status_code=404, detail="商品不存在")
-    product.status = payload.status
+    """上下架 / 审核统一入口：按状态机迁移，并按迁移类型校验权限。"""
+    product = await _load_product(db, context, product_id)
+    current, target = product.status, payload.status
+    if target == current:
+        return ok(_product_dict(product), "状态未变")
+    if target not in PRODUCT_STATUS_FLOW.get(current, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"不能从「{STATUS_LABEL.get(current, current)}」"
+                f"直接改为「{STATUS_LABEL.get(target, target)}」"
+            ),
+        )
+    required = (
+        "product:moderate" if (current, target) in REVIEW_TRANSITIONS else "product:manage"
+    )
+    if required not in context.permissions:
+        raise HTTPException(status_code=403, detail="无权限")
+
+    if target == "on_sale":
+        seller = await db.get(Seller, product.seller_id)
+        if seller is None or seller.status != "active":
+            raise HTTPException(status_code=400, detail="卖家未启用，不能上架")
+        skus = (await _product_skus(db, [product.id])).get(product.id, [])
+        active_skus = [item for item in skus if item.status == "active"]
+        if not active_skus:
+            raise HTTPException(status_code=400, detail="商品没有可用的 SKU，不能上架")
+        if all(item.stock <= 0 for item in active_skus):
+            raise HTTPException(status_code=400, detail="所有 SKU 库存为 0，先补货再上架")
+
+    product.status = target
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_REVIEWED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product",
+        target_id=product.id,
+        before={"status": current},
+        after={"status": target},
+    )
     await db.commit()
     await db.refresh(product)
-    return ok(_product_dict(product), "商品审核完成")
+    return ok(_product_dict(product), "商品状态已更新")
+
+
+@router.put("/admin/products/{product_id}/skus/{sku_id}")
+async def update_product_sku(
+    product_id: int,
+    sku_id: int,
+    payload: ProductSkuUpdate,
+    context: AuthContext = Depends(require_permission("product:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    """改价 / 改库存。库存变化写 InventoryLog，保证与订单占用可对账。"""
+    product = await _load_product(db, context, product_id)
+    sku = await db.get(ProductSku, sku_id)
+    if sku is None or sku.product_id != product.id or sku.tenant_id != context.tenant.id:
+        raise HTTPException(status_code=404, detail="SKU 不存在")
+
+    changed: dict[str, object] = {}
+    if payload.price_cents is not None and payload.price_cents != sku.price_cents:
+        changed["price_cents"] = payload.price_cents
+        sku.price_cents = payload.price_cents
+    if payload.stock is not None and payload.stock != sku.stock:
+        if payload.stock < sku.locked_stock:
+            raise HTTPException(
+                status_code=400,
+                detail=f"库存不能低于已锁定数量（{sku.locked_stock}）",
+            )
+        delta = payload.stock - sku.stock
+        sku.stock = payload.stock
+        db.add(
+            InventoryLog(
+                tenant_id=context.tenant.id,
+                seller_id=sku.seller_id,
+                sku_id=sku.id,
+                change=delta,
+                reason="manual_adjust",
+            )
+        )
+        changed["stock"] = payload.stock
+
+    if changed:
+        await audit_service.record(
+            db,
+            action=audit_service.ACTION_PRODUCT_UPDATED,
+            tenant_id=context.tenant.id,
+            actor_id=context.user.id,
+            target_type="product_sku",
+            target_id=sku.id,
+            before=None,
+            after={key: str(value) for key, value in changed.items()},
+        )
+    await db.commit()
+    await db.refresh(product)
+    skus = (await _product_skus(db, [product.id])).get(product.id, [])
+    return ok(_product_dict(product, skus=skus), "SKU 已更新")
 
 
 @router.get("/admin/orders")

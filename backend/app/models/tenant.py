@@ -19,6 +19,9 @@ class Tenant(Base, TimestampMixin):
     display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     favicon_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 备案信息：每个租户的号不同，不能写死在代码里；大陆站点必须在页脚展示。
+    icp_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    icp_license: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 账期：订单完成后资金需要冻结的天数，冻结期满才计入可结算余额。
     settlement_hold_days: Mapped[int] = mapped_column(Integer, default=7, server_default="7")
     # 平台级业务类目：决定这家租户按哪个类目的比例被平台抽佣（空 = 未分类，不抽佣）

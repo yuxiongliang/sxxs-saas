@@ -11,6 +11,10 @@ export interface PublicBrand {
   display_name: string;
   logo_url?: string | null;
   favicon_url?: string | null;
+  /** ICP 备案号（如 京ICP备12345678号），页脚展示 */
+  icp_number?: string | null;
+  /** ICP 许可证号（如 京ICP证…），页脚展示 */
+  icp_license?: string | null;
 }
 
 const PUBLIC_BRAND_PATH = '/api/v1/public/brand';

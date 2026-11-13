@@ -297,6 +297,8 @@ export interface TenantBrandRecord {
   display_name: string;
   logo_url?: string | null;
   favicon_url?: string | null;
+  icp_number?: string | null;
+  icp_license?: string | null;
 }
 
 export async function getTenantBrand() {
@@ -309,6 +311,8 @@ export async function saveTenantBrand(data: {
   display_name?: string;
   logo_url?: string;
   favicon_url?: string;
+  icp_number?: string;
+  icp_license?: string;
 }) {
   return unwrap<TenantBrandRecord>(
     request(`${API_PREFIX}/tenant/brand`, { method: 'PUT', data }),

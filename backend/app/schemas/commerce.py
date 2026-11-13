@@ -16,12 +16,28 @@ class ShipmentCreateRequest(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+    """改商品资料。
+
+    **没有 status**：状态只能走 `POST /admin/products/{id}/status`，那里有状态机与
+    权限区分。混在这里等于「有 product:manage 就能绕过 product:moderate 直接上架」。
+    """
+
     name: str | None = Field(default=None, min_length=1, max_length=200)
     subtitle: str | None = Field(default=None, max_length=255)
     description: str | None = None
-    status: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
     images: list[str] | None = None
+
+
+class ProductStatusRequest(BaseModel):
+    status: str = Field(pattern="^(draft|pending_review|on_sale|off_sale|rejected)$")
+
+
+class ProductSkuUpdate(BaseModel):
+    """改价 / 改库存。库存变更会写 InventoryLog，不直接覆盖。"""
+
+    price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
+    stock: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class SellerProductCreate(BaseModel):

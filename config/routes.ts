@@ -313,7 +313,10 @@ export default [
     component: './commerce/sellers',
   },
   {
-    path: '/products',
+    // 租户控制台的商品管理。**不能用 `/products`**：那是公开商城商品列表（layout:false），
+    // 两个路由抢同一个 path 时必有一边不可达，且 `/products` 在 PUBLIC_PATHS 里，
+    // 会被当成免登录页。
+    path: '/commerce/products',
     name: 'product-management',
     icon: 'shopping',
     access: 'canProductManage',

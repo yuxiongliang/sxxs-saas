@@ -8,6 +8,7 @@
 import Footer from './Footer';
 import { DocLink, LangDropdown, VersionDropdown } from './RightContent';
 import { AvatarDropdown } from './RightContent/AvatarDropdown';
+import { ThemeSwitch } from './RightContent/ThemeSwitch';
 
 /**
  * 业务组件
@@ -21,4 +22,11 @@ export { default as PageTabs } from './PageTabs';
 export { default as StandardFormRow } from './StandardFormRow';
 export { default as TagSelect } from './TagSelect';
 
-export { AvatarDropdown, DocLink, Footer, LangDropdown, VersionDropdown };
+export {
+  AvatarDropdown,
+  DocLink,
+  Footer,
+  LangDropdown,
+  ThemeSwitch,
+  VersionDropdown,
+};

@@ -85,7 +85,6 @@ async def test_logo_cannot_reference_another_tenants_attachment(
     client, admin_token, platform_token
 ):
     """拿别人的附件 id 当 logo 要 400，不能借保存品牌把别人的图变成公开。"""
-    from sqlalchemy import select
 
     attachment = (
         await client.get(

@@ -1,6 +1,6 @@
 import { InboxOutlined } from '@ant-design/icons';
-import { App, Button, Upload } from 'antd';
 import type { UploadProps } from 'antd';
+import { App, Button, Upload } from 'antd';
 import React from 'react';
 import { uploadAttachment } from '@/services/system/api';
 import type { AttachmentRecord } from '@/services/system/types';

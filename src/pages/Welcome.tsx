@@ -30,7 +30,7 @@ const CAPABILITIES = [
     icon: <ShopOutlined />,
     title: 'C2C 卖家与商品',
     desc: '卖家入驻审核、商品上下架审核、SKU 与库存占用，卖家和商品都按租户隔离。',
-    href: '/products',
+    href: '/commerce/products',
   },
   {
     icon: <ShoppingCartOutlined />,
@@ -216,7 +216,7 @@ export default function WelcomePage() {
               <Link to="/orders">
                 <ShoppingCartOutlined /> {'订单管理'}
               </Link>
-              <Link to="/products">
+              <Link to="/commerce/products">
                 <ShopOutlined /> {'商品管理'}
               </Link>
               <Link to="/finance">

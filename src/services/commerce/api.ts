@@ -122,6 +122,12 @@ export async function listAdminProducts() {
   return unwrap<ProductRecord[]>(request('/api/v1/admin/products', { method: 'GET' }));
 }
 
+export async function getAdminProduct(id: number) {
+  return unwrap<ProductRecord>(
+    request(`/api/v1/admin/products/${id}`, { method: 'GET' }),
+  );
+}
+
 export async function reviewSeller(id: number, data: { status: string; kyc_status: string }) {
   return unwrap<SellerRecord>(
     request(`/api/v1/admin/sellers/${id}/review`, { method: 'POST', data }),
@@ -134,8 +140,8 @@ export async function updateAdminProduct(
     name?: string;
     subtitle?: string;
     description?: string;
-    status?: string;
     main_image?: string;
+    images?: string[];
   },
 ) {
   return unwrap<ProductRecord>(
@@ -143,9 +149,27 @@ export async function updateAdminProduct(
   );
 }
 
-export async function reviewProduct(id: number, data: { status: string }) {
+/** 上下架 / 审核：后端有状态机，非法迁移会返回 400。 */
+export async function changeAdminProductStatus(id: number, status: string) {
   return unwrap<ProductRecord>(
-    request(`/api/v1/admin/products/${id}/review`, { method: 'POST', data }),
+    request(`/api/v1/admin/products/${id}/status`, {
+      method: 'POST',
+      data: { status },
+    }),
+  );
+}
+
+/** 改价 / 改库存（库存变更会写 InventoryLog）。 */
+export async function updateAdminProductSku(
+  productId: number,
+  skuId: number,
+  data: { price_cents?: number; stock?: number },
+) {
+  return unwrap<ProductRecord>(
+    request(`/api/v1/admin/products/${productId}/skus/${skuId}`, {
+      method: 'PUT',
+      data,
+    }),
   );
 }
 

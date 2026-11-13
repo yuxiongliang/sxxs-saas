@@ -16,6 +16,8 @@ This repository contains the admin console of 赛霄玄思, a multi-tenant C2C m
 | `/system/settings/storage` | 存储设置（本地 / 阿里云 OSS） |
 | `/attachments` | 全局附件管理 |
 | `/notifications` | 触达通知（短信 / 邮件 / 站内信） |
+| `/commerce/products` | 商品管理（审核 / 上下架 / 改价改库存） |
+| `/system/brand` | 站点品牌（名称 / Logo / Favicon / ICP 备案） |
 | `/account/settings` | 个人设置（基本设置 / 安全设置 / 账号绑定 / 新消息通知） |
 
 ## Page tabs
@@ -135,6 +137,50 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 > 真实投递（SMTP / 短信网关 / 站内信收件箱）仍未接入：这里落地的是「谁会收到」，
 > 不是「已经送达」。站内信目前只有群发记录，没有按用户的收件箱，所以 inbox 渠道强制不可关。
 
+## 商品管理（`/commerce/products`）
+
+租户控制台的商品管理：卖家在 `/portal/seller` 提交的商品进这里，运营在这里审核、上下架、改价改库存。
+
+> **路径不能叫 `/products`**：那是公开商城的商品列表（`layout:false`，且在 `PUBLIC_PATHS` 里）。
+> 两个路由抢同一个 path 时必有一边不可达，而且控制台页会被当成免登录页。之前就是这个状态。
+
+### 状态机（`POST /admin/products/{id}/status`）
+
+```
+draft        → pending_review
+pending_review → on_sale | rejected
+rejected     → pending_review
+on_sale      → off_sale
+off_sale     → on_sale
+```
+
+- **审核类迁移**（含 `draft→pending_review`）要 `product:moderate`；
+- **上下架类迁移**要 `product:manage`。
+- 两类权限**不互相替代** —— 否则有 manage 的人能自行过审，审核形同虚设。
+- 非法迁移返回 **400**（带中文原因），不再像以前那样 `review` 端点任何状态都能跳到任何状态。
+- `on_sale` 前置校验：卖家必须 `active`、至少一个 `active` SKU、且不是全部库存为 0。
+
+### 改资料 / 改价改库存
+
+| 动作 | 接口 | 权限 |
+|---|---|---|
+| 改名称/副标题/描述/主图 | `PUT /admin/products/{id}`（**不接受 status**） | `product:manage` |
+| 改价 / 改库存 | `PUT /admin/products/{id}/skus/{sku_id}` | `product:manage` |
+| 商品详情（含全部 SKU） | `GET /admin/products/{id}` | `product:read` |
+
+- 改库存会写 `inventory_logs`（`reason=manual_adjust`），且**不能低于 `locked_stock`**；
+  直接覆盖 `stock` 会和已下单占用对不上，所以走流水。
+- 商品主图选附件时，后端会把该附件 `visibility` 标成 `public`（同站点 Logo），否则前台破图。
+- 商品写动作全部落审计（`product.updated` / `product.reviewed`）。
+
+### 已知缺口（尚未做）
+
+- `seller_owner` 角色持有 `product:manage`，而 `/admin/products` 只按 `tenant_id` 过滤 ——
+  卖家登录控制台能改**同租户其它卖家**的商品。要彻底收口得两者选一：剥夺 seller 角色的
+  `product:manage`（卖家只走 `/portal/seller/*`），或给列表/更新加 seller 作用域。
+- 卖家侧仍只能建商品，不能改/下架（`/portal/seller/products` 只有 GET/POST）。
+- 驳回没有原因字段（`products` 表无 `reject_reason`），卖家看不到为什么被驳回。
+
 ## Attachment center
 
 All module uploads should use `src/components/AttachmentUpload` and the `/api/v1/attachments/upload` endpoint. The shared upload component records metadata in PostgreSQL and writes the blob to `backend/uploads/` in this demo. Swap the storage adapter for OSS presigned uploads later without changing page code.
@@ -145,14 +191,21 @@ All module uploads should use `src/components/AttachmentUpload` and the `/api/v1
 
 | 字段 | 怎么填 | 生效位置 |
 |---|---|---|
-| 全站名称 `display_name` | 文本 | 控制台头部标题、登录页标题、页脚、买家中心头部、`<title>`、通知模板 `{{tenant_name}}` |
-| 站点 Logo `logo_url` | **点「从附件中心选择」挑图**（`src/components/AttachmentPicker`） | 控制台左上角、登录页、买家商城头部、买家中心 |
-| Favicon `favicon_url` | 填图片地址 | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`） |
+| 全站名称 `display_name` | 文本 | 页脚版权、登录页标题、买家中心头部、`<title>`、通知模板 `{{tenant_name}}` |
+| 站点 Logo `logo_url` | **点缩略图 / 「从附件中心选择」挑图** | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心 |
+| Favicon `favicon_url` | 同样从附件中心选图 | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`） |
+| ICP 备案号 `icp_number` | 文本，如 `京ICP备12345678号` | 页脚，自动链到 `beian.miit.gov.cn` |
+| ICP 许可证号 `icp_license` | 文本，如 `京ICP证030173号` | 页脚 |
+
+几个必须知道的口径：
+
+- **设了 logo 后控制台头部只显 logo**：`app.tsx` 的 `layout()` 里 `title` 传空串，让 logo 占住原来标题的位置；没设 logo 才回落成站名文字。
+- **页脚只留两行**：`站点名 © 年份` + 备案信息。原来的 `ver / Umi / Utoo / GitHub` 脚手架行已删掉 —— 对访客没意义，还会把内部版本号与仓库地址暴露出去。
 
 几个必须知道的口径：
 
 - **选图存的是 `/api/v1/attachments/public/{id}` 相对直链**，不是附件表里的绝对 `url`——绝对地址指向后端 `public_base_url`，租户换了自己的域名就打错站。
-- **保存品牌时后端会把选中的附件标成 `visibility=public`**（`_publish_logo_attachment`）。附件中心上传出来的附件默认是 `tenant` 可见，不发布的话这条直链一直 404。只能发布**本租户自己的**附件，别人的 id 会 400。
+- **保存品牌时后端会把选中的附件标成 `visibility=public`**（`services/attachment.py::publish_by_public_url`，商品主图走同一个函数）。附件中心上传出来的附件默认是 `tenant` 可见，不发布的话这条直链一直 404。只能发布**本租户自己的**附件，别人的 id 会 400。
 - **刚选完还没保存时**，`/public/{id}` 仍 404（附件还没变 public），所以选择器预览临时用附件的原始 `url`；保存后自动切到稳定直链。
 - **没有主题色**：原来那个「主题色」输入框存了 `tenants.theme_color` 但全站没有任何地方拿它去改主题，属于「填了不生效」；已从 UI / API / 模型 / DB 列一并移除（迁移 `e7a3c5d19b42`）。全站配色跟随控制台主题与深色模式。
 - 品牌数据来源：公开页用 `GET /api/v1/public/brand`（匿名可读，按 Host 解析租户），`getInitialState` 拉一次写进 `initialState.brand`。**不要把品牌写进 `settings`**：`SettingDrawer` 初始化时会 `delete settings.title` 并整体回写。

@@ -8,6 +8,9 @@ class TenantBrandOut(BaseModel):
     display_name: str
     logo_url: str | None = None
     favicon_url: str | None = None
+    # 页脚备案信息：ICP 备案号（如 京ICP备12345678号）与 ICP 许可证号（如 京ICP证…）
+    icp_number: str | None = None
+    icp_license: str | None = None
 
 
 class TenantBrandUpdate(BaseModel):
@@ -20,3 +23,5 @@ class TenantBrandUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=64)
     logo_url: str | None = Field(default=None, max_length=512)
     favicon_url: str | None = Field(default=None, max_length=512)
+    icp_number: str | None = Field(default=None, max_length=64)
+    icp_license: str | None = Field(default=None, max_length=64)

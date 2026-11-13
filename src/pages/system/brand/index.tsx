@@ -5,6 +5,7 @@ import {
   App,
   Button,
   Card,
+  Divider,
   Flex,
   Form,
   Input,
@@ -23,13 +24,15 @@ interface FormValues {
   display_name: string;
   logo_url: string;
   favicon_url: string;
+  icp_number: string;
+  icp_license: string;
 }
 
 /** 与后端 `api/v1/tenant_brand.py` 的 PUBLIC_ATTACHMENT_PREFIX 保持一致 */
 const PUBLIC_ATTACHMENT_PREFIX = '/api/v1/attachments/public/';
 
 /**
- * Logo 字段：点按钮弹附件中心，选图即用。
+ * 图片字段：点缩略图或按钮弹附件中心，选图即用。
  *
  * 存的是 `/api/v1/attachments/public/{id}` 这种**相对**直链，而不是附件表里的绝对
  * url —— 绝对 url 指向后端 public_base_url，租户换了自己的域名就会打错站。
@@ -38,10 +41,14 @@ const PUBLIC_ATTACHMENT_PREFIX = '/api/v1/attachments/public/';
  * 刚选完还没保存时，`/public/{id}` 仍是 404（附件还是 tenant 可见），
  * 所以预览临时用附件本身的 `url`，保存后自动换成稳定直链。
  */
-const LogoField: React.FC<{
+const ImageField: React.FC<{
   value?: string;
   onChange?: (value: string) => void;
-}> = ({ value, onChange }) => {
+  /** 弹窗标题，如「选择站点 Logo」 */
+  title: string;
+  /** 预览框边长（logo 大一点，favicon 小一点） */
+  boxSize?: number;
+}> = ({ value, onChange, title, boxSize = 96 }) => {
   const [open, setOpen] = useState(false);
   const [freshPreview, setFreshPreview] = useState<string>();
   const preview = freshPreview ?? value;
@@ -54,8 +61,8 @@ const LogoField: React.FC<{
           onClick={() => setOpen(true)}
           title="点击选择图片"
           style={{
-            width: 96,
-            height: 96,
+            width: boxSize,
+            height: boxSize,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -70,7 +77,7 @@ const LogoField: React.FC<{
           {preview ? (
             <img
               src={preview}
-              alt="站点 logo"
+              alt={title}
               style={{
                 maxWidth: '100%',
                 maxHeight: '100%',
@@ -107,7 +114,7 @@ const LogoField: React.FC<{
       ) : null}
       <AttachmentPicker
         open={open}
-        title="选择站点 Logo"
+        title={title}
         onCancel={() => setOpen(false)}
         onSelect={(record: AttachmentRecord) => {
           setFreshPreview(record.url);
@@ -134,7 +141,7 @@ export default function TenantBrandPage() {
     onSuccess: (saved, values) => {
       message.success('品牌已保存，控制台头部与买家商城已同步');
       queryClient.invalidateQueries({ queryKey: ['tenant-brand'] });
-      // 头部 logo / 标题来自 initialState.brand（见 app.tsx 的 layout()）。
+      // 头部 logo / 标题 / 页脚备案信息都来自 initialState.brand。
       // 不写回去的话，用户得手动刷新才能看到「保存后显示」。
       setInitialState((state) => ({
         ...state,
@@ -144,6 +151,8 @@ export default function TenantBrandPage() {
           display_name: saved.display_name,
           logo_url: saved.logo_url,
           favicon_url: saved.favicon_url,
+          icp_number: saved.icp_number,
+          icp_license: saved.icp_license,
         },
       }));
       applyBrandFavicon(values.favicon_url);
@@ -158,7 +167,7 @@ export default function TenantBrandPage() {
   return (
     <SettingPage
       title="站点品牌"
-      subTitle="买家与控制台看到的站点名称与 Logo；通知模板里的 {{tenant_name}} 也取这里"
+      subTitle="买家与控制台看到的站点名称、Logo 与页脚备案信息；通知模板里的 {{tenant_name}} 也取这里"
       icon={<PictureOutlined />}
     >
       <Card>
@@ -170,6 +179,8 @@ export default function TenantBrandPage() {
             display_name: current.display_name,
             logo_url: current.logo_url ?? '',
             favicon_url: current.favicon_url ?? '',
+            icp_number: current.icp_number ?? '',
+            icp_license: current.icp_license ?? '',
           }}
           onFinish={(values) => save.mutate(values)}
         >
@@ -184,20 +195,37 @@ export default function TenantBrandPage() {
           <Form.Item
             name="logo_url"
             label="站点 Logo"
-            extra="从附件中心选图；保存后控制台左上角与买家商城顶部都会换成它"
+            extra="从附件中心选图；设了 logo 后控制台头部只显示 logo（占掉标题位），买家商城顶部同样换图"
           >
-            <LogoField />
+            <ImageField title="选择站点 Logo" boxSize={96} />
           </Form.Item>
 
           <Form.Item
             name="favicon_url"
             label="浏览器图标（Favicon）"
-            extra="填 .ico / .png 图片地址；留空用默认图标"
+            extra="浏览器标签页上的小图标，建议用 32×32 或 64×64 的方图"
           >
-            <Input
-              placeholder="https://... 或 /api/v1/attachments/public/12"
-              allowClear
-            />
+            <ImageField title="选择浏览器图标" boxSize={48} />
+          </Form.Item>
+
+          <Divider titlePlacement="start" plain>
+            页脚备案信息
+          </Divider>
+
+          <Form.Item
+            name="icp_number"
+            label="ICP 备案号"
+            extra="例如 京ICP备12345678号；留空则页脚不显示这一项（会自动链接到工信部备案系统）"
+          >
+            <Input placeholder="京ICP备12345678号" allowClear />
+          </Form.Item>
+
+          <Form.Item
+            name="icp_license"
+            label="ICP 许可证号"
+            extra="例如 京ICP证030173号；留空则不显示"
+          >
+            <Input placeholder="京ICP证030173号" allowClear />
           </Form.Item>
 
           <Button type="primary" htmlType="submit" loading={save.isPending}>

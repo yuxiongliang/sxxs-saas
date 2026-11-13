@@ -12,13 +12,12 @@ dayjs.extend(relativeTime);
 
 import {
   AvatarDropdown,
-  DocLink,
   ErrorBoundary,
   Footer,
   LangDropdown,
   OfflineBanner,
   PageTabs,
-  VersionDropdown,
+  ThemeSwitch,
 } from '@/components';
 import { type AuthTenant, me as queryMe } from '@/services/auth/api';
 import {
@@ -272,6 +271,8 @@ export const layout: RunTimeLayoutConfig = ({
   initialState,
   setInitialState,
 }) => {
+  const brandLogo = initialState?.brand?.logo_url;
+  const brandName = initialState?.brand?.display_name;
   return {
     menuItemRender: (item, dom) => {
       if (item.path) {
@@ -288,9 +289,10 @@ export const layout: RunTimeLayoutConfig = ({
       // `locale` prop is a locale string, so narrow to the boolean toggle here.
       const localeEnabled =
         (initialState?.settings as { locale?: boolean })?.locale !== false;
+      // 去掉「使用文档」与「历史版本」两个脚手架按钮（它们指向 ant.design 的
+      // 文档与老版本 demo，对租户运营没有意义），换成三态主题切换。
       return [
-        <DocLink key="doc" />,
-        <VersionDropdown key="version" />,
+        <ThemeSwitch key="theme" />,
         localeEnabled && <LangDropdown key="lang" />,
       ].filter(Boolean);
     },
@@ -384,8 +386,18 @@ export const layout: RunTimeLayoutConfig = ({
     //  1) ProLayout 用后出现的 key 覆盖前面的；
     //  2) `SettingDrawer` 会在初始化时 `delete settings.title`（并整体回写 settings），
     //     把品牌名放进 settings 会先显示品牌名再被动变回 'Ant Design Pro'。
-    logo: initialState?.brand?.logo_url || defaultSettings.logo,
-    title: initialState?.brand?.display_name || defaultSettings.title,
+    // 设了 logo 就只显示 logo（标题位留空，由 logo 占住），避免「图 + 站名」重复；
+    // 没设 logo 才回落到站名文字。
+    logo: brandLogo ? (
+      <img
+        src={brandLogo}
+        alt={brandName ?? 'logo'}
+        style={{ height: 34, width: 'auto', objectFit: 'contain' }}
+      />
+    ) : (
+      defaultSettings.logo
+    ),
+    title: brandLogo ? '' : brandName || defaultSettings.title,
   };
 };
 

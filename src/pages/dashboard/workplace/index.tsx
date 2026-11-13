@@ -112,7 +112,7 @@ export default function WorkplacePage() {
       icon: <CheckCircleOutlined />,
       title: '待审商品',
       count: kpi?.products_pending_review ?? 0,
-      href: '/products',
+      href: '/commerce/products',
       visible: access.canProductManage,
     },
     {
@@ -264,7 +264,7 @@ export default function WorkplacePage() {
                 <Link to="/users/list">用户与成员</Link>
               ) : null}
               {access.canProductRead ? (
-                <Link to="/products">商品管理</Link>
+                <Link to="/commerce/products">商品管理</Link>
               ) : null}
               {canReadOrders ? <Link to="/orders">订单管理</Link> : null}
               {access.canSellerRead ? (

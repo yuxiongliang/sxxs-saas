@@ -158,8 +158,34 @@ async def get_by_signed_token(db: AsyncSession, token: str) -> Attachment:
     return record
 
 
+PUBLIC_ATTACHMENT_PREFIX = "/api/v1/attachments/public/"
+
+
+async def publish_by_public_url(db: AsyncSession, tenant_id: int, url: str | None) -> None:
+    """把「被业务字段引用的附件」标成 public。
+
+    附件中心上传出来的附件默认 `visibility=tenant`，而 `/attachments/public/{id}`
+    只放行 public —— 站点 logo、商品主图这类要给**匿名访客**看的图，引用时必须发布，
+    否则选完图保存后前台一直 404。
+
+    只允许发布本租户自己的附件；不是本站公开链接的 url（外部地址等）直接忽略。
+    """
+    if not url or not url.startswith(PUBLIC_ATTACHMENT_PREFIX):
+        return
+    raw_id = url[len(PUBLIC_ATTACHMENT_PREFIX) :].strip("/")
+    try:
+        attachment_id = int(raw_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="附件链接格式不正确") from exc
+    record = await attachment_dao.get_attachment(db, attachment_id)
+    if record is None or record.tenant_id != tenant_id:
+        raise HTTPException(status_code=400, detail="附件不存在或不属于当前租户")
+    if record.visibility != "public":
+        record.visibility = "public"
+
+
 async def get_public_attachment(db: AsyncSession, attachment_id: int) -> Attachment:
-    """公开资源（logo/头像）稳定直链：只放行 visibility=public 且未下架/未驳回/未软删的。"""
+    """公开资源（logo / 头像 / 商品主图）稳定直链：只放行 visibility=public 且未下架/未驳回/未软删的。"""
     record = await attachment_dao.get_attachment(db, attachment_id)
     if (
         record is None

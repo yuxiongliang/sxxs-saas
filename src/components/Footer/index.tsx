@@ -1,24 +1,6 @@
-import { GithubOutlined } from '@ant-design/icons';
-import packageJson from '@root/package.json';
 import { useModel } from '@umijs/max';
-import { Divider } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
-
-const getRepoUrl = () => {
-  if (!packageJson.repository)
-    return 'https://github.com/ant-design/ant-design-pro';
-  const repo =
-    typeof packageJson.repository === 'string'
-      ? packageJson.repository
-      : (packageJson.repository as { url: string }).url;
-  const match = repo.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
-  if (!match) return 'https://github.com/ant-design/ant-design-pro';
-  return `https://github.com/${match[1]}/${match[2]}`;
-};
-
-const REPO_URL = getRepoUrl();
-const COMMIT_HASH = process.env.COMMIT_HASH || '';
 
 const useStyles = createStyles(({ token, css }) => ({
   footer: css`
@@ -32,6 +14,13 @@ const useStyles = createStyles(({ token, css }) => ({
   copyright: css`
     margin-bottom: 6px;
   `,
+  legal: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  `,
   link: css`
     color: ${token.colorTextDescription};
     text-decoration: none;
@@ -41,98 +30,46 @@ const useStyles = createStyles(({ token, css }) => ({
       color: ${token.colorText};
     }
   `,
-  meta: css`
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-    font-family: ${token.fontFamilyCode};
-    font-size: ${token.fontSizeSM - 1}px;
-  `,
-  group: css`
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  `,
-  label: css`
-    color: ${token.colorTextQuaternary};
-  `,
-  divider: css`
-    display: inline-block;
-    vertical-align: middle;
-  `,
 }));
 
+/**
+ * 页脚：站点名版权 + ICP 备案信息。
+ *
+ * 原来这里还有一行 `ver / Umi / Utoo / GitHub` 的脚手架信息 —— 对租户和买家毫无意义，
+ * 还会把内部版本号与仓库地址暴露给访客，已删除（按要求）。
+ *
+ * ICP 备案号与许可证号在「站点品牌」里填写：中国大陆站点没有备案号属于违规，
+ * 但每个租户的号不同，不能写死在代码里。
+ */
 const Footer: React.FC = () => {
   const { styles } = useStyles();
   const { initialState } = useModel('@@initialState');
   const year = new Date().getFullYear();
-  // 页脚原来写死「Ant Design Pro」，租户改了自己的站名也不会变。
-  const siteName = initialState?.brand?.display_name || 'Ant Design Pro';
+  const brand = initialState?.brand;
+  const siteName = brand?.display_name || 'Ant Design Pro';
+  const icpNumber = brand?.icp_number;
+  const icpLicense = brand?.icp_license;
 
   return (
     <div className={styles.footer}>
       <div className={styles.copyright}>
         {siteName} &copy; {year}
       </div>
-      <div className={styles.meta}>
-        <span className={styles.group}>
-          <span className={styles.label}>ver</span>
-          <a
-            className={styles.link}
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {__APP_VERSION__}
-          </a>
-          {COMMIT_HASH && (
+      {icpNumber || icpLicense ? (
+        <div className={styles.legal}>
+          {icpNumber ? (
             <a
               className={styles.link}
-              href={`${REPO_URL}/commit/${COMMIT_HASH}`}
+              href="https://beian.miit.gov.cn"
               target="_blank"
               rel="noopener noreferrer"
             >
-              {COMMIT_HASH.slice(0, 7)}
+              {icpNumber}
             </a>
-          )}
-        </span>
-        <Divider orientation="vertical" className={styles.divider} />
-        <span className={styles.group}>
-          <span className={styles.label}>Umi</span>
-          <a
-            className={styles.link}
-            href="https://umijs.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {__UMI_VERSION__}
-          </a>
-        </span>
-        <Divider orientation="vertical" className={styles.divider} />
-        <span className={styles.group}>
-          <span className={styles.label}>Utoo</span>
-          <a
-            className={styles.link}
-            href="https://utoo.land"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {__UTOO_VERSION__}
-          </a>
-        </span>
-        <Divider orientation="vertical" className={styles.divider} />
-        <a
-          className={styles.link}
-          href={REPO_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <GithubOutlined style={{ marginRight: 4 }} />
-          GitHub
-        </a>
-      </div>
+          ) : null}
+          {icpLicense ? <span>{icpLicense}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -6,14 +6,39 @@ export interface SellerRecord {
   kyc_status: string;
 }
 
+export interface ProductSkuRecord {
+  id: number;
+  sku_code: string;
+  name: string;
+  price_cents: number;
+  stock: number;
+  locked_stock: number;
+  status: string;
+}
+
 export interface ProductRecord {
   id: number;
   seller_id: number;
   shop_id: number;
+  category_id?: number | null;
   name: string;
-  subtitle?: string;
+  subtitle?: string | null;
+  description?: string | null;
   status: string;
-  main_image?: string;
+  main_image?: string | null;
+  images?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+  /** 列表里 join 出来的可读名字，不用再显示裸 ID */
+  seller_name?: string | null;
+  shop_name?: string | null;
+  sku_count?: number;
+  /** 全部 SKU 库存合计 */
+  stock?: number;
+  locked_stock?: number;
+  skus?: ProductSkuRecord[];
+  /** 列表页展示的首个 SKU 价格 */
+  price_cents?: number | null;
 }
 
 export interface OrderRecord {

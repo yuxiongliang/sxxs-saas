@@ -35,6 +35,10 @@ export default function access(
     canDashboard: permissions.has('dashboard:read'),
     canSellerRead: permissions.has('seller:read'),
     canProductRead: permissions.has('product:read'),
+    // 拆开两个语义：manage = 改资料/改价改库存/上下架；moderate = 审核通过或驳回。
+    // 合并成一个会让「有 manage 的人自行过审」，审核就形同虚设。
+    canProductEdit: permissions.has('product:manage'),
+    canProductModerate: permissions.has('product:moderate'),
     canProductManage:
       permissions.has('product:manage') || permissions.has('product:moderate'),
     canOrderReadTenant: permissions.has('order:read:tenant'),
