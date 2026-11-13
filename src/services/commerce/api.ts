@@ -13,6 +13,7 @@ import type {
   PortalProductDetail,
   PayoutRecord,
   ProductRecord,
+  ProductSkuRecord,
   SellerLedger,
   SellerOrderRecord,
   SellerProductRecord,
@@ -184,10 +185,38 @@ export async function updateAdminProduct(
     description?: string;
     main_image?: string;
     images?: string[];
+    category_id?: number | null;
   },
 ) {
   return unwrap<ProductRecord>(
     request(`/api/v1/admin/products/${id}`, { method: 'PUT', data }),
+  );
+}
+
+/** 保存规格树：规格值做笛卡尔积生成 SKU（后端按组合键匹配，老组合保留价/库存）。 */
+export async function updateAdminProductSpecs(
+  id: number,
+  data: {
+    groups: Array<{
+      name: string;
+      values: Array<{
+        value: string;
+        image_url?: string | null;
+        video_url?: string | null;
+      }>;
+    }>;
+    skus: Array<{
+      specs: Record<string, string>;
+      price_cents?: number;
+      stock?: number;
+      image_url?: string | null;
+      video_url?: string | null;
+      status?: string;
+    }>;
+  },
+) {
+  return unwrap<{ id: number; status: string; skus: ProductSkuRecord[] }>(
+    request(`/api/v1/admin/products/${id}/specs`, { method: 'PUT', data }),
   );
 }
 

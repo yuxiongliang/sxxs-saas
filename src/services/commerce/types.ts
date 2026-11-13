@@ -30,6 +30,22 @@ export interface ProductSkuRecord {
   stock: number;
   locked_stock: number;
   status: string;
+  /** {规格组名: 规格值}，无规格商品为空 */
+  specs?: Record<string, string>;
+  /** SKU 级覆盖图，优先生效 */
+  image_url?: string | null;
+  video_url?: string | null;
+}
+
+export interface SpecValueRecord {
+  value: string;
+  image_url?: string | null;
+  video_url?: string | null;
+}
+
+export interface SpecGroupRecord {
+  name: string;
+  values: SpecValueRecord[];
 }
 
 export interface ProductRecord {
@@ -56,6 +72,13 @@ export interface ProductRecord {
   stock?: number;
   locked_stock?: number;
   skus?: ProductSkuRecord[];
+  /** 规格树（多规格）；无规格商品为空数组 */
+  spec_groups?: SpecGroupRecord[];
+  video_url?: string | null;
+  /** 商品级抽佣比例（万分比），空 = 继承分类默认 */
+  commission_bps?: number | null;
+  commission_locked?: boolean;
+  reject_reason?: string | null;
   /** 列表页展示的首个 SKU 价格 */
   price_cents?: number | null;
 }

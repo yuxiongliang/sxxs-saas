@@ -9,35 +9,25 @@ import {
   App,
   Button,
   Card,
-  Divider,
   Form,
   Image,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Space,
   Table,
   Tag,
-  Typography,
-  theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
-import AttachmentPicker from '@/components/AttachmentPicker';
 import {
   changeAdminProductStatus,
-  getAdminProduct,
   listAdminProducts,
-  updateAdminProduct,
-  updateAdminProductSku,
 } from '@/services/commerce/api';
-import type {
-  ProductRecord,
-  ProductSkuRecord,
-} from '@/services/commerce/types';
+import type { ProductRecord } from '@/services/commerce/types';
 import { labelOf, PRODUCT_STATUS } from '@/utils/labels';
 import SettingPage from '../../system/components/SettingPage';
+import ProductEditor from './components/ProductEditor';
 
 const statusColor = (status: string) =>
   ({
@@ -125,70 +115,19 @@ const actionsFor = (status: string): Action[] => {
 const ProductManagementPage: React.FC = () => {
   const { message } = App.useApp();
   const access = useAccess();
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState<ProductRecord>();
-  const [skus, setSkus] = useState<ProductSkuRecord[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorId, setEditorId] = useState<number>();
   const [rejectTarget, setRejectTarget] = useState<ProductRecord>();
   const [rejectForm] = Form.useForm<{ reason: string }>();
-  const [form] = Form.useForm();
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin-products'],
     queryFn: listAdminProducts,
   });
 
-  const openEdit = async (record: ProductRecord) => {
-    setEditing(record);
-    form.setFieldsValue(record);
-    setSkus(record.skus ?? []);
-    setEditOpen(true);
-    // 列表里的 skus 只有概要，详情接口才有完整字段
-    setLoadingDetail(true);
-    try {
-      const detail = await getAdminProduct(record.id);
-      form.setFieldsValue(detail);
-      setSkus(detail.skus ?? []);
-    } catch (error) {
-      message.error((error as Error).message);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!editing) return;
-    try {
-      const values = await form.validateFields();
-      await updateAdminProduct(editing.id, {
-        name: values.name,
-        subtitle: values.subtitle,
-        description: values.description,
-        main_image: values.main_image,
-      });
-      message.success('商品资料已更新');
-      setEditOpen(false);
-      refetch();
-    } catch (error) {
-      if ((error as { errorFields?: unknown }).errorFields) return;
-      message.error((error as Error).message);
-    }
-  };
-
-  const saveSku = async (
-    sku: ProductSkuRecord,
-    patch: { price_cents?: number; stock?: number },
-  ) => {
-    if (!editing) return;
-    try {
-      await updateAdminProductSku(editing.id, sku.id, patch);
-      message.success('SKU 已更新（库存变更已记账）');
-      const detail = await getAdminProduct(editing.id);
-      setSkus(detail.skus ?? []);
-      refetch();
-    } catch (error) {
-      message.error((error as Error).message);
-    }
+  const openEdit = (record: ProductRecord) => {
+    setEditorId(record.id);
+    setEditorOpen(true);
   };
 
   const runAction = async (record: ProductRecord, action: Action) => {
@@ -370,98 +309,12 @@ const ProductManagementPage: React.FC = () => {
         />
       </Card>
 
-      <Modal
-        title="编辑商品"
-        open={editOpen}
-        onCancel={() => setEditOpen(false)}
-        onOk={handleSave}
-        confirmLoading={loadingDetail}
-        destroyOnHidden
-        forceRender
-        width={720}
-      >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item
-            label="商品名称"
-            name="name"
-            rules={[{ required: true, message: '请输入商品名称' }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item label="副标题" name="subtitle">
-            <Input />
-          </Form.Item>
-          <Form.Item label="商品描述" name="description">
-            <Input.TextArea rows={3} placeholder="卖点、成色、规格等" />
-          </Form.Item>
-          <Form.Item
-            label="主图"
-            name="main_image"
-            extra="点图片或按钮从附件中心选图"
-          >
-            <MainImageField />
-          </Form.Item>
-        </Form>
-
-        <Divider titlePlacement="start" plain>
-          SKU（价格 / 库存）
-        </Divider>
-        <Table<ProductSkuRecord>
-          rowKey="id"
-          size="small"
-          pagination={false}
-          dataSource={skus}
-          locale={{ emptyText: '该商品还没有 SKU，无法上架' }}
-          columns={[
-            { title: 'SKU', dataIndex: 'name', width: 180 },
-            {
-              title: '价格（元）',
-              width: 160,
-              render: (_, sku) => (
-                <InputNumber
-                  min={0.01}
-                  step={1}
-                  defaultValue={sku.price_cents / 100}
-                  style={{ width: '100%' }}
-                  onBlur={(event) => {
-                    const yuan = Number(event.target.value);
-                    if (!Number.isFinite(yuan) || yuan <= 0) return;
-                    const cents = Math.round(yuan * 100);
-                    if (cents !== sku.price_cents) {
-                      saveSku(sku, { price_cents: cents });
-                    }
-                  }}
-                />
-              ),
-            },
-            {
-              title: '库存',
-              width: 160,
-              render: (_, sku) => (
-                <InputNumber
-                  min={sku.locked_stock}
-                  step={1}
-                  defaultValue={sku.stock}
-                  style={{ width: '100%' }}
-                  onBlur={(event) => {
-                    const next = Number(event.target.value);
-                    if (!Number.isFinite(next) || next === sku.stock) return;
-                    saveSku(sku, { stock: next });
-                  }}
-                />
-              ),
-            },
-            {
-              title: '已锁定',
-              dataIndex: 'locked_stock',
-              width: 90,
-            },
-          ]}
-        />
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          改价/改库存在失焦时自动保存；库存不能低于已锁定数量，每次变更都会写库存流水。
-        </Typography.Text>
-      </Modal>
+      <ProductEditor
+        open={editorOpen}
+        productId={editorId}
+        onClose={() => setEditorOpen(false)}
+        onSaved={refetch}
+      />
 
       <Modal
         title="驳回商品"
@@ -485,77 +338,6 @@ const ProductManagementPage: React.FC = () => {
         </Form>
       </Modal>
     </SettingPage>
-  );
-};
-
-/** 主图字段：点图弹附件中心。与品牌页的 ImageField 同款交互。 */
-const MainImageField: React.FC<{
-  value?: string;
-  onChange?: (value: string) => void;
-}> = ({ value, onChange }) => {
-  const { token } = theme.useToken();
-  const [open, setOpen] = useState(false);
-  const [freshPreview, setFreshPreview] = useState<string>();
-  const preview = freshPreview ?? value;
-  return (
-    <Space align="center" size={16}>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        style={{
-          width: 96,
-          height: 96,
-          padding: 0,
-          border: `1px dashed ${token.colorBorder}`,
-          borderRadius: 8,
-          background: token.colorFillQuaternary,
-          cursor: 'pointer',
-          overflow: 'hidden',
-        }}
-      >
-        {preview ? (
-          <img
-            src={preview}
-            alt="商品主图"
-            style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
-            }}
-          />
-        ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            点击选图
-          </Typography.Text>
-        )}
-      </button>
-      <Space>
-        <Button size="small" onClick={() => setOpen(true)}>
-          {value ? '更换主图' : '选择主图'}
-        </Button>
-        {value ? (
-          <Button
-            size="small"
-            danger
-            onClick={() => {
-              setFreshPreview(undefined);
-              onChange?.('');
-            }}
-          >
-            清除
-          </Button>
-        ) : null}
-      </Space>
-      <AttachmentPicker
-        open={open}
-        title="选择商品主图"
-        onCancel={() => setOpen(false)}
-        onSelect={(record) => {
-          setFreshPreview(record.url);
-          onChange?.(`/api/v1/attachments/public/${record.id}`);
-        }}
-      />
-    </Space>
   );
 };
 
