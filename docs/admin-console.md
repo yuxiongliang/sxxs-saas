@@ -173,13 +173,38 @@ off_sale     → on_sale
 - 商品主图选附件时，后端会把该附件 `visibility` 标成 `public`（同站点 Logo），否则前台破图。
 - 商品写动作全部落审计（`product.updated` / `product.reviewed`）。
 
-### 已知缺口（尚未做）
+### 卖家侧（`/portal/seller`）
 
-- `seller_owner` 角色持有 `product:manage`，而 `/admin/products` 只按 `tenant_id` 过滤 ——
-  卖家登录控制台能改**同租户其它卖家**的商品。要彻底收口得两者选一：剥夺 seller 角色的
-  `product:manage`（卖家只走 `/portal/seller/*`），或给列表/更新加 seller 作用域。
-- 卖家侧仍只能建商品，不能改/下架（`/portal/seller/products` 只有 GET/POST）。
-- 驳回没有原因字段（`products` 表无 `reject_reason`），卖家看不到为什么被驳回。
+卖家能管自己商品，归属靠 `current_seller()`（`SellerMember` + `Seller.status`），**不靠权限码**。
+
+| 动作 | 接口 | 规则 |
+|---|---|---|
+| 新建 | `POST /portal/seller/products` | 强制 `pending_review`，自动建 1 个 SKU |
+| 改资料 / 改价改库存 | `PUT /portal/seller/products/{id}` | 在售商品改内容或改价 → **自动打回 `pending_review`**（`bounced_to_review=true`） |
+| 自己下架 | `POST /portal/seller/products/{id}/status` `{status:off_sale}` | 仅 `on_sale` 可 |
+| 重新提交 | 同上 `{status:pending_review}` | 仅 `rejected / draft / off_sale` 可；清空驳回原因 |
+
+- 卖家**不能自己上架**：schema 只允许 `off_sale` / `pending_review`，想上架必须走租户运营审核。
+- 为什么在售改动要打回：否则可以「先提交合规商品过审 → 再把标题/主图换成违规内容」，审核形同虚设。
+- 改别人店铺的商品返回 **404**（不是 403，不泄露存在性）。
+- 改库存写 `inventory_logs`（`reason=seller_adjust`），不能低于 `locked_stock`。
+
+### 驳回原因
+
+`products.reject_reason`（迁移 `a8c4f1d72e60`）：运营驳回时可在弹窗里写原因，卖家在「我的商品」里直接看到；
+重新提交或上架时自动清空。
+
+### 越权面已收口
+
+`seller_owner` / `seller_staff` **不再持有 `product:manage` / `product:moderate`**：
+它们原来能在租户控制台的 `/admin/products` 改**同租户其它卖家**的商品（那个接口只按 `tenant_id` 过滤）。
+- 代码侧：`seed_auth.ROLE_PERMISSIONS` 移除 + `FORBIDDEN_ROLE_PERMISSIONS` 登记（seed 时自动清理脏授权）；
+- 存量库：迁移 `a8c4f1d72e60` 直接删掉这条 `role_permissions`。
+
+### 仍未做
+
+- 商品无可视化库存流水页（`inventory_logs` 只写不读）。
+- 平台端没有商品目录（只有 `/moderation` 审内容）。
 
 ## Attachment center
 

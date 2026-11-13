@@ -59,6 +59,7 @@ def _product_dict(
         "status": product.status,
         "main_image": product.main_image,
         "images": product.images or [],
+        "reject_reason": product.reject_reason,
         "created_at": product.created_at.isoformat() if product.created_at else None,
         "updated_at": product.updated_at.isoformat() if product.updated_at else None,
         "seller_name": seller.display_name if seller else None,
@@ -374,6 +375,8 @@ async def change_product_status(
             raise HTTPException(status_code=400, detail="所有 SKU 库存为 0，先补货再上架")
 
     product.status = target
+    # 驳回要留原因；上架/其他迁移清空上一次的驳回原因
+    product.reject_reason = (payload.reason or None) if target == "rejected" else None
     await audit_service.record(
         db,
         action=audit_service.ACTION_PRODUCT_REVIEWED,

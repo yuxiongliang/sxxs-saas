@@ -49,6 +49,42 @@ export async function createSellerProduct(data: {
   );
 }
 
+/** 卖家改自己的商品：在售商品改内容/改价会自动打回待审核。 */
+export async function updateSellerProduct(
+  id: number,
+  data: {
+    name?: string;
+    subtitle?: string;
+    description?: string;
+    main_image?: string;
+    price_cents?: number;
+    stock?: number;
+  },
+) {
+  return unwrap<{
+    id: number;
+    name: string;
+    status: string;
+    reject_reason?: string | null;
+    price_cents: number;
+    stock: number;
+    bounced_to_review: boolean;
+  }>(request(`/api/v1/portal/seller/products/${id}`, { method: 'PUT', data }));
+}
+
+/** 卖家只能：自己下架（on_sale→off_sale）、被驳回后重新提交（→pending_review）。 */
+export async function changeSellerProductStatus(
+  id: number,
+  status: 'off_sale' | 'pending_review',
+) {
+  return unwrap<{ id: number; status: string }>(
+    request(`/api/v1/portal/seller/products/${id}/status`, {
+      method: 'POST',
+      data: { status },
+    }),
+  );
+}
+
 export async function shipMySellerOrder(
   id: number,
   data: { carrier: string; tracking_no: string },
@@ -149,12 +185,16 @@ export async function updateAdminProduct(
   );
 }
 
-/** 上下架 / 审核：后端有状态机，非法迁移会返回 400。 */
-export async function changeAdminProductStatus(id: number, status: string) {
+/** 上下架 / 审核：后端有状态机，非法迁移会返回 400。驳回可带原因给卖家看。 */
+export async function changeAdminProductStatus(
+  id: number,
+  status: string,
+  reason?: string,
+) {
   return unwrap<ProductRecord>(
     request(`/api/v1/admin/products/${id}/status`, {
       method: 'POST',
-      data: { status },
+      data: reason ? { status, reason } : { status },
     }),
   );
 }

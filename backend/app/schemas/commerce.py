@@ -31,6 +31,8 @@ class ProductUpdate(BaseModel):
 
 class ProductStatusRequest(BaseModel):
     status: str = Field(pattern="^(draft|pending_review|on_sale|off_sale|rejected)$")
+    # 驳回时给卖家的原因（卖家中心会展示）
+    reason: str | None = Field(default=None, max_length=255)
 
 
 class ProductSkuUpdate(BaseModel):
@@ -46,6 +48,27 @@ class SellerProductCreate(BaseModel):
     price_cents: int = Field(gt=0)
     stock: int = Field(ge=0)
     category_id: int | None = None
+
+
+class SellerProductUpdate(BaseModel):
+    """卖家改自己的商品。
+
+    在售商品改了内容（名称/描述/主图/价格）会**自动打回待审核** —— 否则先提交个
+    合规商品过审，再把标题和主图换成违禁内容，审核就白做了。
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    subtitle: str | None = Field(default=None, max_length=255)
+    description: str | None = None
+    main_image: str | None = Field(default=None, max_length=512)
+    price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
+    stock: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class SellerProductStatusRequest(BaseModel):
+    """卖家能做的状态变更只有两种：自己下架、被驳回后重新提交。"""
+
+    status: str = Field(pattern="^(off_sale|pending_review)$")
 
 
 class RefundCreateRequest(BaseModel):

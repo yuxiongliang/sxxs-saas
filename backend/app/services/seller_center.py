@@ -5,10 +5,14 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Product, ProductSku
+from app.models.catalog import InventoryLog, Product, ProductSku
 from app.models.order import SellerOrder, Shipment
 from app.models.seller import Seller, SellerMember, Shop
-from app.schemas.commerce import SellerProductCreate
+from app.schemas.commerce import (
+    SellerProductCreate,
+    SellerProductStatusRequest,
+    SellerProductUpdate,
+)
 from app.services import audit as audit_service
 from app.services import finance as finance_service
 from app.services.auth import AuthContext
@@ -65,12 +69,143 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
             {
                 "id": product.id,
                 "name": product.name,
+                "subtitle": product.subtitle,
+                "description": product.description,
+                "main_image": product.main_image,
                 "status": product.status,
+                # 驳回原因要给卖家看，否则只能反复重提
+                "reject_reason": product.reject_reason,
                 "price_cents": sku.price_cents if sku else 0,
                 "stock": sku.stock if sku else 0,
+                "sku_id": sku.id if sku else None,
+                "locked_stock": sku.locked_stock if sku else 0,
             }
         )
     return result
+
+
+async def _own_product(db: AsyncSession, context: AuthContext, product_id: int) -> Product:
+    """卖家只能动自己的商品：归属校验靠 current_seller()，不靠权限码。"""
+    seller, _ = await current_seller(db, context)
+    product = await db.get(Product, product_id)
+    if product is None or product.tenant_id != context.tenant.id or product.seller_id != seller.id:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    return product
+
+
+async def update_seller_product(
+    db: AsyncSession, context: AuthContext, product_id: int, payload: SellerProductUpdate
+) -> dict:
+    """卖家改自己的商品。在售商品改动后自动打回待审核。"""
+    product = await _own_product(db, context, product_id)
+    data = payload.model_dump(exclude_unset=True)
+
+    content_changed = False
+    for key in ("name", "subtitle", "description", "main_image"):
+        if key in data and getattr(product, key) != data[key]:
+            setattr(product, key, data[key])
+            content_changed = True
+
+    sku = (
+        await db.scalars(select(ProductSku).where(ProductSku.product_id == product.id))
+    ).first()
+    price_changed = False
+    stock_changed = False
+    if sku is not None:
+        if "price_cents" in data and data["price_cents"] != sku.price_cents:
+            sku.price_cents = data["price_cents"]
+            price_changed = True
+        if "stock" in data and data["stock"] != sku.stock:
+            if data["stock"] < sku.locked_stock:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"库存不能低于已锁定数量（{sku.locked_stock}）",
+                )
+            delta = data["stock"] - sku.stock
+            sku.stock = data["stock"]
+            db.add(
+                InventoryLog(
+                    tenant_id=context.tenant.id,
+                    seller_id=sku.seller_id,
+                    sku_id=sku.id,
+                    change=delta,
+                    reason="seller_adjust",
+                )
+            )
+            stock_changed = True
+
+    bounced = False
+    if product.status == "on_sale" and (content_changed or price_changed):
+        # 过审后又改内容/价格：必须重新审，否则可以先过审再换成违规内容。
+        product.status = "pending_review"
+        product.reject_reason = None
+        bounced = True
+
+    if content_changed or price_changed or stock_changed or bounced:
+        await audit_service.record(
+            db,
+            action=audit_service.ACTION_PRODUCT_UPDATED,
+            tenant_id=context.tenant.id,
+            actor_id=context.user.id,
+            target_type="product",
+            target_id=product.id,
+            before=None,
+            after={
+                "fields": ",".join(sorted(data.keys())),
+                "bounced_to_review": str(bounced),
+            },
+        )
+    await db.commit()
+    await db.refresh(product)
+    return {
+        "id": product.id,
+        "name": product.name,
+        "status": product.status,
+        "reject_reason": product.reject_reason,
+        "price_cents": sku.price_cents if sku else 0,
+        "stock": sku.stock if sku else 0,
+        "bounced_to_review": bounced,
+    }
+
+
+async def change_seller_product_status(
+    db: AsyncSession,
+    context: AuthContext,
+    product_id: int,
+    payload: SellerProductStatusRequest,
+) -> dict:
+    """卖家能做的状态变更：自己下架、被驳回后重新提交。"""
+    product = await _own_product(db, context, product_id)
+    current, target = product.status, payload.status
+
+    if target == "off_sale":
+        if current != "on_sale":
+            raise HTTPException(status_code=400, detail="只有在售商品可以下架")
+    elif target == "pending_review":
+        if current not in {"rejected", "draft", "off_sale"}:
+            raise HTTPException(
+                status_code=400, detail="只有被驳回/草稿/已下架的商品可以重新提交审核"
+            )
+    else:  # pragma: no cover - schema 已限死两个值
+        raise HTTPException(status_code=400, detail="不支持的状态")
+
+    before = product.status
+    product.status = target
+    # 重新提审时清空上次的驳回原因
+    product.reject_reason = None
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_REVIEWED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product",
+        target_id=product.id,
+        before={"status": before},
+        after={"status": target},
+    )
+    await db.commit()
+    await db.refresh(product)
+    return {"id": product.id, "status": product.status}
 
 
 async def create_seller_product(

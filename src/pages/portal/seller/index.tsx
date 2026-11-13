@@ -20,6 +20,7 @@ import React, { useState } from 'react';
 import PortalShell from '@/pages/portal/components/PortalShell';
 import {
   applySeller,
+  changeSellerProductStatus,
   createSellerProduct,
   getSellerApplication,
   getSellerProfile,
@@ -27,16 +28,21 @@ import {
   listSellerProducts,
   requestSellerPayout,
   shipMySellerOrder,
+  updateSellerProduct,
 } from '@/services/commerce/api';
 import type {
   SellerOrderRecord,
   SellerProductRecord,
 } from '@/services/commerce/types';
+import { labelOf, PRODUCT_STATUS } from '@/utils/labels';
 
 const SellerPage: React.FC = () => {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [productOpen, setProductOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<SellerProductRecord>();
+  const [editForm] = Form.useForm();
   const [shipOpen, setShipOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SellerOrderRecord>();
   const applicationQuery = useQuery({
@@ -120,19 +126,113 @@ const SellerPage: React.FC = () => {
     }
   };
 
+  const openEdit = (record: SellerProductRecord) => {
+    setEditing(record);
+    editForm.setFieldsValue({
+      name: record.name,
+      subtitle: record.subtitle ?? '',
+      description: record.description ?? '',
+      price_yuan: record.price_cents / 100,
+      stock: record.stock,
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editing) return;
+    try {
+      const values = await editForm.validateFields();
+      const result = await updateSellerProduct(editing.id, {
+        name: values.name,
+        subtitle: values.subtitle,
+        description: values.description,
+        price_cents: Math.round(Number(values.price_yuan) * 100),
+        stock: Number(values.stock),
+      });
+      if (result.bounced_to_review) {
+        message.info('在售商品改动后已自动重新提交审核');
+      } else {
+        message.success('商品已更新');
+      }
+      setEditOpen(false);
+      refresh();
+    } catch (error: any) {
+      if (error?.errorFields) return;
+      message.error(error?.message || '更新失败');
+    }
+  };
+
+  const changeStatus = async (
+    record: SellerProductRecord,
+    status: 'off_sale' | 'pending_review',
+  ) => {
+    try {
+      await changeSellerProductStatus(record.id, status);
+      message.success(status === 'off_sale' ? '商品已下架' : '已重新提交审核');
+      refresh();
+    } catch (error: any) {
+      message.error(error?.message || '操作失败');
+    }
+  };
+
   const productColumns: ColumnsType<SellerProductRecord> = [
-    { title: '商品', dataIndex: 'name' },
+    {
+      title: '商品',
+      dataIndex: 'name',
+      render: (_, record) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{record.name}</div>
+          {record.reject_reason ? (
+            <div style={{ color: '#cf1322', fontSize: 12 }}>
+              驳回原因：{record.reject_reason}
+            </div>
+          ) : null}
+        </div>
+      ),
+    },
     {
       title: '状态',
       dataIndex: 'status',
-      render: (v: string) => <Tag>{v}</Tag>,
+      width: 110,
+      render: (v: string) => <Tag>{labelOf(PRODUCT_STATUS, v)}</Tag>,
     },
     {
       title: '价格',
       dataIndex: 'price_cents',
+      width: 110,
       render: (v: number) => `¥${(v / 100).toFixed(2)}`,
     },
-    { title: '库存', dataIndex: 'stock' },
+    { title: '库存', dataIndex: 'stock', width: 90 },
+    {
+      title: '操作',
+      width: 200,
+      render: (_, record) => (
+        <Space size={0}>
+          <Button type="link" size="small" onClick={() => openEdit(record)}>
+            编辑
+          </Button>
+          {record.status === 'on_sale' ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => changeStatus(record, 'off_sale')}
+            >
+              下架
+            </Button>
+          ) : null}
+          {['rejected', 'draft', 'off_sale'].includes(record.status) ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => changeStatus(record, 'pending_review')}
+            >
+              重新提交审核
+            </Button>
+          ) : null}
+        </Space>
+      ),
+    },
   ];
 
   const orderColumns: ColumnsType<SellerOrderRecord> = [
@@ -347,6 +447,48 @@ const SellerPage: React.FC = () => {
             >
               <Input />
             </Form.Item>
+          </Form>
+        </Modal>
+
+        <Modal
+          title="编辑商品"
+          open={editOpen}
+          onCancel={() => setEditOpen(false)}
+          onOk={handleEditSave}
+          destroyOnHidden
+          forceRender
+        >
+          <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item
+              label="商品名称"
+              name="name"
+              rules={[{ required: true, message: '请输入商品名称' }]}
+            >
+              <Input />
+            </Form.Item>
+            <Form.Item label="副标题" name="subtitle">
+              <Input />
+            </Form.Item>
+            <Form.Item label="商品描述" name="description">
+              <Input.TextArea rows={3} placeholder="成色、规格、卖点" />
+            </Form.Item>
+            <Form.Item
+              label="价格（元）"
+              name="price_yuan"
+              rules={[{ required: true, message: '请输入价格' }]}
+            >
+              <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              label="库存"
+              name="stock"
+              rules={[{ required: true, message: '请输入库存' }]}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              在售商品改了内容或价格会自动重新进入审核，审核通过后恢复在售。
+            </Typography.Text>
           </Form>
         </Modal>
       </div>

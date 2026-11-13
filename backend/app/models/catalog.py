@@ -33,6 +33,9 @@ class Product(Base, TimestampMixin):
     main_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     images: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # 审核驳回原因：卖家要知道为什么被驳回，否则只能反复重提。
+    # 上架/重新提交时清空。
+    reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 

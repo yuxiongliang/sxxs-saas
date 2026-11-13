@@ -3,7 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
 from app.core.response import ok
-from app.schemas.commerce import SellerApplyRequest, SellerProductCreate, SellerShipRequest
+from app.schemas.commerce import (
+    SellerApplyRequest,
+    SellerProductCreate,
+    SellerProductStatusRequest,
+    SellerProductUpdate,
+    SellerShipRequest,
+)
 from app.services import seller_center as seller_service
 from app.services.auth import AuthContext
 
@@ -93,6 +99,34 @@ async def seller_products(
     db: AsyncSession = Depends(get_db),
 ):
     return ok(await seller_service.seller_products(db, context))
+
+
+@router.put("/products/{product_id}")
+async def update_seller_product(
+    product_id: int,
+    payload: SellerProductUpdate,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家改自己的商品（归属校验走 current_seller，不需要 product:manage）。"""
+    return ok(
+        await seller_service.update_seller_product(db, context, product_id, payload),
+        "商品已更新",
+    )
+
+
+@router.post("/products/{product_id}/status")
+async def change_seller_product_status(
+    product_id: int,
+    payload: SellerProductStatusRequest,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家自己下架 / 被驳回后重新提交审核。"""
+    return ok(
+        await seller_service.change_seller_product_status(db, context, product_id, payload),
+        "商品状态已更新",
+    )
 
 
 @router.get("/orders")

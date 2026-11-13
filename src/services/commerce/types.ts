@@ -89,9 +89,16 @@ export interface SellerProfile {
 export interface SellerProductRecord {
   id: number;
   name: string;
+  subtitle?: string | null;
+  description?: string | null;
+  main_image?: string | null;
   status: string;
+  /** 被驳回时运营给的原因，重新提交后清空 */
+  reject_reason?: string | null;
   price_cents: number;
   stock: number;
+  sku_id?: number | null;
+  locked_stock?: number;
 }
 
 export interface SellerOrderRecord {

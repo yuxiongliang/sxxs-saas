@@ -128,6 +128,8 @@ const ProductManagementPage: React.FC = () => {
   const [editing, setEditing] = useState<ProductRecord>();
   const [skus, setSkus] = useState<ProductSkuRecord[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<ProductRecord>();
+  const [rejectForm] = Form.useForm<{ reason: string }>();
   const [form] = Form.useForm();
 
   const { data, isLoading, refetch } = useQuery({
@@ -194,6 +196,21 @@ const ProductManagementPage: React.FC = () => {
       message.success(`${action.label}成功`);
       refetch();
     } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectTarget) return;
+    try {
+      const { reason } = await rejectForm.validateFields();
+      await changeAdminProductStatus(rejectTarget.id, 'rejected', reason);
+      message.success('已驳回，卖家可在商品中心看到原因');
+      setRejectTarget(undefined);
+      rejectForm.resetFields();
+      refetch();
+    } catch (error) {
+      if ((error as { errorFields?: unknown }).errorFields) return;
       message.error((error as Error).message);
     }
   };
@@ -289,17 +306,33 @@ const ProductManagementPage: React.FC = () => {
                 ? access.canProductModerate
                 : access.canProductEdit,
             )
-            .map((action) => (
-              <Popconfirm
-                key={action.key}
-                title={action.confirm}
-                onConfirm={() => runAction(record, action)}
-              >
-                <Button type="link" size="small" danger={action.danger}>
+            .map((action) =>
+              action.key === 'reject' ? (
+                // 驳回要填原因：卖家中心会直接展示，不写原因只会反复重提
+                <Button
+                  key={action.key}
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={() => {
+                    setRejectTarget(record);
+                    rejectForm.resetFields();
+                  }}
+                >
                   {action.label}
                 </Button>
-              </Popconfirm>
-            ))}
+              ) : (
+                <Popconfirm
+                  key={action.key}
+                  title={action.confirm}
+                  onConfirm={() => runAction(record, action)}
+                >
+                  <Button type="link" size="small" danger={action.danger}>
+                    {action.label}
+                  </Button>
+                </Popconfirm>
+              ),
+            )}
         </Space>
       ),
     },
@@ -418,6 +451,28 @@ const ProductManagementPage: React.FC = () => {
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           改价/改库存在失焦时自动保存；库存不能低于已锁定数量，每次变更都会写库存流水。
         </Typography.Text>
+      </Modal>
+
+      <Modal
+        title="驳回商品"
+        open={Boolean(rejectTarget)}
+        onCancel={() => setRejectTarget(undefined)}
+        onOk={handleReject}
+        okText="确认驳回"
+        okButtonProps={{ danger: true }}
+        destroyOnHidden
+        forceRender
+      >
+        <Form form={rejectForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            label="驳回原因"
+            name="reason"
+            extra="卖家会在「我的商品」里看到这句话，写清楚要改什么"
+            rules={[{ required: true, message: '请填写驳回原因' }]}
+          >
+            <Input.TextArea rows={3} maxLength={255} showCount />
+          </Form.Item>
+        </Form>
       </Modal>
     </SettingPage>
   );

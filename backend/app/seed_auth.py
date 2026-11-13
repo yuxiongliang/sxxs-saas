@@ -232,7 +232,8 @@ ROLE_PERMISSIONS = {
         "seller:read",
         "seller:manage",
         "product:read",
-        "product:manage",
+        # 没有 product:manage：卖家只能管自己店铺的商品（走 /portal/seller/*，
+        # 用 current_seller() 校验归属），给了 manage 就能在控制台改别家卖家的商品。
         "order:read:seller",
         "order:manage",
         "payout:read",
@@ -288,6 +289,9 @@ for _amap_role in ("tenant_owner", "tenant_admin", "operator", "viewer"):
 # 不做「与代码不一致就删」的粗暴归一化，以免抹掉运营在 UI 上自定义的授权。
 FORBIDDEN_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "customer": {"dashboard:read"},
+    # 卖家只能动自己的商品；商品管理页是租户运营的，不能靠 manage 权限跨卖家越权。
+    "seller_owner": {"product:manage", "product:moderate"},
+    "seller_staff": {"product:manage", "product:moderate"},
 }
 
 
