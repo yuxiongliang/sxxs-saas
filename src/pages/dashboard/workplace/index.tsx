@@ -83,7 +83,8 @@ export default function WorkplacePage() {
   const access = useAccess();
   const { initialState } = useModel('@@initialState');
   const user = initialState?.currentUser;
-  const tenant = initialState?.currentTenant;
+  // 页头标签用登录用户名（不改、唯一），而不是租户名 —— 租户名在左上角/页脚已经有了。
+  const username = initialState?.username ?? user?.name ?? '未登录';
 
   const overviewQuery = useQuery({
     queryKey: ['workplace-overview'],
@@ -185,7 +186,7 @@ export default function WorkplacePage() {
             </Title>
             <Space size={8} style={{ marginTop: 6 }} wrap>
               <Text type="secondary">{today}</Text>
-              <Tag color="blue">{tenant?.name ?? '演示租户'}</Tag>
+              <Tag color="blue">{username}</Tag>
               {usage?.plan_name ? <Tag>{usage.plan_name}</Tag> : null}
             </Space>
           </Col>

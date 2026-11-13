@@ -12,6 +12,7 @@ import {
   Spin,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import React, { useState } from 'react';
 import AttachmentUpload from '@/components/AttachmentUpload';
@@ -52,6 +53,7 @@ export default function AttachmentPicker({
   title = '选择图片',
 }: AttachmentPickerProps) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
@@ -158,10 +160,15 @@ export default function AttachmentPicker({
               style={{
                 padding: 8,
                 border: `1px solid ${
-                  selectedId === item.id ? '#1677ff' : '#f0f0f0'
+                  selectedId === item.id
+                    ? token.colorPrimary
+                    : token.colorBorderSecondary
                 }`,
                 borderRadius: 8,
-                background: selectedId === item.id ? '#e6f4ff' : '#fff',
+                background:
+                  selectedId === item.id
+                    ? token.colorPrimaryBg
+                    : token.colorBgContainer,
                 cursor: 'pointer',
                 textAlign: 'left',
               }}
@@ -173,7 +180,7 @@ export default function AttachmentPicker({
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
-                  background: '#fafafa',
+                  background: token.colorFillQuaternary,
                   borderRadius: 6,
                 }}
               >

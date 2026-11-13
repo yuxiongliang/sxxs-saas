@@ -77,6 +77,8 @@ export async function getInitialState(): Promise<{
   roles?: string[];
   tenants?: AuthTenant[];
   currentTenant?: AuthTenant;
+  /** 登录用户名（不改、不可重复）—— 页面上标识「当前是哪个账号」用这个，不用展示名 */
+  username?: string;
   /** Feature keys of the tenant's plan; undefined when the plan is unknown. */
   features?: string[];
   /** 站点品牌（公开接口）：logo / 全站名称 / favicon */
@@ -205,6 +207,7 @@ export async function getInitialState(): Promise<{
       roles: session?.roles ?? [],
       tenants: session?.tenants ?? [],
       currentTenant: session?.current_tenant,
+      username: session?.user.username,
       features,
       brand,
       settings,
@@ -224,6 +227,7 @@ export async function getInitialState(): Promise<{
     roles: publicSession?.roles ?? [],
     tenants: publicSession?.tenants ?? [],
     currentTenant: publicSession?.current_tenant,
+    username: publicSession?.user.username,
     features: publicFeatures,
     brand,
     settings,

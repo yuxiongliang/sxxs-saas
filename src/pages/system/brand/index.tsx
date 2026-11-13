@@ -12,6 +12,7 @@ import {
   Space,
   Spin,
   Typography,
+  theme,
 } from 'antd';
 import React, { useState } from 'react';
 import AttachmentPicker from '@/components/AttachmentPicker';
@@ -49,6 +50,7 @@ const ImageField: React.FC<{
   /** 预览框边长（logo 大一点，favicon 小一点） */
   boxSize?: number;
 }> = ({ value, onChange, title, boxSize = 96 }) => {
+  const { token } = theme.useToken();
   const [open, setOpen] = useState(false);
   const [freshPreview, setFreshPreview] = useState<string>();
   const preview = freshPreview ?? value;
@@ -68,9 +70,9 @@ const ImageField: React.FC<{
             justifyContent: 'center',
             overflow: 'hidden',
             padding: 0,
-            border: '1px dashed #d9d9d9',
+            border: `1px dashed ${token.colorBorder}`,
             borderRadius: 8,
-            background: '#fafafa',
+            background: token.colorFillQuaternary,
             cursor: 'pointer',
           }}
         >

@@ -20,6 +20,7 @@ import {
   Table,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
@@ -483,6 +484,7 @@ const MainImageField: React.FC<{
   value?: string;
   onChange?: (value: string) => void;
 }> = ({ value, onChange }) => {
+  const { token } = theme.useToken();
   const [open, setOpen] = useState(false);
   const [freshPreview, setFreshPreview] = useState<string>();
   const preview = freshPreview ?? value;
@@ -495,9 +497,9 @@ const MainImageField: React.FC<{
           width: 96,
           height: 96,
           padding: 0,
-          border: '1px dashed #d9d9d9',
+          border: `1px dashed ${token.colorBorder}`,
           borderRadius: 8,
-          background: '#fafafa',
+          background: token.colorFillQuaternary,
           cursor: 'pointer',
           overflow: 'hidden',
         }}
