@@ -7,19 +7,80 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao import notification as notification_dao
 from app.models.notification import Notification
+from app.models.notification_pref import TenantNotificationPref, UserNotificationPref
 from app.models.notification_template import NotificationTemplate
-from app.models.tenant import Tenant, TenantDomain
+from app.models.permission import MemberRole
+from app.models.role import Role
+from app.models.tenant import Tenant, TenantDomain, TenantMember
+from app.models.user import User
 from app.schemas.notification import NotificationCreate, NotificationStats
 from app.services import notification_template as template_service
 from app.services import setting_resolver
 
-AUDIENCE_SIZE = {
-    "all": 1280,
-    "role:admin": 12,
-    "role:operator": 36,
-    "role:viewer": 1232,
-    "custom": 100,
-}
+
+def _audience_role_code(audience: str) -> str | None:
+    """`role:admin` → `admin`；`all` / `custom` → None（不按角色过滤）。"""
+    if audience.startswith("role:"):
+        return audience.split(":", 1)[1] or None
+    return None
+
+
+async def resolve_recipients(db: AsyncSession, tenant_id: int, audience: str) -> list[User]:
+    """把 audience 展开成**真实**收件人。
+
+    旧实现用 `AUDIENCE_SIZE` 硬编码字典（all=1280 等）编数字，导致
+    「成功率」和收件人偏好都无从谈起。现在以租户成员表为准：只有
+    `tenant_members` 和 `users` 都 active 的人算收件人。
+    """
+    stmt = (
+        select(User)
+        .join(TenantMember, TenantMember.user_id == User.id)
+        .where(
+            TenantMember.tenant_id == tenant_id,
+            TenantMember.status == "active",
+            User.status == "active",
+        )
+    )
+    role_code = _audience_role_code(audience)
+    if role_code:
+        stmt = (
+            stmt.join(MemberRole, MemberRole.member_id == TenantMember.id)
+            .join(Role, Role.id == MemberRole.role_id)
+            .where(Role.code == role_code)
+        )
+    return list((await db.scalars(stmt.distinct())).all())
+
+
+async def _tenant_channel_enabled(db: AsyncSession, tenant_id: int, channel: str) -> bool:
+    """租户自己的渠道开关（运营意志）。缺行 = 开启。"""
+    if channel == "inbox":
+        return True
+    row = (
+        await db.scalars(
+            select(TenantNotificationPref).where(
+                TenantNotificationPref.tenant_id == tenant_id,
+                TenantNotificationPref.channel == channel,
+            )
+        )
+    ).first()
+    return True if row is None else bool(row.enabled)
+
+
+async def _users_opted_out(
+    db: AsyncSession, tenant_id: int, category: str, channel: str
+) -> set[int]:
+    """用户自己在「个人设置 → 新消息通知」里关掉这个分类的人。"""
+    if channel == "inbox":
+        return set()
+    rows = await db.scalars(
+        select(UserNotificationPref.user_id).where(
+            UserNotificationPref.tenant_id == tenant_id,
+            UserNotificationPref.category == category,
+            UserNotificationPref.channel == channel,
+            UserNotificationPref.enabled.is_(False),
+        )
+    )
+    return set(rows.all())
 
 
 async def list_notifications(
@@ -55,15 +116,10 @@ async def send_notification(
 ) -> Notification:
     if payload.channel not in {"sms", "email", "inbox"}:
         raise HTTPException(status_code=400, detail="不支持的触达渠道")
-    audience_size = AUDIENCE_SIZE.get(payload.audience, 100)
     now = datetime.now(UTC)
 
-    channel_enabled = True
-    if payload.channel in {"sms", "email"}:
-        # 走 resolver：跟随系统的租户要用**平台**的启用状态，
-        # 直接读 system_settings 拿不到继承后的结果。
-        resolved = await setting_resolver.resolve(db, tenant_id, payload.channel)
-        channel_enabled = bool(resolved.enabled)
+    # 先展开真实收件人：`total` 从创建那一刻就是真实人数，不再是写死的 1280。
+    recipients = await resolve_recipients(db, tenant_id, payload.audience)
 
     title = payload.title
     content = payload.content
@@ -119,12 +175,14 @@ async def send_notification(
             "channel": payload.channel,
             "template": payload.template,
             "audience": payload.audience,
+            "category": payload.category,
             "content": content,
             "status": status,
             "scheduled_at": payload.scheduled_at,
-            "total": audience_size,
+            "total": len(recipients),
             "success_count": 0,
             "failed_count": 0,
+            "skipped_count": 0,
         },
     )
     await db.commit()
@@ -133,20 +191,56 @@ async def send_notification(
         await db.refresh(record)
         return record
 
-    # Simulate an async delivery pipeline. Real implementation should enqueue a task
-    # and update status via a worker / SSE channel.
+    return await _deliver(db, record)
+
+
+async def _deliver(db: AsyncSession, record: Notification) -> Notification:
+    """按「渠道可用 → 租户开关 → 用户偏好」三层算能发给谁。
+
+    真实投递（SMTP / 短信网关）仍未接入 —— 这个函数决定的是「多少人**会**收到」，
+    不是「已送达」。三个数字各有含义，不要混用：
+
+    * `total`   — 命中 audience 的真实成员数；
+    * `skipped` — 命中但被租户渠道开关或本人分类偏好挡掉的人；
+    * `success` — 真会被投递的人数。
+    """
+    # 保留一点延迟：前端拿到的是“已处理完”的结果，少一个轮询分支。
     await asyncio.sleep(0.35)
-    if channel_enabled:
-        record.status = "success"
-        record.success_count = audience_size
-        record.failed_count = 0
-        record.sent_at = datetime.now(UTC)
-        record.error_message = None
-    else:
+
+    recipients = await resolve_recipients(db, record.tenant_id, record.audience)
+    record.total = len(recipients)
+
+    failure: str | None = None
+    if record.channel in {"sms", "email"}:
+        # 走 resolver：跟随系统的租户要用**平台**的启用状态，
+        # 直接读 system_settings 拿不到继承后的结果。
+        resolved = await setting_resolver.resolve(db, record.tenant_id, record.channel)
+        if not resolved.enabled:
+            failure = f"{record.channel} 渠道未启用"
+        elif not await _tenant_channel_enabled(db, record.tenant_id, record.channel):
+            failure = f"{record.channel} 渠道已被租户关闭"
+
+    if failure:
         record.status = "failed"
         record.success_count = 0
-        record.failed_count = audience_size
-        record.error_message = f"{payload.channel} 渠道未启用"
+        record.failed_count = len(recipients)
+        record.skipped_count = 0
+        record.error_message = failure
+        record.sent_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(record)
+        return record
+
+    opted_out = await _users_opted_out(
+        db, record.tenant_id, record.category or "system", record.channel
+    )
+    skipped = sum(1 for user in recipients if user.id in opted_out)
+    record.status = "success"
+    record.success_count = len(recipients) - skipped
+    record.failed_count = 0
+    record.skipped_count = skipped
+    record.error_message = None
+    record.sent_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(record)
     return record
@@ -160,14 +254,9 @@ async def retry_notification(
         raise HTTPException(status_code=404, detail="通知记录不存在")
     if record.status == "success":
         return record
-    record.status = "success"
-    record.success_count = record.total
-    record.failed_count = 0
-    record.sent_at = datetime.now(UTC)
-    record.error_message = None
-    await db.commit()
-    await db.refresh(record)
-    return record
+    # 重试不再“直接标成功”：按当前收件人与偏好重新算一次，
+    # 否刚关掉短信的租户点一下重试就看到全员成功。
+    return await _deliver(db, record)
 
 
 async def get_stats(db: AsyncSession, tenant_id: int = 1) -> NotificationStats:

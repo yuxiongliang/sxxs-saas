@@ -257,7 +257,8 @@ export const layout: RunTimeLayoutConfig = ({
     },
     avatarProps: {
       src: initialState?.currentUser?.avatar,
-      title: 'ProUser',
+      // 模板里写死了 'ProUser'，实际账号信息一直没露出来。没有头像时会显示这里。
+      title: initialState?.currentUser?.name ?? 'ProUser',
       render: (_, avatarChildren) => (
         <AvatarDropdown>{avatarChildren}</AvatarDropdown>
       ),

@@ -34,6 +34,9 @@ AUTH_PATHS = (
     "/api/v1/auth/login",
     "/api/v1/auth/register",
     "/api/v1/auth/refresh",
+    # 这两个端点要验密码，属于可被爆破的路径，跟登录共用一个预算
+    "/api/v1/auth/me/password",
+    "/api/v1/auth/me/contact",
 )
 
 EXEMPT_PREFIXES = (

@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import HTTPException
@@ -38,9 +39,15 @@ class AuthContext:
 def _auth_user(user: User) -> dict:
     return {
         "id": user.id,
+        "public_id": user.public_id,
         "username": user.username,
         "nickname": user.nickname,
         "email": user.email,
+        "phone": user.phone,
+        "gender": user.gender,
+        "birthday": user.birthday,
+        "last_login_at": user.last_login_at,
+        "has_password": bool(user.password_hash),
         "avatar": None,
     }
 
@@ -252,6 +259,10 @@ async def login(
     else:
         raise HTTPException(status_code=400, detail="请选择要登录的租户")
     member, tenant = selected
+    # 登录成功才回写 last_login_at：个人设置页的「最近登录」要有真实数据源。
+    # 失败次数/锁定不在本次范围（没有 attempt 表）。
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
     context = await build_context(db, user, member, tenant)
     result = await _response(context)
     result["tenants"] = [

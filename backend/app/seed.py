@@ -15,6 +15,7 @@ from app.models.user import User
 from app.seed_auth import DEMO_TENANT_SLUG, seed_auth_data, seed_platform_admin
 from app.seed_billing import seed_billing_data
 from app.seed_commerce import seed_commerce_data, seed_commission_rule
+from app.services.notification import resolve_recipients
 from app.services.setting import DEFAULT_SETTINGS
 
 SEED_DEPARTMENTS = [
@@ -282,6 +283,12 @@ async def seed_demo_data() -> None:
         notification_count = (await db.execute(select(func.count(Notification.id)))).scalar_one()
         if notification_count == 0:
             now = datetime.now(UTC)
+            # 收件人数按真实成员算，与发送链路同一口径
+            # （`services/notification.resolve_recipients`）—— 不能再写死 1280。
+            await db.flush()
+            all_total = len(await resolve_recipients(db, tenant_id, "all"))
+            admin_total = len(await resolve_recipients(db, tenant_id, "role:admin"))
+            operator_total = len(await resolve_recipients(db, tenant_id, "role:operator"))
             db.add_all(
                 [
                     Notification(
@@ -293,8 +300,8 @@ async def seed_demo_data() -> None:
                         content="Ant Design Pro 管理端已升级到 v6。",
                         status="success",
                         sent_at=now - timedelta(hours=2),
-                        total=1280,
-                        success_count=1280,
+                        total=all_total,
+                        success_count=all_total,
                     ),
                     Notification(
                         tenant_id=tenant_id,
@@ -305,8 +312,8 @@ async def seed_demo_data() -> None:
                         content="本周运营数据已生成，请查收附件。",
                         status="success",
                         sent_at=now - timedelta(days=1),
-                        total=36,
-                        success_count=36,
+                        total=operator_total,
+                        success_count=operator_total,
                     ),
                     Notification(
                         tenant_id=tenant_id,
@@ -317,9 +324,9 @@ async def seed_demo_data() -> None:
                         content="短信通道出现短暂波动，请检查配置。",
                         status="failed",
                         sent_at=now - timedelta(days=2),
-                        total=12,
+                        total=admin_total,
                         success_count=0,
-                        failed_count=12,
+                        failed_count=admin_total,
                         error_message="短信渠道未启用",
                     ),
                     Notification(
@@ -331,7 +338,7 @@ async def seed_demo_data() -> None:
                         content="活动将于本周五开启。",
                         status="pending",
                         scheduled_at=now + timedelta(hours=6),
-                        total=1280,
+                        total=all_total,
                     ),
                 ]
             )

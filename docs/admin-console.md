@@ -16,6 +16,7 @@ This repository contains the admin console of 赛霄玄思, a multi-tenant C2C m
 | `/system/settings/storage` | 存储设置（本地 / 阿里云 OSS） |
 | `/attachments` | 全局附件管理 |
 | `/notifications` | 触达通知（短信 / 邮件 / 站内信） |
+| `/account/settings` | 个人设置（基本设置 / 安全设置 / 账号绑定 / 新消息通知） |
 
 ## Page tabs
 
@@ -95,6 +96,42 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 - User records carry `department_id`, `birthday`, `gender` and a hashed login password.
 - Password hashes use `pwdlib[argon2]`; the API never returns password hashes or plaintext passwords.
 - Existing databases must run `backend/scripts/migrate_20261110_user_profile.sql` once; it is idempotent.
+
+## 个人设置（自助账号）
+
+入口：头部头像下拉 →「个人设置」(`/account/settings`)；`/account` 本身不在侧边栏。
+
+四个 Tab 都是**真接口**，没有一项是模板假数据：
+
+| Tab | 做什么 | 接口 |
+|---|---|---|
+| 基本设置 | 只读展示 用户ID / 用户名 / 邮箱 / 手机号 / 最近登录；可改 **性别 / 生日** | `GET /auth/me`、`PATCH /auth/me` |
+| 安全设置 | 改密码（验当前密码，成功后强制重新登录）；展示绑定状态与上次登录时间 | `POST /auth/me/password` |
+| 账号绑定 | 换手机号 / 换邮箱（需当前密码确认） | `PUT /auth/me/contact` |
+| 新消息通知 | 分类 × 短信/邮件 开关，**群发时真实生效** | `GET/PUT /auth/me/notification-prefs` |
+
+几个刻意的取舍：
+
+- **`/auth/me*` 不挂权限码**：能登录就能改自己的资料，查询条件永远是 `context.user`，从不接受外部传入的 `user_id`。
+- **用户名 / 用户ID 不可自助修改**，昵称由管理员在「用户管理」维护 —— 个人设置页因此没有昵称、手机号输入框（模板里那些字段后端根本没有落点）。
+- **改邮箱/手机必须验密码**：项目没有短信/邮件验证码通道（`settings/sms` 的「测试连接」也只是参数校验），密码是当下唯一能证明本人的手段。
+- **模板删掉的假入口**：头像上传（`users` 表无 `avatar` 列）、个人简介 / 国家 / 省市 / 街道（无字段）、密保问题 / MFA（无字段无校验）、淘宝 / 支付宝 / 钉钉绑定（无 OAuth 实体）。
+- **改密码不会踢掉其它会话**：没有 user→token 反向索引，旧 access token 最多再活 30 分钟，所以前端改完直接清 token 重新登录。
+
+### 新消息通知的生效口径
+
+发送时的三层判定（`services/notification.py::_deliver`）：
+
+1. 渠道是否配置可用 —— `setting_resolver`（平台/租户配置继承）；
+2. 租户渠道开关 —— `tenant_notification_prefs`（运营意志，缺行 = 开）；
+3. 用户分类偏好 —— `user_notification_prefs`（缺行 = 开）。
+
+群发记录里三个数字不要混用：`total` = 命中 audience 的真实成员数（成员与账号都 active），
+`skipped_count` = 被第 2/3 层挡掉的人数，`success_count` = 真会投递的人数。
+`audience` 也已经是真实展开（`all` / `role:<code>` → `tenant_members`），不再有写死的 1280。
+
+> 真实投递（SMTP / 短信网关 / 站内信收件箱）仍未接入：这里落地的是「谁会收到」，
+> 不是「已经送达」。站内信目前只有群发记录，没有按用户的收件箱，所以 inbox 渠道强制不可关。
 
 ## Attachment center
 
