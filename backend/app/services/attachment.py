@@ -25,6 +25,7 @@ from app.dao.attachment import AttachmentQuery
 from app.models.attachment import Attachment
 from app.schemas.attachment import AttachmentStats
 from app.services import moderation
+from app.services import platform_setting as platform_setting_service
 
 ADMIN_ROLES = {"admin", "tenant_admin", "tenant_owner", "platform_admin"}
 DOWNLOAD_AUDIENCE = "attachment-download"
@@ -198,6 +199,33 @@ async def get_public_attachment(db: AsyncSession, attachment_id: int) -> Attachm
     return record
 
 
+ROLE_BUCKETS = {"admin": "tenant", "viewer": "tenant", "seller": "seller", "buyer": "buyer"}
+
+
+async def upload_policy(
+    db: AsyncSession, uploader_role: str, file_category: str
+) -> tuple[int, set[str]]:
+    """返回 `(体积上限字节, 允许的扩展名集合)`。空集合 = 不限格式。
+
+    配置在 SaaS 管理端统一维护（`platform_settings.category = upload`），
+    按「角色 × 文件类型」分层；**没配置就用内置默认**，不像其他平台设置那样
+    走「未接管=不限」——上传限制没配置就变成无限，是个洞。
+    """
+    row = await platform_setting_service.get_platform_setting(db, "upload")
+    config = row.config or {}
+    bucket = ROLE_BUCKETS.get(uploader_role, "tenant")
+    rule = (config.get(bucket) or {}).get(file_category) or {}
+    default_rule = platform_setting_service.DEFAULT_UPLOAD_POLICY.get(bucket, {}).get(
+        file_category, {}
+    )
+    max_mb = int(rule.get("max_mb") or default_rule.get("max_mb") or 10)
+    raw_formats = rule.get("formats")
+    if raw_formats is None:
+        raw_formats = default_rule.get("formats") or []
+    formats = {str(item).lower().lstrip(".") for item in raw_formats}
+    return max_mb * 1024 * 1024, formats
+
+
 async def save_upload(
     db: AsyncSession,
     file: UploadFile,
@@ -217,14 +245,30 @@ async def save_upload(
     stored_name = f"{uuid.uuid4().hex}{extension}"
     target = settings.upload_path / stored_name
 
+    # SaaS 端统一维护的上传限制（角色 × 文件类型）
+    file_category = _category_for(mime_type, extension)
+    max_bytes, allowed_formats = await upload_policy(db, uploader_role, file_category)
+    ext = extension.lstrip(".").lower()
+    if allowed_formats and (not ext or ext not in allowed_formats):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"不允许上传该格式（{ext or '未知'}）；"
+                f"当前角色可上传：{'、'.join(sorted(allowed_formats))}"
+            ),
+        )
+
     size = 0
     checksum = hashlib.sha256()
     try:
         with target.open("wb") as out:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
-                if size > settings.max_upload_size:
-                    raise HTTPException(status_code=413, detail="文件超过大小限制")
+                if size > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"文件超过大小限制（{max_bytes // 1024 // 1024}MB）",
+                    )
                 checksum.update(chunk)
                 out.write(chunk)
     except HTTPException:

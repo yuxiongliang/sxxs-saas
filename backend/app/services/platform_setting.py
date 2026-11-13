@@ -20,7 +20,36 @@ ALLOWED_CATEGORIES = {
     "email",
     "storage",
     "amap",
+    "upload",
 }
+
+# 上传限制矩阵：**角色 × 文件类型** → 体积上限(MB) + 允许的扩展名。
+# 空 formats = 不限格式（但体积仍受限）。
+# 角色桶与 `services/attachment.primary_role()` 对齐：admin/viewer → tenant。
+DEFAULT_UPLOAD_POLICY = {
+    "tenant": {
+        "image": {"max_mb": 10, "formats": ["jpg", "jpeg", "png", "webp", "gif", "svg"]},
+        "video": {"max_mb": 200, "formats": ["mp4", "webm", "mov"]},
+        "document": {
+            "max_mb": 50,
+            "formats": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "json"],
+        },
+        "other": {"max_mb": 20, "formats": []},
+    },
+    "seller": {
+        "image": {"max_mb": 10, "formats": ["jpg", "jpeg", "png", "webp", "gif"]},
+        "video": {"max_mb": 200, "formats": ["mp4", "webm"]},
+        "document": {"max_mb": 20, "formats": ["pdf", "docx", "xlsx", "csv", "txt"]},
+        "other": {"max_mb": 10, "formats": []},
+    },
+    "buyer": {
+        "image": {"max_mb": 5, "formats": ["jpg", "jpeg", "png", "webp", "gif"]},
+        "video": {"max_mb": 50, "formats": ["mp4", "webm"]},
+        "document": {"max_mb": 10, "formats": ["pdf", "docx", "xlsx", "txt"]},
+        "other": {"max_mb": 5, "formats": []},
+    },
+}
+
 
 DEFAULT_PLATFORM_SETTINGS_MODERATION = {
     "enabled": True,
@@ -104,6 +133,10 @@ async def save_platform_setting(
 
 
 DEFAULT_PLATFORM_SETTINGS["moderation"] = DEFAULT_PLATFORM_SETTINGS_MODERATION
+DEFAULT_PLATFORM_SETTINGS["upload"] = {
+    "enabled": True,
+    "config": copy.deepcopy(DEFAULT_UPLOAD_POLICY),
+}
 
 # 5 类「可被租户继承」的平台配置。
 # enabled=False 表示平台尚未真正接管该类配置：租户切到 inherit 时会自动回落

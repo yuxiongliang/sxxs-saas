@@ -28,6 +28,8 @@ export default {
   'menu.moderation': 'Content Review',
   'menu.services': 'Service Config',
   'menu.settings': 'Platform Settings',
+  'menu.platformSetting': 'Platform Info',
+  'menu.uploadSetting': 'Upload Limits',
   'menu.login': 'Sign in',
   'login.title': 'Saixiao Xuansi SaaS Console',
   'login.subtitle':

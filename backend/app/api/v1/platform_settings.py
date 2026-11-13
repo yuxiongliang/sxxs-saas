@@ -27,6 +27,7 @@ PLATFORM_SETTING_PERMISSIONS = {
     "email": "platform:setting:manage",
     "storage": "platform:setting:manage",
     "amap": "platform:setting:manage",
+    "upload": "platform:setting:manage",
 }
 
 

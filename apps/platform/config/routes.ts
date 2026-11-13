@@ -96,6 +96,18 @@ export default [
     path: '/settings',
     name: 'settings',
     icon: 'SettingOutlined',
-    component: './settings',
+    routes: [
+      { path: '/settings', redirect: '/settings/platform' },
+      {
+        path: '/settings/platform',
+        name: 'platformSetting',
+        component: './settings',
+      },
+      {
+        path: '/settings/upload',
+        name: 'uploadSetting',
+        component: './settings/upload',
+      },
+    ],
   },
 ];

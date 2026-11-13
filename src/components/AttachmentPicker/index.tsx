@@ -26,6 +26,8 @@ interface AttachmentPickerProps {
   onSelect: (attachment: AttachmentRecord) => void;
   /** 默认只挑图片；传空字符串则不限类型 */
   category?: string;
+  /** 上传框 accept，按类型给默认值（图片/视频各一套） */
+  accept?: string;
   title?: string;
 }
 
@@ -50,6 +52,7 @@ export default function AttachmentPicker({
   onCancel,
   onSelect,
   category = 'image',
+  accept,
   title = '选择图片',
 }: AttachmentPickerProps) {
   const { message } = App.useApp();
@@ -111,7 +114,7 @@ export default function AttachmentPicker({
             刷新
           </Button>
           <AttachmentUpload
-            accept="image/*"
+            accept={accept ?? (category === 'video' ? 'video/*' : 'image/*')}
             multiple={false}
             sourceModule="brand"
             buttonText="上传新图片"

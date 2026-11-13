@@ -30,6 +30,8 @@ export default {
   'menu.moderation': '内容审核',
   'menu.services': '服务配置',
   'menu.settings': '平台配置',
+  'menu.platformSetting': '平台信息',
+  'menu.uploadSetting': '上传限制',
   'menu.login': '登录',
   'login.title': '赛霄玄思 SaaS 管理平台',
   'login.subtitle': '只管租户与平台配置。业务管理请用租户控制台。',
