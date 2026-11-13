@@ -1,12 +1,16 @@
 """平台向租户的抽佣台账（按月汇总，只读）。
 
-口径（2026-11-12 与用户确认）：
+口径（2026-11-13 更新）：
 
-* 基数 = 该租户当月**已支付**订单金额（orders.paid_at 落在当月，取 payable_amount_cents，
-  与经营看板的 GMV 口径一致）；
+* 基数 = 该租户当月**已完成**订单金额（`orders.status='completed'` 且 `completed_at`
+  落在当月，取 `payable_amount_cents`）。已支付但未确认收货的订单**不计入**——
+  买家还没确认，钱还不算真的成交。
 * 比例 = 租户所属业务类目的 commission_bps（万分比）；
 * **买断（lifetime）与自定义档期（custom）套餐的租户一律 0**，即使类目配了比例也不抽；
 * 只出报表、不落账、不扣款：真正的收款动作需要单独的账务流程。
+
+注意：这条是**乙线**（平台→租户），与 `services/finance.resolve_commission_rate`
+那条甲线（租户→卖家，按商品/分类比例）完全无关，不要混。
 """
 
 from __future__ import annotations
@@ -48,9 +52,10 @@ async def monthly_report(db: AsyncSession, month: str | None = None) -> dict:
         await db.execute(
             select(Order.tenant_id, func.coalesce(func.sum(Order.payable_amount_cents), 0))
             .where(
-                Order.paid_at.is_not(None),
-                Order.paid_at >= start,
-                Order.paid_at < end,
+                Order.status == "completed",
+                Order.completed_at.is_not(None),
+                Order.completed_at >= start,
+                Order.completed_at < end,
             )
             .group_by(Order.tenant_id)
         )

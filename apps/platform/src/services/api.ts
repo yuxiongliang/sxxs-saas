@@ -532,7 +532,7 @@ export interface CommissionReport {
   rows: CommissionRow[];
 }
 
-/** 按月抽佣台账（只读）：基数=当月已支付 GMV；买断/自定义档期租户 waived、抽佣为 0 */
+/** 按月抽佣台账（只读）：基数=当月**已完成**订单 GMV；买断/自定义档期租户 waived、抽佣为 0 */
 export const getCommissionReport = (month?: string) =>
   apiGet<CommissionReport>(
     `/platform/commission-report${month ? `?month=${month}` : ''}`,

@@ -1,7 +1,10 @@
 """按月抽佣台账：GMV × 类目比例，买断/自定义档期豁免。
 
-口径（与用户确认）：基数=当月已支付订单金额；比例=租户所属业务类目；
+口径（2026-11-13 更新）：基数 = 当月**已完成**订单金额（`completed_at` 落在当月、
+`status='completed'`）；已支付但未确认收货的**不计入**。比例 = 租户所属业务类目；
 买断（lifetime）与自定义档期（custom）套餐的租户恒为 0。
+
+这是**乙线**（平台→租户），与 `tests/test_commission_rate.py` 的甲线（租户→卖家）无关。
 """
 
 from __future__ import annotations
@@ -33,6 +36,60 @@ async def _assign(client, token, tenant_id: int, category_id: int | None) -> Non
 async def test_requires_platform_token(client, admin_token):
     response = await client.get(REPORT, headers=bearer(admin_token))
     assert response.status_code == 401, response.text
+
+
+async def test_only_completed_orders_count_into_gmv(client, platform_token, customer_token, db_session):
+    """已支付但未确认收货的订单不能算进抽佣基数 —— 这是本轮改动的核心。"""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.order import Order, SellerOrder
+
+    category_id = await _make_category(client, platform_token, "completed-cat", 500)
+    await _assign(client, platform_token, 1, category_id)
+
+    detail = (await client.get("/api/v1/public/products?limit=1")).json()["data"][0]
+    product = (await client.get(f"/api/v1/public/products/{detail['id']}")).json()["data"]
+    sku = next((item for item in product["skus"] if item["stock"] > 0), product["skus"][0])
+
+    ordered = await client.post(
+        "/api/v1/portal/orders",
+        headers=bearer(customer_token),
+        json={
+            "items": [{"sku_id": sku["id"], "quantity": 1}],
+            "receiver_name": "抽佣口径",
+            "receiver_phone": "13900003333",
+            "receiver_address": {"city": "深圳市", "detail": "测试路 3 号"},
+        },
+    )
+    assert ordered.status_code == 200, ordered.text
+    order_id = ordered.json()["data"]["id"]
+    await client.post(
+        f"/api/v1/portal/orders/{order_id}/mock-pay", headers=bearer(customer_token)
+    )
+
+    # 已支付但未完成 → 不计入
+    before = (await client.get(REPORT, headers=bearer(platform_token))).json()["data"]
+    demo_before = next(row for row in before["rows"] if row["tenant_id"] == 1)
+
+    # 手动把这单标成已完成（当前月份）
+    order = await db_session.get(Order, order_id)
+    assert order is not None
+    order.status = "completed"
+    order.completed_at = datetime.now(UTC)
+    seller_orders = (
+        await db_session.execute(select(SellerOrder).where(SellerOrder.order_id == order_id))
+    ).scalars().all()
+    for row in seller_orders:
+        row.status = "completed"
+        row.completed_at = datetime.now(UTC)
+    await db_session.flush()
+
+    after = (await client.get(REPORT, headers=bearer(platform_token))).json()["data"]
+    demo_after = next(row for row in after["rows"] if row["tenant_id"] == 1)
+    assert demo_after["gmv_cents"] > demo_before["gmv_cents"], "完成后才计入 GMV"
+    assert demo_after["commission_cents"] == demo_after["gmv_cents"] * 500 // 10000
 
 
 async def test_commission_follows_category_rate(client, platform_token):

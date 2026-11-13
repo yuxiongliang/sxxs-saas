@@ -68,7 +68,7 @@ export default function CommissionReportPage() {
           : '—',
     },
     {
-      title: '当月 GMV',
+      title: '当月已完成 GMV',
       dataIndex: 'gmv_cents',
       width: 140,
       align: 'right',
@@ -100,7 +100,7 @@ export default function CommissionReportPage() {
   return (
     <PageShell
       title="抽佣台账"
-      subTitle="按月汇总：当月已支付 GMV × 租户所属类目比例；买断/自定义档期租户豁免"
+      subTitle="按月汇总：当月**已完成**订单 GMV × 租户所属类目比例；买断/自定义档期租户豁免"
       icon={<WalletOutlined />}
       extra={
         <Space>
@@ -121,14 +121,14 @@ export default function CommissionReportPage() {
         showIcon
         style={{ marginBottom: 16 }}
         title="这里只是台账，不会自动扣款"
-        description="基数取租户当月已支付订单金额（paid_at 落在当月）；比例取租户所属业务类目；买断（lifetime）与自定义档期（custom）套餐恒为 0。真正收款需要单独的账务流程。"
+        description="基数取租户当月**已完成**订单金额（completed_at 落在当月、status=completed）；已支付未确认收货的不计入；比例取租户所属业务类目；买断（lifetime）与自定义档期（custom）套餐恒为 0。"
       />
 
       <Card style={{ marginBottom: 16 }}>
         <Space size={48}>
           <Statistic title="月份" value={totals?.month ?? '—'} />
           <Statistic
-            title="当月 GMV 合计"
+            title="当月已完成 GMV 合计"
             value={yuan(totals?.total_gmv_cents ?? 0)}
           />
           <Statistic
