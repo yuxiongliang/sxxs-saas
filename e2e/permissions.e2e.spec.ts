@@ -101,10 +101,12 @@ test.describe('permissions: customer', () => {
   test('can browse the buyer portal', async ({ page }) => {
     await loginAs(page, CUSTOMER);
     await page.goto('/portal');
-    await expect(page.getByText('C2C 商城').first()).toBeVisible({
+    // 买家外売的标题现在是**租户站名**（可在「站点品牌」里改），不能当固定文案断言；
+    // 改为断言导航项与 URL。
+    await expect(page).toHaveURL(/\/portal/, { timeout: 30_000 });
+    await expect(page.getByText('我的订单').first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText('我的订单').first()).toBeVisible();
   });
 });
 

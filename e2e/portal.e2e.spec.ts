@@ -2,36 +2,37 @@ import { expect, type Page, test } from '@playwright/test';
 import { CUSTOMER, loginAs } from './helpers/auth';
 
 /**
- * Pick a product card whose「加入购物车」action is actually enabled.
+ * 把一个可买商品加入购物车，返回商品名。
  *
- * Demo stock is finite and earlier runs consume it, so the specs must not assume
- * the first card is purchasable.
+ * 列表卡不再直接加购：多规格商品的正确路径是「去详情 → 选规格 → 加入购物车」，
+ * 单规格商品在详情页不需要选规格，所以统一走详情页一条路径（两种商品都能覆盖）。
  */
-async function pickInStockProduct(page: Page) {
-  // Wait for the product grid to render before counting cards.
+async function addAnyProductToCart(page: Page): Promise<string> {
+  await page.goto('/products');
   await page
-    .getByRole('button', { name: '加入购物车' })
+    .getByRole('button', { name: '查看详情' })
     .first()
-    .waitFor({ state: 'attached', timeout: 30_000 })
-    .catch(() => undefined);
+    .waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByRole('button', { name: '查看详情' }).first().click();
+  await expect(page).toHaveURL(/\/products\/\d+/, { timeout: 30_000 });
 
-  const cards = page.locator('.ant-card');
-  const total = await cards.count();
-  for (let index = 0; index < total; index += 1) {
-    const card = cards.nth(index);
-    const button = card.getByRole('button', { name: '加入购物车' });
-    if ((await button.count()) === 0) continue;
-    if (await button.first().isEnabled()) {
-      // 前台商品卡不是 Card.Meta 结构：名称是卡片正文首行
-      const name =
-        (await card.innerText().catch(() => ''))
-          .split('\n')
-          .map((line) => line.trim())
-          .find((line) => line.length > 0) ?? '';
-      return { card, name };
+  const title = (await page.locator('h3').first().innerText()).trim();
+
+  // 多规格：每组选第一个可用值；单规格没有规格组，循环自然跳过
+  const groups = page.locator('[data-testid="spec-group"]');
+  const groupCount = await groups.count();
+  for (let index = 0; index < groupCount; index += 1) {
+    const options = groups.nth(index).locator('button:not([disabled])');
+    if ((await options.count()) > 0) {
+      await options.first().click();
     }
   }
-  return null;
+
+  await page.getByTestId('add-to-cart').click();
+  await expect(page.getByText('已加入购物车').first()).toBeVisible({
+    timeout: 20_000,
+  });
+  return title;
 }
 
 /**
@@ -62,19 +63,8 @@ test.describe('portal: buyer journey', () => {
 
   test('adds a product to the cart and sees it listed', async ({ page }) => {
     await loginAs(page, CUSTOMER);
-    await page.goto('/products');
 
-    const picked = await pickInStockProduct(page);
-    test.skip(!picked, '演示商品均已售罄，跳过加购用例');
-    const name = picked!.name;
-
-    await picked!.card
-      .getByRole('button', { name: '加入购物车' })
-      .first()
-      .click();
-    await expect(page.getByText('已加入购物车').first()).toBeVisible({
-      timeout: 20_000,
-    });
+    const name = await addAnyProductToCart(page);
 
     await page.goto('/portal/cart');
     await expect(
@@ -91,11 +81,7 @@ test.describe('portal: buyer journey', () => {
     await loginAs(page, CUSTOMER);
 
     // Make sure there is at least one line to settle.
-    await page.goto('/products');
-    await page.getByRole('button', { name: '加入购物车' }).first().click();
-    await expect(page.getByText('已加入购物车').first()).toBeVisible({
-      timeout: 20_000,
-    });
+    await addAnyProductToCart(page);
 
     await page.goto('/portal/cart');
     await page.getByRole('button', { name: '去结算' }).click();

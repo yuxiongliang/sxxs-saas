@@ -15,6 +15,11 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import {
+  isComboComplete,
+  isSellable,
+  resolveMedia,
+} from '@/pages/commerce/products/components/specUtils';
 import useStyles from '@/pages/site/style';
 import { addCartItem, getPublicProductDetail } from '@/services/commerce/api';
 import MallShell from '../components/MallShell';
@@ -55,8 +60,7 @@ export default function ProductDetailPage() {
       return data.skus.find((item) => item.id === skuId) ?? data.skus[0];
     }
     // 规格未选全就不确定 SKU（不能默默拿第一条去下单）
-    const complete = specGroups.every((group) => selected[group.name]);
-    if (!complete) return undefined;
+    if (!isComboComplete(specGroups, selected)) return undefined;
     return data.skus.find((item) =>
       specGroups.every(
         (group) => item.specs?.[group.name] === selected[group.name],
@@ -75,17 +79,15 @@ export default function ProductDetailPage() {
     setSelected((prev) => ({ ...prev, [groupName]: value }));
   };
 
-  const skuImage =
-    data?.skus?.find((item) => item.id === activeSku?.id)?.image_url ??
-    (hasSpecs
-      ? specGroups
-          .map((group) =>
-            group.values.find((item) => item.value === selected[group.name]),
-          )
-          .find((value) => value?.image_url)?.image_url
-      : null) ??
-    data?.main_image ??
-    '';
+  // 与卖家端同一套取图优先级：SKU 覆盖图 > 规格值图 > 商品主图
+  const media = resolveMedia({
+    skuImage: data?.skus?.find((item) => item.id === activeSku?.id)?.image_url,
+    skuVideo: data?.skus?.find((item) => item.id === activeSku?.id)?.video_url,
+    groups: specGroups,
+    selected,
+    mainImage: data?.main_image,
+  });
+  const skuImage = media?.url ?? '';
 
   const loginPath = `/user/login?redirect=${encodeURIComponent(`/products/${productId}`)}`;
 
@@ -235,7 +237,12 @@ export default function ProductDetailPage() {
                         style={{ width: '100%' }}
                       >
                         {specGroups.map((group) => (
-                          <Space key={group.name} size={8} wrap>
+                          <Space
+                            key={group.name}
+                            size={8}
+                            wrap
+                            data-testid="spec-group"
+                          >
                             <Typography.Text type="secondary">
                               {group.name}：
                             </Typography.Text>
@@ -245,17 +252,16 @@ export default function ProductDetailPage() {
                                 ...selected,
                                 [group.name]: value.value,
                               };
-                              const sellable = (data.skus ?? []).some((sku) =>
-                                specGroups.every(
-                                  (item) =>
-                                    sku.specs?.[item.name] ===
-                                    candidate[item.name],
-                                ),
+                              const sellable = isSellable(
+                                data.skus ?? [],
+                                specGroups,
+                                candidate,
                               );
                               return (
                                 <Button
                                   key={value.value}
                                   size="small"
+                                  data-testid={`spec-value-${value.value}`}
                                   disabled={!sellable}
                                   type={
                                     selected[group.name] === value.value
@@ -321,6 +327,7 @@ export default function ProductDetailPage() {
                       <Button
                         type="primary"
                         size="large"
+                        data-testid="buy-now"
                         disabled={outOfStock || needPickSpec}
                         onClick={buyNow}
                       >
@@ -331,6 +338,7 @@ export default function ProductDetailPage() {
                       </Button>
                       <Button
                         size="large"
+                        data-testid="add-to-cart"
                         disabled={outOfStock || needPickSpec}
                         onClick={addToCart}
                       >

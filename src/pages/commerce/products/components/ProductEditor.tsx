@@ -25,6 +25,7 @@ import {
   updateAdminProductSpecs,
 } from '@/services/commerce/api';
 import type { CategoryRecord, ProductRecord } from '@/services/commerce/types';
+import { buildCombos, comboKey, resolveMedia } from './specUtils';
 
 /** 草稿里的规格组/规格值（带本地 key，便于增删） */
 interface DraftValue {
@@ -48,31 +49,6 @@ interface SkuDraft {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const MAX_GROUPS = 3;
-
-const combosOf = (groups: DraftGroup[]): Array<Record<string, string>> => {
-  const usable = groups.filter(
-    (group) => group.name.trim() && group.values.length,
-  );
-  if (!usable.length) return [{}];
-  return usable.reduce<Array<Record<string, string>>>(
-    (acc, group) => {
-      const next: Array<Record<string, string>> = [];
-      for (const base of acc) {
-        for (const value of group.values) {
-          next.push({ ...base, [group.name.trim()]: value.value });
-        }
-      }
-      return next;
-    },
-    [{}],
-  );
-};
-
-const comboKey = (combo: Record<string, string>) =>
-  Object.keys(combo)
-    .sort()
-    .map((key) => `${key}=${combo[key]}`)
-    .join('|') || '__default__';
 
 type PickerTarget =
   | { kind: 'main_image' }
@@ -173,39 +149,23 @@ export default function ProductEditor({
       .catch((error: Error) => message.error(error.message));
   }, [open, productId, form, message]);
 
-  const combos = useMemo(() => combosOf(groups), [groups]);
+  const combos = useMemo(() => buildCombos(groups), [groups]);
   const activeCombo = useMemo(
     () => combos.find((combo) => comboKey(combo) === activeKey) ?? combos[0],
     [combos, activeKey],
   );
 
-  const specValueMedia = useMemo(() => {
-    if (!activeCombo) return undefined;
-    for (const group of groups) {
-      const value = group.values.find(
-        (item) => item.value === activeCombo[group.name],
-      );
-      if (value?.image_url || value?.video_url) {
-        return {
-          url: value.image_url || value.video_url || '',
-          isVideo: !!value.video_url,
-        };
-      }
-    }
-    return undefined;
-  }, [activeCombo, groups]);
-
   const activeSku = skuDraft[comboKey(activeCombo ?? {})];
+  // 取图优先级与买家端一致（SKU 覆盖 > 规格值图 > 商品主图），逻辑在 specUtils 里共用
   const mainMedia = previewOverride
     ? { url: previewOverride, isVideo: false }
-    : activeSku?.image_url || activeSku?.video_url
-      ? {
-          url: activeSku.image_url || activeSku.video_url || '',
-          isVideo: !!activeSku.video_url,
-        }
-      : specValueMedia
-        ? specValueMedia
-        : { url: detail?.main_image ?? '', isVideo: false };
+    : resolveMedia({
+        skuImage: activeSku?.image_url,
+        skuVideo: activeSku?.video_url,
+        groups,
+        selected: activeCombo ?? {},
+        mainImage: detail?.main_image,
+      });
 
   const thumbnails = useMemo(() => {
     const urls = new Set<string>();
