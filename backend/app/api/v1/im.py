@@ -2,6 +2,7 @@ import json
 import secrets
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_permission
@@ -10,10 +11,11 @@ from app.core.db import AsyncSessionLocal
 from app.core.redis import redis_client
 from app.core.response import ok
 from app.models.im import Conversation
+from app.models.seller import Seller
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.im import (
     ConversationCreate,
-    ConversationOut,
     MessageCreate,
     MessageOut,
     ReadReceiptRequest,
@@ -147,23 +149,78 @@ async def websocket_chat(websocket: WebSocket, ticket: str = Query(...)):
             manager.disconnect(context.user.id, websocket)
 
 
-@router.post("/conversations", response_model=ApiResponse[ConversationOut])
+@router.post("/conversations", response_model=ApiResponse[dict])
 async def create_conversation(
     payload: ConversationCreate,
     context: AuthContext = Depends(require_permission("im:conversation:read")),
     db: AsyncSession = Depends(get_db),
 ):
     conversation = await im_service.create_conversation(db, context, payload)
-    return ok(ConversationOut.model_validate(conversation), "会话已创建")
+    items = await _conversation_payloads(db, [conversation])
+    return ok(items[0], "会话已创建")
 
 
-@router.get("/conversations", response_model=ApiResponse[list[ConversationOut]])
+async def _conversation_payloads(db: AsyncSession, conversations: list[Conversation]) -> list[dict]:
+    """会话列表带上双方归属人：买家是用户，卖家要沿 seller → owner_user 取。
+
+    全站口径：界面上给「用户ID + 用户名」，不显示裸 buyer_id / seller_id。
+    """
+    buyer_ids = {item.buyer_id for item in conversations}
+    buyers = (
+        {user.id: user for user in (await db.scalars(select(User).where(User.id.in_(buyer_ids)))).all()}
+        if buyer_ids
+        else {}
+    )
+    seller_ids = {item.seller_id for item in conversations}
+    sellers = (
+        {
+            seller.id: seller
+            for seller in (await db.scalars(select(Seller).where(Seller.id.in_(seller_ids)))).all()
+        }
+        if seller_ids
+        else {}
+    )
+    owner_ids = {seller.owner_user_id for seller in sellers.values()}
+    owners = (
+        {
+            user.id: user
+            for user in (await db.scalars(select(User).where(User.id.in_(owner_ids)))).all()
+        }
+        if owner_ids
+        else {}
+    )
+
+    payload = []
+    for item in conversations:
+        buyer = buyers.get(item.buyer_id)
+        seller = sellers.get(item.seller_id)
+        owner = owners.get(seller.owner_user_id) if seller else None
+        payload.append(
+            {
+                "id": item.id,
+                "buyer_id": item.buyer_id,
+                "buyer_public_id": buyer.public_id if buyer else None,
+                "buyer_username": buyer.username if buyer else None,
+                "seller_id": item.seller_id,
+                "seller_name": seller.display_name if seller else None,
+                "seller_public_id": owner.public_id if owner else None,
+                "seller_username": owner.username if owner else None,
+                "order_id": item.order_id,
+                "status": item.status,
+                "buyer_unread_count": item.buyer_unread_count,
+                "seller_unread_count": item.seller_unread_count,
+            }
+        )
+    return payload
+
+
+@router.get("/conversations", response_model=ApiResponse[list[dict]])
 async def list_conversations(
     context: AuthContext = Depends(require_permission("im:conversation:read")),
     db: AsyncSession = Depends(get_db),
 ):
     conversations = await im_service.list_conversations(db, context)
-    return ok([ConversationOut.model_validate(item) for item in conversations])
+    return ok(await _conversation_payloads(db, conversations))
 
 
 @router.get(

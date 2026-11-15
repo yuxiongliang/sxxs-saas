@@ -1,12 +1,20 @@
-"""Finance administration: commission rules, payout review, settlement batches."""
+"""Finance administration: 提现审核 + 结算批次。
+
+佣金规则（commission_rules）已下线：租户向卖家的抽佣比例改由
+`products.commission_bps` > `categories.default_commission_bps` > 系统 10% 解析，
+见 `services/finance.resolve_commission_rate`。
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_permission
 from app.core.response import ok
+from app.models.seller import Seller
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.finance import (
     PayoutOut,
@@ -20,19 +28,52 @@ from app.services.auth import AuthContext
 router = APIRouter(prefix="/admin", tags=["财务中心"])
 
 
+async def _payout_payload(db: AsyncSession, payouts: list) -> list[dict]:
+    """提现记录带上卖家归属人：全站规则是「用户ID + 用户名」，不显示裸 seller_id。"""
+    seller_ids = {item.seller_id for item in payouts}
+    sellers = (
+        list((await db.scalars(select(Seller).where(Seller.id.in_(seller_ids)))).all())
+        if seller_ids
+        else []
+    )
+    seller_map = {seller.id: seller for seller in sellers}
+    owner_ids = {seller.owner_user_id for seller in sellers}
+    owners = (
+        list((await db.scalars(select(User).where(User.id.in_(owner_ids)))).all())
+        if owner_ids
+        else []
+    )
+    owner_map = {owner.id: owner for owner in owners}
+
+    payload = []
+    for item in payouts:
+        seller = seller_map.get(item.seller_id)
+        owner = owner_map.get(seller.owner_user_id) if seller else None
+        data = PayoutOut.model_validate(item).model_dump()
+        data.update(
+            {
+                "seller_name": seller.display_name if seller else None,
+                "seller_public_id": owner.public_id if owner else None,
+                "seller_username": owner.username if owner else None,
+            }
+        )
+        payload.append(data)
+    return payload
+
+
 # --------------------------------------------------------------------------- #
 # Payout review (提现审核)
 # --------------------------------------------------------------------------- #
 
 
-@router.get("/payouts", response_model=ApiResponse[list[PayoutOut]])
+@router.get("/payouts", response_model=ApiResponse[list[dict]])
 async def list_payouts(
     status: str | None = Query(default=None),
     context: AuthContext = Depends(require_permission("payout:read")),
     db: AsyncSession = Depends(get_db),
 ):
     payouts = await finance_service.list_payouts(db, context, status)
-    return ok([PayoutOut.model_validate(item) for item in payouts])
+    return ok(await _payout_payload(db, payouts))
 
 
 @router.post("/payouts/{payout_id}/approve", response_model=ApiResponse[PayoutOut])

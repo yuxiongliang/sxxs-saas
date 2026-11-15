@@ -1,7 +1,14 @@
 export interface ConversationRecord {
   id: number;
   buyer_id: number;
+  /** 买家：用户ID + 用户名 */
+  buyer_public_id?: string | null;
+  buyer_username?: string | null;
   seller_id: number;
+  /** 卖家：store 名 + 归属用户ID/用户名 */
+  seller_name?: string | null;
+  seller_public_id?: string | null;
+  seller_username?: string | null;
   order_id?: number;
   status: string;
   buyer_unread_count: number;

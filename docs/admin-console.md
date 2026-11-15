@@ -99,6 +99,40 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 - Password hashes use `pwdlib[argon2]`; the API never returns password hashes or plaintext passwords.
 - Existing databases must run `backend/scripts/migrate_20261110_user_profile.sql` once; it is idempotent.
 
+## 人物标识口径（全站硬规则）
+
+**界面上只允许出现「用户ID + 用户名」，不允许出现裸自增 ID。**
+
+| 要显示的 | 用哪个字段 | 例子 |
+|---|---|---|
+| 用户ID | `users.public_id`（20 位、全站唯一、可复制） | `usr_254cfe101573b0fbe9ff` |
+| 用户名 | `users.username`（登录名，不可改） | `admin`、`lisi` |
+| 店铺名/卖家名 | `sellers.display_name` —— **只能做副行**，不能单独当身份 | `李思的二手好物` |
+
+为什么不用 `users.id`：它是自增主键，对外暴露既不方便人读也泄漏数据规模；
+为什么不用昵称：昵称是管理员维护的展示名，改了就变，无法对账。
+
+实现约定：
+
+- **不在业务表存冗余名字**（改了名要立刻生效），一律查询时 join `users`；
+  批量解析现成写法：`services/audit.actor_directory()`。
+- 接口字段命名：`owner_public_id` / `owner_username`（卖家归属）、
+  `buyer_public_id` / `buyer_username`（订单/IM）、`actor_public_id` / `actor_username`（审计）。
+- 用户被删时这些字段为 `null`，前端显示「—」或「已删除」，不要回退到裸 ID。
+
+已经落地的页面（改新页面时照抄这些）：
+
+| 页面 | 形态 |
+|---|---|
+| `/system/audit` | 用户ID（可复制）+ 用户名 |
+| `/sellers` | 用户ID / 用户名 / 卖家名 / 类型 |
+| `/commerce/products` | 卖家列 = 用户名 + 副行卖家名；店铺单独一列 |
+| `/platform/users`、`/platform/audit` | 同口径 |
+| `/finance`、`/orders`、`/messages` | 本轮对齐（见下） |
+
+排查口径：搜 `dataIndex: '\w*_id'`、`{record.seller_id}`、`买家 {buyer_id}` 这类渲染就是漏网；
+改的时候连带同步**列表列 / 详情抽屉 / 筛选条件 / 导出 / e2e 断言**。
+
 ## 个人设置（自助账号）
 
 入口：头部头像下拉 →「个人设置」(`/account/settings`)；`/account` 本身不在侧边栏。

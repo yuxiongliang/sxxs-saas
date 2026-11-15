@@ -17,6 +17,7 @@ import {
   Tabs,
   Tag,
   Tooltip,
+  Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -131,16 +132,33 @@ const FinancePage: React.FC = () => {
 
   const sellerColumns: ColumnsType<SellerFinance> = [
     {
-      title: '卖家',
-      dataIndex: 'display_name',
+      // 全站规则：人的标识给「用户ID + 用户名」，卖家名只做副行
+      title: '用户ID',
+      dataIndex: 'owner_public_id',
+      width: 220,
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Text code copyable={{ text: value }}>
+            {value}
+          </Typography.Text>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      title: '用户名',
+      width: 150,
       render: (_, record) => (
-        <Space>
-          <AccountBookOutlined style={{ color: '#1677ff' }} />
-          <span style={{ fontWeight: 600 }}>{record.display_name}</span>
+        <Space orientation="vertical" size={0}>
+          <span style={{ fontWeight: 600 }}>
+            {record.owner_username ?? '—'}
+          </span>
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+            {record.display_name}
+          </span>
         </Space>
       ),
     },
-    { title: '卖家 ID', dataIndex: 'id', width: 90 },
     {
       title: '可提现',
       dataIndex: 'available_cents',
@@ -199,7 +217,33 @@ const FinancePage: React.FC = () => {
 
   const payoutColumns: ColumnsType<PayoutRecord> = [
     { title: '申请 ID', dataIndex: 'id', width: 90 },
-    { title: '卖家 ID', dataIndex: 'seller_id', width: 90 },
+    {
+      title: '用户ID',
+      dataIndex: 'seller_public_id',
+      width: 220,
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Text code copyable={{ text: value }}>
+            {value}
+          </Typography.Text>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      title: '用户名',
+      width: 150,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <span style={{ fontWeight: 600 }}>
+            {record.seller_username ?? '—'}
+          </span>
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+            {record.seller_name ?? `卖家 #${record.seller_id}`}
+          </span>
+        </Space>
+      ),
+    },
     {
       title: '金额',
       dataIndex: 'amount_cents',

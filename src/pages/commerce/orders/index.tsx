@@ -13,6 +13,7 @@ import {
   Space,
   Table,
   Tag,
+  Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
@@ -106,7 +107,26 @@ const OrderManagementPage: React.FC = () => {
         <span style={{ fontWeight: 600 }}>{value}</span>
       ),
     },
-    { title: '买家 ID', dataIndex: 'buyer_id', width: 100 },
+    {
+      // 全站规则：买家给「用户ID + 用户名」，不显示裸 buyer_id
+      title: '用户ID',
+      dataIndex: 'buyer_public_id',
+      width: 220,
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Text code copyable={{ text: value }}>
+            {value}
+          </Typography.Text>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      title: '买家',
+      dataIndex: 'buyer_username',
+      width: 140,
+      render: (value: string | null) => value ?? '—',
+    },
     {
       title: '金额',
       dataIndex: 'payable_amount_cents',
@@ -163,7 +183,20 @@ const OrderManagementPage: React.FC = () => {
 
   const sellerColumns: ColumnsType<SellerOrderRecord> = [
     { title: '卖家单 ID', dataIndex: 'id', width: 100 },
-    { title: '卖家 ID', dataIndex: 'seller_id', width: 100 },
+    {
+      title: '卖家',
+      width: 180,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <span style={{ fontWeight: 600 }}>
+            {record.seller_username ?? '—'}
+          </span>
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+            {record.seller_name ?? `卖家 #${record.seller_id}`}
+          </span>
+        </Space>
+      ),
+    },
     {
       title: '商品金额',
       dataIndex: 'goods_amount_cents',
@@ -256,8 +289,13 @@ const OrderManagementPage: React.FC = () => {
               <Descriptions.Item label="状态">
                 <Tag color={statusColor(detail.status)}>{detail.status}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="买家 ID">
-                {detail.buyer_id}
+              <Descriptions.Item label="买家">
+                {detail.buyer_username ?? '—'}
+                {detail.buyer_public_id ? (
+                  <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                    {detail.buyer_public_id}
+                  </Typography.Text>
+                ) : null}
               </Descriptions.Item>
               <Descriptions.Item label="金额">
                 ¥{(detail.payable_amount_cents / 100).toFixed(2)}

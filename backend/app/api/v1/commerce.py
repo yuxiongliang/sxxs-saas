@@ -161,17 +161,25 @@ async def admin_order_detail(
             )
         ).all()
     )
+    buyer_identity = await _identity_map(db, {order.buyer_id})
+    buyer_public_id, buyer_username = buyer_identity.get(order.buyer_id, (None, None))
+    seller_identities = await _seller_identity_map(
+        db, {item.seller_id for item in seller_orders}
+    )
     return ok(
         {
             "id": order.id,
             "order_no": order.order_no,
             "buyer_id": order.buyer_id,
+            "buyer_public_id": buyer_public_id,
+            "buyer_username": buyer_username,
             "status": order.status,
             "payable_amount_cents": order.payable_amount_cents,
             "seller_orders": [
                 {
                     "id": item.id,
                     "seller_id": item.seller_id,
+                    **(seller_identities.get(item.seller_id) or {}),
                     "status": item.status,
                     "goods_amount_cents": item.goods_amount_cents,
                     "commission_amount_cents": item.commission_amount_cents,
@@ -291,6 +299,31 @@ async def admin_categories(
 ):
     """租户端只读：商品分类是平台统一定的，租户只负责选。"""
     return ok(await category_service.list_categories(db, include_archived=False))
+
+
+async def _identity_map(db: AsyncSession, user_ids: set[int]) -> dict[int, tuple[str, str]]:
+    """批量把 user_id 解成 (public_id, username)。全站口径：只给用户ID+用户名，不给裸 ID。"""
+    if not user_ids:
+        return {}
+    users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
+    return {user.id: (user.public_id, user.username) for user in users}
+
+
+async def _seller_identity_map(db: AsyncSession, seller_ids: set[int]) -> dict[int, dict]:
+    """卖家 id → {seller_name, seller_public_id, seller_username}。"""
+    if not seller_ids:
+        return {}
+    sellers = (await db.scalars(select(Seller).where(Seller.id.in_(seller_ids)))).all()
+    owners = await _identity_map(db, {seller.owner_user_id for seller in sellers})
+    result: dict[int, dict] = {}
+    for seller in sellers:
+        public_id, username = owners.get(seller.owner_user_id, (None, None))
+        result[seller.id] = {
+            "seller_name": seller.display_name,
+            "seller_public_id": public_id,
+            "seller_username": username,
+        }
+    return result
 
 
 @router.get("/admin/products")
@@ -587,18 +620,22 @@ async def admin_orders(
             )
         ).all()
     )
-    return ok(
-        [
+    buyers = await _identity_map(db, {item.buyer_id for item in orders})
+    payload = []
+    for item in orders:
+        public_id, username = buyers.get(item.buyer_id, (None, None))
+        payload.append(
             {
                 "id": item.id,
                 "order_no": item.order_no,
                 "buyer_id": item.buyer_id,
+                "buyer_public_id": public_id,
+                "buyer_username": username,
                 "status": item.status,
                 "payable_amount_cents": item.payable_amount_cents,
             }
-            for item in orders
-        ]
-    )
+        )
+    return ok(payload)
 
 
 @router.post("/admin/orders/{order_id}/mock-pay")

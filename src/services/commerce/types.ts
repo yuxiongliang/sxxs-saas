@@ -87,6 +87,9 @@ export interface OrderRecord {
   id: number;
   order_no: string;
   buyer_id: number;
+  /** 买家归属人（全站只展示用户ID + 用户名） */
+  buyer_public_id?: string | null;
+  buyer_username?: string | null;
   status: string;
   payable_amount_cents: number;
 }
@@ -94,6 +97,10 @@ export interface OrderRecord {
 export interface SellerOrderRecord {
   id: number;
   seller_id: number;
+  /** 卖家归属人：用户ID + 用户名，店铺名只做副行 */
+  seller_name?: string | null;
+  seller_public_id?: string | null;
+  seller_username?: string | null;
   status: string;
   goods_amount_cents: number;
   commission_amount_cents: number;
@@ -249,6 +256,10 @@ export interface AddressRecord {
 export interface PayoutRecord {
   id: number;
   seller_id: number;
+  /** 卖家归属人：用户ID + 用户名，店铺名只做副行 */
+  seller_public_id?: string | null;
+  seller_username?: string | null;
+  seller_name?: string | null;
   amount_cents: number;
   status: string;
   reject_reason: string;

@@ -19,6 +19,11 @@ Other: `npm run openapi` (regenerate `src/services/`), `npm run simple` (**irrev
 - **Conventional commits** required (commitlint enforced)
 - **TypeScript strict** · **Node ≥ 22** · **`package-lock.json`** (not yarn/pnpm)
 - **`.umi` dir is auto-generated** — delete `src/.umi` and restart if dev server acts up
+- **人的标识一律给「用户ID + 用户名」** — 界面上不要出现裸自增 ID（`users.id`、`seller_id`、`buyer_id`、
+  `actor_id`），一律展示 `public_id`（`usr_xxx`，可复制）+ `username`；店铺名/卖家名只能做副行。
+  数据库不存冗余名字，查询时 join `users`（现成写法：`services/audit.actor_directory()`）。
+  新增接口字段命名：`owner_public_id`/`owner_username`、`buyer_public_id`/`buyer_username`、
+  `actor_public_id`/`actor_username`。详见 `docs/admin-console.md` →「人物标识口径」。
 
 ## Architecture Essentials
 

@@ -178,7 +178,8 @@ const ImPage: React.FC = () => {
                   <div>
                     <div style={{ fontWeight: 600 }}>会话 #{item.id}</div>
                     <div style={{ color: '#8c8c8c', fontSize: 12 }}>
-                      买家 {item.buyer_id} / 卖家 {item.seller_id}
+                      买家 {item.buyer_username ?? '—'} / 卖家{' '}
+                      {item.seller_username ?? item.seller_name ?? '—'}
                     </div>
                   </div>
                   {item.seller_unread_count > 0 ||
