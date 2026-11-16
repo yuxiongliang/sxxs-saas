@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@umijs/max';
 import { Button, Card, Descriptions, Empty, Skeleton, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { getPortalOrderDetail } from '@/services/commerce/api';
 import type { PortalOrderDetail } from '@/services/commerce/api';
+import { getPortalOrderDetail } from '@/services/commerce/api';
 import PortalShell from '../../components/PortalShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;

@@ -61,7 +61,6 @@ export default {
   'menu.finance-management': 'Finance',
   'menu.platform-tenants': 'Tenants',
   'menu.user-management.list': 'User List',
-  'menu.user-management.departments': 'Department Management',
   'menu.user-management.roles': 'Role Management',
   'menu.system-settings': 'System Settings',
   'menu.system-settings.payment': 'Payment Settings',

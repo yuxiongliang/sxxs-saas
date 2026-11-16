@@ -110,7 +110,6 @@ export default function ProductEditor({
         setDetail(data);
         form.setFieldsValue({
           name: data.name,
-          subtitle: data.subtitle ?? '',
           description: data.description ?? '',
           category_id: data.category_id ?? undefined,
           main_image: data.main_image ?? '',
@@ -261,7 +260,6 @@ export default function ProductEditor({
       setSaving(true);
       await updateAdminProduct(productId, {
         name: values.name,
-        subtitle: values.subtitle,
         description: values.description,
         category_id: values.category_id ?? null,
         main_image: values.main_image ?? '',
@@ -355,16 +353,15 @@ export default function ProductEditor({
           >
             <Input />
           </Form.Item>
-          <Form.Item label="副标题" name="subtitle">
-            <Input />
-          </Form.Item>
           <Form.Item label="商品描述" name="description">
             <Input.TextArea rows={3} placeholder="卖点、成色、规格说明" />
           </Form.Item>
           <Form.Item label="商品分类" name="category_id">
             <Select
               allowClear
-              placeholder="请选择（由平台统一维护）"
+              showSearch
+              optionFilterProp="label"
+              placeholder="搜索或选择分类（由平台统一维护）"
               options={categoryList.map((item) => ({
                 label: item.name,
                 value: item.id,
@@ -640,6 +637,12 @@ export default function ProductEditor({
                 },
               ]}
             />
+            {detail?.inactive_sku_count ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                该商品有 {detail.inactive_sku_count}{' '}
+                条已停用的历史规格（只保留给历史订单对账，不计入库存与价格）。
+              </Typography.Text>
+            ) : null}
           </div>
 
           {/* 展示区：滑动切组合，点缩略图切图 */}

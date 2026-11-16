@@ -364,14 +364,9 @@ export default [
         component: './system/users',
       },
       {
+        // 部门管理已下线（产品上用不到）：老书签/文档里的链接不返回 404，直接回到用户列表
         path: '/users/departments',
-        name: 'departments',
-        icon: 'apartment',
-        // Department/role pages must be gated individually: the parent's
-        // `canUserRead` only hid the menu, leaving the child routes open to a
-        // direct URL visit.
-        access: 'canDepartmentManage',
-        component: './system/users/departments',
+        redirect: '/users/list',
       },
       {
         path: '/users/roles',

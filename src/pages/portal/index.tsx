@@ -1,8 +1,8 @@
 import {
+  EnvironmentOutlined,
   ProfileOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
-  EnvironmentOutlined,
 } from '@ant-design/icons';
 import { Card, Col, Row, Typography } from 'antd';
 import PortalShell from './components/PortalShell';

@@ -44,7 +44,6 @@ export default function access(
     canOrderReadTenant: permissions.has('order:read:tenant'),
     canUserRead: permissions.has('user:read'),
     canUserWrite: permissions.has('user:write'),
-    canDepartmentManage: permissions.has('department:manage'),
     canRoleManage: permissions.has('role:manage'),
     // Platform-scoped: never granted to a tenant role. Mirrors the backend
     // `platform:tenant:read` / `platform:tenant:manage` permission codes.

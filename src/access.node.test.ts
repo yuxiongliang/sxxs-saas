@@ -15,19 +15,29 @@ function build(payload: {
   roles?: string[];
   features?: string[];
 }) {
-  return access({ permissions: payload.permissions ?? [], roles: payload.roles ?? [], features: payload.features });
+  return access({
+    permissions: payload.permissions ?? [],
+    roles: payload.roles ?? [],
+    features: payload.features,
+  });
 }
 
 describe('plan feature gates', () => {
   it('opens the paid modules when the plan lists them and the user may read them', () => {
-    const result = build({ permissions: ADMIN_PERMISSIONS, features: PRO_FEATURES });
+    const result = build({
+      permissions: ADMIN_PERMISSIONS,
+      features: PRO_FEATURES,
+    });
     expect(result.canUsePortal).toBe(true);
     expect(result.canUseIm).toBe(true);
     expect(result.canUseFinance).toBe(true);
   });
 
   it('hides paid modules on the free plan even when the user holds the permission', () => {
-    const result = build({ permissions: ADMIN_PERMISSIONS, features: ['portal'] });
+    const result = build({
+      permissions: ADMIN_PERMISSIONS,
+      features: ['portal'],
+    });
     expect(result.canUsePortal).toBe(true);
     expect(result.canImRead).toBe(true);
     expect(result.canUseIm).toBe(false);
@@ -35,7 +45,10 @@ describe('plan feature gates', () => {
   });
 
   it('still requires the permission when the plan unlocks the module', () => {
-    const result = build({ permissions: ['dashboard:read'], features: PRO_FEATURES });
+    const result = build({
+      permissions: ['dashboard:read'],
+      features: PRO_FEATURES,
+    });
     expect(result.canUseIm).toBe(false);
     expect(result.canUseFinance).toBe(false);
   });

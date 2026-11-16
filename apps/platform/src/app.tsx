@@ -6,13 +6,14 @@
  *   - 只接平台配置与租户/计费，没有任何业务菜单；
  *   - 未登录一律回 /login。
  */
+
+import type { MenuDataItem } from '@ant-design/pro-components';
+import { AppThemeProvider } from '@shared';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RunTimeLayoutConfig } from '@umijs/max';
 import { getIntl, history } from '@umijs/max';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp } from 'antd';
-import type { MenuDataItem } from '@ant-design/pro-components';
 import type { ReactNode } from 'react';
-import { AppThemeProvider } from '@shared';
 import PlatformAvatar from '@/components/PlatformAvatar';
 import type { PlatformAuthUser } from '@/services/api';
 import { platformMe } from '@/services/api';
@@ -72,7 +73,9 @@ export function rootContainer(container: ReactNode) {
   return (
     <AppThemeProvider>
       <AntdApp>
-        <QueryClientProvider client={queryClient}>{container}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+          {container}
+        </QueryClientProvider>
       </AntdApp>
     </AppThemeProvider>
   );

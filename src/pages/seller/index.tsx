@@ -1,5 +1,6 @@
 import { PlusOutlined, ShopOutlined, UserOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useModel } from '@umijs/max';
 import {
   App,
   Button,
@@ -16,7 +17,6 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
-import { useModel } from '@umijs/max';
 import {
   createSellerProduct,
   getSellerProfile,

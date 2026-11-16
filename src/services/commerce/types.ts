@@ -68,6 +68,8 @@ export interface ProductRecord {
   seller_owner_public_id?: string | null;
   shop_name?: string | null;
   sku_count?: number;
+  /** 已停用的历史 SKU 数（不计入库存/价格统计，仅提示） */
+  inactive_sku_count?: number;
   /** 全部 SKU 库存合计 */
   stock?: number;
   locked_stock?: number;

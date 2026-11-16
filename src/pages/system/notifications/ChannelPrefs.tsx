@@ -81,7 +81,9 @@ export default function ChannelPrefs() {
               title: '渠道',
               dataIndex: 'channel',
               width: 90,
-              render: (value: string) => <Tag>{CHANNEL_LABEL[value] ?? value}</Tag>,
+              render: (value: string) => (
+                <Tag>{CHANNEL_LABEL[value] ?? value}</Tag>
+              ),
             },
             {
               title: '变量',

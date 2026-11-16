@@ -26,17 +26,12 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   createUser,
   deleteUser,
-  listDepartments,
   listRoles,
   listUsers,
   resetUserPassword,
   updateUser,
 } from '@/services/system/api';
-import type {
-  DepartmentRecord,
-  RoleRecord,
-  UserRecord,
-} from '@/services/system/types';
+import type { RoleRecord, UserRecord } from '@/services/system/types';
 import SettingPage from '../components/SettingPage';
 import {
   formatDate,
@@ -60,22 +55,11 @@ const UserManagement: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<UserRecord>();
 
-  const { data: departments } = useQuery({
-    queryKey: ['departments', 'active'],
-    queryFn: () => listDepartments({ pageSize: 200, status: 'active' }),
-  });
   const { data: roles } = useQuery({
     queryKey: ['roles', 'active'],
     queryFn: () => listRoles({ pageSize: 200, status: 'active' }),
   });
 
-  const departmentMap = useMemo(
-    () =>
-      new Map<number, DepartmentRecord>(
-        (departments?.list ?? []).map((item) => [item.id, item]),
-      ),
-    [departments],
-  );
   const roleMap = useMemo(
     () =>
       new Map<string, RoleRecord>(
@@ -209,21 +193,6 @@ const UserManagement: React.FC = () => {
     },
     { title: '手机号', dataIndex: 'phone', search: false, width: 130 },
     {
-      title: '部门',
-      dataIndex: 'department_id',
-      valueType: 'select',
-      width: 140,
-      valueEnum: Object.fromEntries(
-        (departments?.list ?? []).map((item) => [item.id, { text: item.name }]),
-      ),
-      render: (_, record) =>
-        record.department_id
-          ? (departmentMap.get(record.department_id)?.name ??
-            record.department ??
-            '-')
-          : (record.department ?? '-'),
-    },
-    {
       title: '角色',
       dataIndex: 'role',
       valueType: 'select',
@@ -351,7 +320,6 @@ const UserManagement: React.FC = () => {
             keyword: params.keyword,
             role: params.role,
             status: params.status,
-            department_id: params.department_id,
           });
           return { data: result.list, total: result.total, success: true };
         }}
@@ -395,16 +363,6 @@ const UserManagement: React.FC = () => {
             <Input placeholder="13800000000" />
           </Form.Item>
           <Space size={16} style={{ display: 'flex' }}>
-            <Form.Item label="部门" name="department_id" style={{ flex: 1 }}>
-              <Select
-                allowClear
-                placeholder="请选择部门"
-                options={(departments?.list ?? []).map((item) => ({
-                  label: item.name,
-                  value: item.id,
-                }))}
-              />
-            </Form.Item>
             <Form.Item
               label="角色"
               name="role"

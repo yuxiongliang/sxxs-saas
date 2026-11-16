@@ -37,9 +37,9 @@ import React, { useMemo, useState } from 'react';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import {
   deleteAttachment,
-  restoreAttachment,
   getAttachmentStats,
   listAttachments,
+  restoreAttachment,
 } from '@/services/system/api';
 import type { AttachmentRecord } from '@/services/system/types';
 import SettingPage from '../components/SettingPage';
@@ -212,7 +212,15 @@ const AttachmentManagement: React.FC = () => {
         dataIndex: 'uploader_role',
         width: 90,
         render: (value: string) => (
-          <Tag color={value === 'seller' ? 'purple' : value === 'buyer' ? 'blue' : 'default'}>
+          <Tag
+            color={
+              value === 'seller'
+                ? 'purple'
+                : value === 'buyer'
+                  ? 'blue'
+                  : 'default'
+            }
+          >
             {ROLE_LABEL[value] ?? value}
           </Tag>
         ),

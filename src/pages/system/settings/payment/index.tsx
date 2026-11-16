@@ -3,8 +3,8 @@ import {
   CheckCircleOutlined,
   ExperimentOutlined,
   QrcodeOutlined,
-  SaveOutlined,
   SafetyCertificateOutlined,
+  SaveOutlined,
   WechatOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,10 +27,10 @@ import {
   Tag,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
-import { getSetting, saveSetting, testSetting } from '@/services/system/api';
 import InheritSwitch, {
   type SettingSource,
 } from '@/pages/system/components/InheritSwitch';
+import { getSetting, saveSetting, testSetting } from '@/services/system/api';
 import type { SettingTestResult } from '@/services/system/types';
 import SettingPage from '../../components/SettingPage';
 import TestResultAlert from '../../components/TestResultAlert';
@@ -78,8 +78,12 @@ const PaymentSettings: React.FC = () => {
     try {
       // 不传 config：只切换来源，保留自己已保存的配置
       await saveSetting('payment', { source: next, enabled: true });
-      await queryClient.invalidateQueries({ queryKey: ['system-setting', 'payment'] });
-      message.success(next === 'inherit' ? '已切换为跟随系统' : '已切换为自定义');
+      await queryClient.invalidateQueries({
+        queryKey: ['system-setting', 'payment'],
+      });
+      message.success(
+        next === 'inherit' ? '已切换为跟随系统' : '已切换为自定义',
+      );
     } catch (error: any) {
       setSourceOverride(undefined);
       message.error(error?.message || '切换失败');

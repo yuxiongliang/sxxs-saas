@@ -4,8 +4,8 @@ import {
   SunOutlined,
   TranslationOutlined,
 } from '@ant-design/icons';
-import { getLocale, history, setLocale, useIntl } from '@umijs/max';
 import { useAppTheme } from '@shared';
+import { getLocale, history, setLocale, useIntl } from '@umijs/max';
 import { Dropdown, Space, Typography } from 'antd';
 import type { PlatformAuthUser } from '@/services/api';
 import { logout } from '@/services/api';

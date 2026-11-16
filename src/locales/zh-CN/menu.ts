@@ -63,7 +63,6 @@ export default {
   'menu.finance-management': '财务结算',
   'menu.platform-tenants': '租户管理',
   'menu.user-management.list': '用户列表',
-  'menu.user-management.departments': '部门管理',
   'menu.user-management.roles': '角色管理',
   'menu.system-settings': '系统设置',
   'menu.system-settings.payment': '支付设置',

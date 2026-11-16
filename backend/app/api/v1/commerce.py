@@ -62,6 +62,10 @@ def _product_dict(
     原来只回 name/subtitle/status，连改价改库存在界面上都无从下手。
     """
     sku_list = skus if skus is not None else ([sku] if sku is not None else [])
+    # 统计只算**在售（active）**的 SKU：停用的历史 SKU 还留在库里（订单外键指着它），
+    # 但不能计入「库存 / SKU 数 / 价格」，否则运营在编辑器里把规格库存改成 0，
+    # 回到列表看到的还是旧合计，就会觉得「保存无效」。
+    active_skus = [item for item in sku_list if item.status == "active"]
     data = {
         "id": product.id,
         "seller_id": product.seller_id,
@@ -83,9 +87,10 @@ def _product_dict(
         "seller_owner_username": owner.username if owner else None,
         "seller_owner_public_id": owner.public_id if owner else None,
         "shop_name": shop.name if shop else None,
-        "sku_count": len(sku_list),
-        "stock": sum(item.stock for item in sku_list),
-        "locked_stock": sum(item.locked_stock for item in sku_list),
+        "sku_count": len(active_skus),
+        "inactive_sku_count": len(sku_list) - len(active_skus),
+        "stock": sum(item.stock for item in active_skus),
+        "locked_stock": sum(item.locked_stock for item in active_skus),
         "skus": [
             {
                 "id": item.id,
@@ -102,14 +107,15 @@ def _product_dict(
             for item in sku_list
         ],
     }
-    if sku_list:
-        # 列表页只展示第一个 SKU 的价格（多规格商品由详情弹窗看全量）
-        data["price_cents"] = sku_list[0].price_cents
+    if active_skus:
+        # 列表页用**在售 SKU 的最低价**作为「起售价」，不能用停用的历史 SKU
+        cheapest = min(active_skus, key=lambda item: item.price_cents)
+        data["price_cents"] = cheapest.price_cents
         data["sku"] = {
-            "id": sku_list[0].id,
-            "name": sku_list[0].name,
-            "price_cents": sku_list[0].price_cents,
-            "stock": sku_list[0].stock,
+            "id": cheapest.id,
+            "name": cheapest.name,
+            "price_cents": cheapest.price_cents,
+            "stock": cheapest.stock,
         }
     return data
 
