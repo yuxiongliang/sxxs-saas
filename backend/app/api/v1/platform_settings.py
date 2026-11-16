@@ -73,7 +73,7 @@ async def save_platform_setting(
     await audit_service.record_platform(
         db,
         actor_id=context.user.id,
-        action="platform.setting.update",
+        action=audit_service.ACTION_PLATFORM_SETTING_UPDATED,
         target_type="platform_setting",
         target_id=category,
         after={"enabled": payload.enabled, "policy_locked": payload.policy_locked},

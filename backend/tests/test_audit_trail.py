@@ -378,7 +378,10 @@ async def test_distinct_actions_endpoint(client, admin_token, customer_token, db
     await _place_order(client, customer_token, db_session)
     response = await client.get("/api/v1/audit-logs/actions", headers=bearer(admin_token))
     assert response.status_code == 200
-    assert "order.created" in response.json()["data"]
+    # 返回 {value, label}：code 给机器、label 给界面，前端不再自己维护映射表
+    actions = response.json()["data"]
+    labels = {item["value"]: item["label"] for item in actions}
+    assert labels.get("order.created") == "创建订单"
 
 
 async def test_audit_is_tenant_scoped(client, admin_token, customer_token, db_session, platform_token):

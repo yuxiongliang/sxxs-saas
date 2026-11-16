@@ -394,7 +394,13 @@ export interface PlatformAuditRecord {
   actor_username?: string | null;
   actor_public_id?: string | null;
   action: string;
+  /** 动作中文名（后端给） */
+  action_label?: string | null;
   target_type: string;
+  /** 对象类型的中文名 */
+  target_type_label?: string | null;
+  /** 对象的可读标签：订单号 / 商品名 / 用户ID+用户名… */
+  target_label?: string | null;
   target_id: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
@@ -404,10 +410,14 @@ export interface PlatformAuditRecord {
 export const listPlatformAudit = (params: {
   current?: number;
   pageSize?: number;
+  keyword?: string;
+  action?: string;
 }) => {
   const parts: string[] = [];
   if (params.current !== undefined) parts.push('current=' + params.current);
   if (params.pageSize !== undefined) parts.push('pageSize=' + params.pageSize);
+  if (params.keyword) parts.push('keyword=' + encodeURIComponent(params.keyword));
+  if (params.action) parts.push('action=' + encodeURIComponent(params.action));
   const q = parts.join('&');
   return apiGet<{ list: PlatformAuditRecord[]; total: number }>(
     q ? '/platform/audit?' + q : '/platform/audit',

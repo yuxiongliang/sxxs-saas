@@ -25,6 +25,7 @@ async def list_audit_logs(
     action: str | None = None,
     target_type: str | None = None,
     target_id: str | None = None,
+    keyword: str | None = Query(default=None, max_length=64),
     actor_id: int | None = None,
     tenant_id: int | None = None,
     context: AuthContext = Depends(get_current_context),
@@ -38,13 +39,16 @@ async def list_audit_logs(
         action=action,
         target_type=target_type,
         target_id=target_id,
+        keyword=keyword,
         actor_id=actor_id,
         tenant_id=tenant_id,
     )
     items = []
     actors = await audit_service.actor_directory(db, rows)
+    targets = await audit_service.target_directory(db, rows)
     for row in rows:
         username, public_id = actors.get(row.actor_id or 0, (None, None))
+        target_type_text, target_label = targets.get(row.id, ("-", ""))
         items.append(
             {
                 "id": row.id,
@@ -55,7 +59,13 @@ async def list_audit_logs(
                 "actor_username": username,
                 "actor_public_id": public_id,
                 "action": row.action,
+                "action_label": audit_service.action_label(row.action),
+                "action_label": audit_service.action_label(row.action),
                 "target_type": row.target_type,
+                # 界面上不再拼 `#id`：直接给中文类型 + 人能读的标签
+                # （订单号 / 商品名 / 用户ID+用户名 / 角色名…）
+                "target_type_label": target_type_text,
+                "target_label": target_label,
                 "target_id": row.target_id,
                 "before": row.before,
                 "after": row.after,
@@ -69,11 +79,18 @@ async def list_audit_logs(
 
 @router.get(
     "/actions",
-    response_model=ApiResponse[list[str]],
+    response_model=ApiResponse[list[dict]],
     dependencies=[Depends(require_permission("audit:read"))],
 )
 async def list_audit_actions(
     context: AuthContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return ok(await audit_service.distinct_actions(db, context))
+    """筛选下拉用：直接给中文名，前端不用自己维护一份 code→中文 的映射。"""
+    codes = await audit_service.distinct_actions(db, context)
+    return ok(
+        [
+            {"value": code, "label": audit_service.action_label(code)}
+            for code in codes
+        ]
+    )

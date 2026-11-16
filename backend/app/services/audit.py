@@ -18,6 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.request_context import get_request_meta
 from app.models.audit import AuditLog
+from app.models.catalog import Product, ProductSku
+from app.models.finance import Payout, SettlementBatch
+from app.models.order import Order, SellerOrder
+from app.models.role import Role
+from app.models.seller import Seller
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.auth import AuthContext
 
@@ -59,6 +65,56 @@ ACTION_SUBSCRIPTION_RENEWED = "subscription.renewed"
 ACTION_SUBSCRIPTION_PAST_DUE = "subscription.past_due"
 ACTION_SUBSCRIPTION_CANCELLED = "subscription.cancelled"
 ACTION_SUBSCRIPTION_DOWNGRADED = "subscription.downgraded"
+ACTION_PLATFORM_SETTING_UPDATED = "platform.setting.update"
+
+# 动作 code 是给机器看的（稳定、可 grep、可筛选），界面上直接显示 `product.updated`
+# 对运营没可读性。中文名就放在**定义这些常量的地方**，租户端和平台端都用同一份，
+# 不在前端各自维护一份容易漂移的拷贝。
+ACTION_LABELS: dict[str, str] = {
+    ACTION_ORDER_CREATED: "创建订单",
+    ACTION_ORDER_PAID: "订单支付",
+    ACTION_ORDER_CANCELLED: "取消订单",
+    ACTION_ORDER_CONFIRMED: "确认收货",
+    ACTION_SELLER_ORDER_SHIPPED: "卖家发货",
+    ACTION_SELLER_ORDER_REFUNDED: "子订单退款",
+    ACTION_SELLER_APPLIED: "卖家入驻申请",
+    ACTION_SELLER_APPROVED: "卖家审核通过",
+    ACTION_PRODUCT_CREATED: "创建商品",
+    ACTION_PRODUCT_REVIEWED: "商品审核",
+    ACTION_PRODUCT_UPDATED: "修改商品",
+    ACTION_PAYOUT_REQUESTED: "提现申请",
+    ACTION_PAYOUT_APPROVED: "提现审核通过",
+    ACTION_PAYOUT_REJECTED: "提现驳回",
+    ACTION_PAYOUT_PAID: "提现打款",
+    ACTION_SETTLEMENT_CREATED: "创建结算批次",
+    ACTION_SETTLEMENT_CONFIRMED: "结算批次确认",
+    ACTION_SETTLEMENT_PAID: "结算批次打款",
+    # 佣金规则已下线，但历史审计行仍存在，仍要能读懂
+    ACTION_COMMISSION_RULE_CREATED: "创建佣金规则（已下线）",
+    ACTION_COMMISSION_RULE_UPDATED: "修改佣金规则（已下线）",
+    ACTION_COMMISSION_RULE_DELETED: "删除佣金规则（已下线）",
+    ACTION_IM_MESSAGE_MODERATED: "站内信内容治理",
+    ACTION_TENANT_SUSPENDED: "租户停用",
+    ACTION_TENANT_RESUMED: "租户恢复",
+    ACTION_TENANT_UPDATED: "修改租户",
+    ACTION_ROLE_PERMISSIONS_UPDATED: "修改角色权限",
+    ACTION_USER_ROLE_CHANGED: "修改用户角色",
+    ACTION_PROFILE_UPDATED: "修改个人资料",
+    ACTION_PASSWORD_CHANGED: "修改密码",
+    ACTION_CONTACT_UPDATED: "修改联系方式",
+    ACTION_SUBSCRIPTION_RENEWED: "订阅续费",
+    ACTION_SUBSCRIPTION_PAST_DUE: "订阅逾期",
+    ACTION_SUBSCRIPTION_CANCELLED: "订阅取消",
+    ACTION_SUBSCRIPTION_DOWNGRADED: "订阅降级",
+    ACTION_PLATFORM_SETTING_UPDATED: "修改平台配置",
+}
+
+
+def action_label(action: str | None) -> str:
+    """未知动作原样返回：后端新增动作时页面不会空白，也一眼能看出还没起中文名。"""
+    if not action:
+        return "-"
+    return ACTION_LABELS.get(action, action)
 
 
 async def record(
@@ -115,6 +171,148 @@ async def actor_directory(
     return {user.id: (user.username, user.public_id) for user in users}
 
 
+# ``target_type`` 是给机器和接口筛选用的英文标识，界面上不能直接拿它拼 ``#id``。
+# 「对象」列要的是人能读的东西：订单号 / 商品名 / 用户名 / 角色名……
+TARGET_TYPE_LABELS: dict[str, str] = {
+    "order": "订单",
+    "seller_order": "子订单",
+    "product": "商品",
+    "product_specs": "商品规格",
+    "product_sku": "商品 SKU",
+    "seller": "卖家",
+    "user": "用户",
+    "role": "角色",
+    "tenant": "租户",
+    "subscription": "订阅",
+    "payout": "提现",
+    "settlement_batch": "结算批次",
+    "platform_setting": "平台配置",
+    "im_message": "站内信",
+}
+
+target_type_label = TARGET_TYPE_LABELS.get
+
+# `platform_setting` 的 target_id 存的是设置分类名（platform / upload / notification …），
+# 界面上给中文，否则对象列会直接爆出 `platform` 这种内部词。
+PLATFORM_SETTING_LABELS: dict[str, str] = {
+    "platform": "平台基础配置",
+    "upload": "上传限制",
+    "notification": "通知配置",
+    "commission": "佣金配置",
+    "security": "安全策略",
+}
+
+
+def target_type_text(target_type: str | None) -> str:
+    """未知类型也别把英文扔给运营：退化成原值而不是空。"""
+    if not target_type:
+        return "-"
+    return TARGET_TYPE_LABELS.get(target_type, target_type)
+
+
+async def target_directory(
+    db: AsyncSession, rows: list[AuditLog]
+) -> dict[int, tuple[str, str]]:
+    """把 ``(target_type, target_id)`` 批量解析成 ``(中文类型, 可读标签)``。
+
+    审计表只存 id（不存快照），所以一律**读时解析**：订单号改了、商品改名了、
+    用户换用户名了，历史记录也跟着显示新值。目标被删就查不到，标签为空字符串，
+    前端退回 ``-``。
+    """
+    if not rows:
+        return {}
+
+    # 按类型分桶，每类一条 IN 查询，避免 N+1
+    buckets: dict[str, list[int]] = {}
+    for row in rows:
+        raw = str(row.target_id or "")
+        if raw.isdigit():
+            buckets.setdefault(row.target_type or "", []).append(int(raw))
+
+    # target_type 分组 -> (模型, 取值函数)
+    resolvers = [
+        (("product", "product_specs"), Product, lambda p: p.name),
+        (("product_sku",), ProductSku, lambda s: s.sku_code or s.name),
+        (("order",), Order, lambda o: o.order_no),
+        (("seller_order",), SellerOrder, lambda o: o.seller_order_no),
+        (("seller",), Seller, lambda s: s.display_name),
+        (("user",), User, lambda u: f"{u.public_id} / {u.username}"),
+        (("role",), Role, lambda r: r.name),
+        (("tenant",), Tenant, lambda t: t.name),
+        (("settlement_batch",), SettlementBatch, lambda b: b.batch_no),
+        (("payout",), Payout, lambda p: f"¥{p.amount_cents / 100:.2f}"),
+    ]
+    resolved: dict[tuple[str, int], str] = {}
+    for types, model, render in resolvers:
+        ids: list[int] = []
+        for target_type in types:
+            ids.extend(buckets.get(target_type, []))
+        if not ids:
+            continue
+        found = (await db.scalars(select(model).where(model.id.in_(ids)))).all()
+        for item in found:
+            label = render(item)
+            if label:
+                resolved[(model.__tablename__, item.id)] = label
+
+    table_of = {t: model.__tablename__ for types, model, _ in resolvers for t in types}
+    out: dict[int, tuple[str, str]] = {}
+    for row in rows:
+        raw = str(row.target_id or "")
+        label = ""
+        if raw.isdigit():
+            label = resolved.get((table_of.get(row.target_type or "", ""), int(raw)), "")
+        elif raw:
+            # 非数字目标：`platform_setting` 的 target_id 存的是设置分类名
+            if row.target_type == "platform_setting":
+                label = PLATFORM_SETTING_LABELS.get(raw, raw)
+            else:
+                label = raw
+        out[row.id] = (target_type_text(row.target_type), label)
+    return out
+
+
+async def _target_ids_matching(db: AsyncSession, keyword: str) -> list[str]:
+    """把可读关键词（商品名 / 订单号 / 用户名 / 用户ID / 店铺名 / 角色名）
+    在各业务表里解析成 `target_id` 候选值。
+
+    审计行的 `target_id` 是存字符串的，所以统一转成 str 再比对。
+    """
+    like = f"%{keyword.strip()}%"
+    if like == "%%":
+        return []
+    ids: set[str] = set()
+
+    for model, column in (
+        (Product, Product.name),
+        (ProductSku, ProductSku.sku_code),
+        (Order, Order.order_no),
+        (SellerOrder, SellerOrder.seller_order_no),
+        (Seller, Seller.display_name),
+        (Role, Role.name),
+        (Tenant, Tenant.name),
+        (SettlementBatch, SettlementBatch.batch_no),
+    ):
+        rows = (await db.scalars(select(model.id).where(column.ilike(like)))).all()
+        ids.update(str(item) for item in rows)
+
+    users = (
+        await db.scalars(
+            select(User.id).where(
+                User.username.ilike(like) | User.public_id.ilike(like)
+            )
+        )
+    ).all()
+    ids.update(str(item) for item in users)
+
+    # 非数字目标（平台配置的分类名）也能被搜到：`平台配置` -> platform
+    needle = keyword.strip()
+    for key, label in PLATFORM_SETTING_LABELS.items():
+        if needle in label or needle in key:
+            ids.add(key)
+    return sorted(ids)
+
+
 async def list_logs(
     db: AsyncSession,
     context: AuthContext,
@@ -126,6 +324,7 @@ async def list_logs(
     target_id: str | None = None,
     actor_id: int | None = None,
     tenant_id: int | None = None,
+    keyword: str | None = None,
 ) -> tuple[list[AuditLog], int]:
     """Query the trail. A tenant only ever sees its own rows."""
     stmt = select(AuditLog)
@@ -144,6 +343,14 @@ async def list_logs(
     if target_type:
         stmt = stmt.where(AuditLog.target_type == target_type)
         count_stmt = count_stmt.where(AuditLog.target_type == target_type)
+    if keyword:
+        # 运营搜的是「那个人 / 那个商品 / 那个订单号」，不是内部自增 id。
+        # 先把关键词在各个业务表里解析成一批 id，再用 IN 过滤审计行。
+        candidates = await _target_ids_matching(db, keyword)
+        if not candidates:
+            return [], 0
+        stmt = stmt.where(AuditLog.target_id.in_(candidates))
+        count_stmt = count_stmt.where(AuditLog.target_id.in_(candidates))
     if target_id:
         stmt = stmt.where(AuditLog.target_id == str(target_id))
         count_stmt = count_stmt.where(AuditLog.target_id == str(target_id))
@@ -199,11 +406,28 @@ async def record_platform(
 
 
 async def list_platform_logs(
-    db: AsyncSession, current: int = 1, page_size: int = 20
+    db: AsyncSession,
+    current: int = 1,
+    page_size: int = 20,
+    keyword: str | None = None,
+    action: str | None = None,
 ) -> tuple[list[AuditLog], int]:
-    """平台审计：只看 tenant_id 为空的行。"""
+    """平台审计：只看 tenant_id 为空的行。
+
+    筛选口径和租户端一致：`keyword` 搜的是人能读的对象（商品名 / 订单号 / 用户名…），
+    不是内部自增 id。
+    """
     stmt = select(AuditLog).where(AuditLog.tenant_id.is_(None))
     count_stmt = select(func.count(AuditLog.id)).where(AuditLog.tenant_id.is_(None))
+    if action:
+        stmt = stmt.where(AuditLog.action == action)
+        count_stmt = count_stmt.where(AuditLog.action == action)
+    if keyword:
+        candidates = await _target_ids_matching(db, keyword)
+        if not candidates:
+            return [], 0
+        stmt = stmt.where(AuditLog.target_id.in_(candidates))
+        count_stmt = count_stmt.where(AuditLog.target_id.in_(candidates))
     total = int(await db.scalar(count_stmt) or 0)
     stmt = stmt.order_by(AuditLog.id.desc()).offset((current - 1) * page_size).limit(page_size)
     return list((await db.scalars(stmt)).all()), total

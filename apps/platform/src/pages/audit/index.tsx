@@ -1,7 +1,17 @@
 import { SafetyCertificateOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Table, Tag, Typography } from 'antd';
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useState } from 'react';
 import PageShell from '@/components/PageShell';
 import type { PlatformAuditRecord } from '@/services/api';
 import { listPlatformAudit } from '@/services/api';
@@ -24,16 +34,24 @@ const columns: ColumnsType<PlatformAuditRecord> = [
     title: '操作',
     dataIndex: 'action',
     width: 220,
-    render: (value: string) => <Tag color="geekblue">{value}</Tag>,
+    render: (value: string, record) => (
+      <Tag color="geekblue" title={value}>
+        {record.action_label ?? value}
+      </Tag>
+    ),
   },
   {
     title: '对象',
     width: 200,
     render: (_, record) => (
-      <Typography.Text>
-        {record.target_type || '—'}
-        {record.target_id ? ' / ' + record.target_id : ''}
-      </Typography.Text>
+      <Space size={4}>
+        <Typography.Text>
+          {record.target_type_label ?? record.target_type ?? '—'}
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          {record.target_label || '—'}
+        </Typography.Text>
+      </Space>
     ),
   },
   {
@@ -60,9 +78,10 @@ const columns: ColumnsType<PlatformAuditRecord> = [
 ];
 
 export default function PlatformAuditPage() {
+  const [keyword, setKeyword] = useState<string>();
   const audit = useQuery({
-    queryKey: ['platform-audit'],
-    queryFn: () => listPlatformAudit({ pageSize: 50 }),
+    queryKey: ['platform-audit', keyword],
+    queryFn: () => listPlatformAudit({ pageSize: 50, keyword }),
   });
 
   return (
@@ -79,6 +98,16 @@ export default function PlatformAuditPage() {
         description="平台行以 tenant_id 为空标识，租户侧审计查不到；反过来租户侧的操作也不会出现在这里。"
       />
       <Card>
+        <Space wrap style={{ marginBottom: 16 }}>
+          {/* 搜的是人能读的对象，不是内部自增 id */}
+          <Input.Search
+            allowClear
+            placeholder="搜对象：租户名 / 用户名 / 商品名 / 订单号"
+            style={{ width: 320 }}
+            onSearch={(value) => setKeyword(value.trim() || undefined)}
+          />
+          <Button onClick={() => audit.refetch()}>刷新</Button>
+        </Space>
         <Table<PlatformAuditRecord>
           rowKey="id"
           size="small"

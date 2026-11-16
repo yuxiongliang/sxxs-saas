@@ -34,8 +34,7 @@ const actionColor = (action: string) =>
 
 const AuditPage: React.FC = () => {
   const [action, setAction] = useState<string>();
-  const [targetType, setTargetType] = useState<string>();
-  const [targetId, setTargetId] = useState<string>();
+  const [keyword, setKeyword] = useState<string>();
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<AuditLogRecord>();
   const { token } = theme.useToken();
@@ -45,14 +44,13 @@ const AuditPage: React.FC = () => {
     queryFn: listAuditActions,
   });
   const logs = useQuery({
-    queryKey: ['audit-logs', action, targetType, targetId, page],
+    queryKey: ['audit-logs', action, keyword, page],
     queryFn: () =>
       listAuditLogs({
         current: page,
         pageSize: 20,
         action,
-        target_type: targetType,
-        target_id: targetId || undefined,
+        keyword,
       }),
   });
 
@@ -86,17 +84,30 @@ const AuditPage: React.FC = () => {
       title: '动作',
       dataIndex: 'action',
       width: 220,
-      render: (value: string) => <Tag color={actionColor(value)}>{value}</Tag>,
+      render: (value: string, record) => (
+        <Tag color={actionColor(value)} title={value}>
+          {record.action_label ?? value}
+        </Tag>
+      ),
     },
     {
+      // 以前这里拼的是 `#{target_id}` —— 裸自增主键，既不可读也违反全站口径。
+      // 现在给「中文类型 + 人能读的对象」（订单号 / 商品名 / 用户ID+用户名…）。
       title: '对象',
       key: 'target',
-      width: 200,
+      width: 240,
       render: (_, record) => (
         <Space size={4}>
-          <Typography.Text>{record.target_type}</Typography.Text>
-          <Typography.Text type="secondary">
-            #{record.target_id}
+          <Typography.Text>
+            {record.target_type_label ?? record.target_type}
+          </Typography.Text>
+          <Typography.Text
+            type="secondary"
+            copyable={
+              record.target_label ? { text: record.target_label } : false
+            }
+          >
+            {record.target_label || '目标已删除'}
           </Typography.Text>
         </Space>
       ),
@@ -148,28 +159,16 @@ const AuditPage: React.FC = () => {
               setAction(value);
               setPage(1);
             }}
-            options={(actions.data ?? []).map((item) => ({
-              value: item,
-              label: item,
-            }))}
+            options={actions.data ?? []}
+            optionFilterProp="label"
           />
-          <Input
+          {/* 不能让人去填内部自增 id：搜的是订单号 / 商品名 / 用户名 / 用户ID */}
+          <Input.Search
             allowClear
-            placeholder="对象类型，如 order"
-            style={{ width: 200 }}
-            value={targetType}
-            onChange={(event) => {
-              setTargetType(event.target.value || undefined);
-              setPage(1);
-            }}
-          />
-          <Input
-            allowClear
-            placeholder="对象 ID"
-            style={{ width: 160 }}
-            value={targetId}
-            onChange={(event) => {
-              setTargetId(event.target.value || undefined);
+            placeholder="搜对象：订单号 / 商品名 / 用户名 / 用户ID"
+            style={{ width: 320 }}
+            onSearch={(value) => {
+              setKeyword(value.trim() || undefined);
               setPage(1);
             }}
           />
@@ -199,10 +198,26 @@ const AuditPage: React.FC = () => {
           <>
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="动作">
-                {detail.action}
+                {detail.action_label ?? detail.action}
+                <Typography.Text
+                  type="secondary"
+                  style={{ marginLeft: 8, fontSize: 12 }}
+                >
+                  {detail.action}
+                </Typography.Text>
               </Descriptions.Item>
               <Descriptions.Item label="对象">
-                {detail.target_type} / {detail.target_id}
+                {detail.target_type_label ?? detail.target_type}
+                <Typography.Text style={{ marginLeft: 8 }}>
+                  {detail.target_label || '目标已删除'}
+                </Typography.Text>
+                {/* 内部编号只放在详情里供技术排查，列表上不再展示 */}
+                <Typography.Text
+                  type="secondary"
+                  style={{ marginLeft: 8, fontSize: 12 }}
+                >
+                  内部 ID {detail.target_id}
+                </Typography.Text>
               </Descriptions.Item>
               <Descriptions.Item label="操作人">
                 {detail.actor_username ?? (detail.actor_id ? '已删除' : '系统')}

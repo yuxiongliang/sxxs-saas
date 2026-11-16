@@ -15,14 +15,20 @@ router = APIRouter(prefix="/platform/audit", tags=["平台审计"])
 async def list_platform_audit(
     current: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
+    keyword: str | None = Query(default=None, max_length=64),
+    action: str | None = None,
     _context=Depends(require_platform_permission("platform:setting:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    rows, total = await audit_service.list_platform_logs(db, current, pageSize)
+    rows, total = await audit_service.list_platform_logs(
+        db, current, pageSize, keyword=keyword, action=action
+    )
     items = []
     actors = await audit_service.actor_directory(db, rows)
+    targets = await audit_service.target_directory(db, rows)
     for row in rows:
         username, public_id = actors.get(row.actor_id or 0, (None, None))
+        target_type_text, target_label = targets.get(row.id, ("-", ""))
         items.append(
             {
                 "id": row.id,
@@ -30,7 +36,10 @@ async def list_platform_audit(
                 "actor_username": username,
                 "actor_public_id": public_id,
                 "action": row.action,
+                "action_label": audit_service.action_label(row.action),
                 "target_type": row.target_type,
+                "target_type_label": target_type_text,
+                "target_label": target_label,
                 "target_id": row.target_id,
                 "before": row.before,
                 "after": row.after,
