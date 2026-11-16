@@ -391,7 +391,73 @@ change a member's effective rights calls `bump_permission_version()`:
 Without the bump a demoted user kept their old privileges until the TTL expired —
 covered by `test_users_management.py::test_role_change_invalidates_cached_permissions`.
 
-## Buyer shopping (portal)
+## 商品富文本描述（Tiptap v3）
+
+商品编辑弹窗是三步：**基础信息 → 规格 → 详情**，详情步骤里是 Tiptap 富文本编辑器。
+
+### 版本与依赖
+
+全部 `@tiptap/*` **3.34.0**（同版本，避免 peer 冲突）。**扩展必须用 Kit**：
+`ListKit` / `TableKit` / `TextStyleKit` —— 单引 `Table` 会缺 `tableRow`、单引 `TaskList`
+会缺 `taskItem`，运行时报 `No node type or group 'xxx' found`（spike 阶段踩过）。
+
+### 存储（四列，各司其职）
+
+| 列                   | 用途                                            |
+| -------------------- | ----------------------------------------------- |
+| `description_doc`    | 真身（ProseMirror doc JSON），编辑器回显用      |
+| `description_html`   | **服务端 nh3 清洗过**的 HTML，买家端直接渲染    |
+| `description_text`   | 从清洗后 HTML 抽出的纯文本，**只给搜索用**      |
+| `description_format` | `text`（历史纯文本）/ `doc`（富文本），渐进迁移 |
+
+原来的 `description` 列保留作为老数据兜底，渲染时按 `description_format` 分流。
+
+> 为什么不“渲染时现算 HTML”：现算意味着渲染路径上多一步“可能忘记清洗”，
+> 清洗结果落库才能被回归测试盯住。
+
+### 安全（两层，缺一不可）
+
+1. **服务端 `services/rich_text.py`**：nh3（Rust ammonia）白名单清洗
+   - 标签/属性白名单；`script` `iframe` `on*` 一律剥掉
+   - **`filter_style_properties` 必须显式传**：只放行 `text-align / color / background-color /
+     font-size / font-family / line-height`。
+     ⚠️ 只给 `style` 属性放行、却不限属性名，等于允许 `position:fixed`、`background:url(...)`
+     这类 CSS 注入（写这条时真踩过，`test_sanitize_keeps_allowed_style_subset_only` 盯住它）。
+   - 图片 `src` **只允许** `/api/v1/attachments/public/`，外链图片整张删掉
+   - 链接只允许 http(s)，nh3 自动补 `rel="noopener noreferrer nofollow"`
+   - doc 体积上限 256KB
+2. **前端 `RichTextViewer`**：DOMPurify 再过一遍（纵深防御，不假设历史/导入数据都干净）
+
+### 图片与审核
+
+- 编辑器插图 → 附件中心 → 存相对直链 → **保存时**后端统一 `publish_by_public_url`
+  （否则 `/public/{id}` 是 404，买家端就是破图）
+- 图片本体的审核走现有 moderation worker（上传即入队），不另做一套
+- 文本框的自动审核接 `services/review_moderation`（预留口，**先发后审**）
+
+### 渲染
+
+`src/components/RichTextViewer`，编辑器正文和买家端容器**共用 `.rich-content` 样式**
+（`RichTextEditor/style.css`）——避免“编辑器里好看、前台歪掉”。
+图片 `max-width:100%`，表格容器允许横向滚动，长串字符 `word-break`。
+
+### 卖家侧同步
+
+卖家中心「编辑商品」用**同一个** `RichTextEditor`，后端 `SellerProductUpdate` 同样接受
+`description_doc` / `description_html` 并走同一套清洗。
+
+### CMS 预留
+
+`RichTextEditor` / `RichTextViewer` 已抽离且 props 可配（`placeholder` / `minHeight` / `disabled`），
+将来 CMS 直接复用，不用再改渲染层。
+
+### 回归
+
+- 后端：`tests/test_product_rich_text.py`（清洗 / style 子集 / 纯文本抽取 / 搜索命中 /
+  超体积 400 / 老纯文本不被破坏）
+- e2e：`e2e/product-editor.e2e.spec.ts` 覆盖“第 3 步写富文本 → 保存 → 请求体带 `description_doc`”
+
+## 买家 shopping (portal)
 
 ### 商品列表筛选与排序（`/products`）
 

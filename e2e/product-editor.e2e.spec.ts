@@ -28,7 +28,11 @@ test.describe('product editor (admin)', () => {
     await expect(modal).toBeVisible({ timeout: 30_000 });
 
     // 选一张图（附件中心：单击选中 → 使用选中的图片）
-    await page.locator('button:has-text("选择图片")').first().click();
+    // 已有主图时按钮文案是「更换」，两种都要能点
+    await page
+      .locator('button:has-text("更换"), button:has-text("选择图片")')
+      .first()
+      .click();
     await page.waitForTimeout(1500);
     await page
       .getByRole('dialog')
@@ -55,9 +59,22 @@ test.describe('product editor (admin)', () => {
     await page.waitForTimeout(600);
     expect(await slot.getAttribute('src')).toBe(picked);
 
-    // 第 2 步保存
+    // 第 2 步（规格）→ 第 3 步（详情）→ 保存
     await page.locator('button:has-text("下一步")').first().click();
     await page.waitForTimeout(600);
+    await page.locator('button:has-text("下一步")').first().click();
+    await page.waitForTimeout(1200);
+
+    // 第 3 步是富文本编辑器：工具条与编辑区都要在
+    await expect(page.getByTestId('rich-text-toolbar')).toBeVisible({
+      timeout: 20_000,
+    });
+    const editor = page.locator('.rich-text-editor .rich-content').first();
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    await editor.click();
+    await page.keyboard.type('详情页富文本回归');
+    await page.waitForTimeout(400);
+
     const saved = page.waitForResponse(
       (res) =>
         res.request().method() === 'PUT' &&
@@ -71,9 +88,11 @@ test.describe('product editor (admin)', () => {
     const response = await saved;
     expect(response.status()).toBe(200);
 
-    // 请求体里必须真的带上 main_image，而不是空串
+    // 请求体里必须真的带上 main_image 与富文本 doc，而不是空串
     const body = JSON.parse(response.request().postData() ?? '{}');
     expect(body.main_image).toBeTruthy();
     expect(body.main_image).toContain('/api/v1/attachments/public/');
+    expect(body.description_doc).toBeTruthy();
+    expect(JSON.stringify(body.description_doc)).toContain('详情页富文本回归');
   });
 });

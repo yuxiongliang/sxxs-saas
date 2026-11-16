@@ -18,6 +18,8 @@ import {
 import React, { useEffect, useMemo, useState } from 'react';
 import AttachmentPicker from '@/components/AttachmentPicker';
 import MediaField from '@/components/MediaField';
+import type { RichTextValue } from '@/components/RichTextEditor';
+import RichTextEditor from '@/components/RichTextEditor';
 import {
   getAdminProduct,
   listAdminCategories,
@@ -90,6 +92,9 @@ export default function ProductEditor({
   const [previewOverride, setPreviewOverride] = useState<string>();
   const [picker, setPicker] = useState<PickerTarget>();
   const [saving, setSaving] = useState(false);
+  // 富文本详情：单独存 state（不是 Form 字段）—— 它是个重组件，走 Form 受控反而麻烦
+  const [richText, setRichText] = useState<RichTextValue | null>(null);
+  const [richLoaded, setRichLoaded] = useState(false);
 
   const [categoryList, setCategoryList] = useState<CategoryRecord[]>([]);
 
@@ -107,6 +112,16 @@ export default function ProductEditor({
     getAdminProduct(productId)
       .then((data) => {
         setDetail(data);
+        // 富文本回显：doc 优先，没有 doc 就把历史纯文本包成一段段落展示
+        setRichText(
+          data.description_format === 'doc' && data.description_doc
+            ? {
+                doc: data.description_doc as Record<string, unknown>,
+                html: data.description_html ?? '',
+              }
+            : null,
+        );
+        setRichLoaded(true);
         form.setFieldsValue({
           name: data.name,
           description: data.description ?? '',
@@ -256,6 +271,10 @@ export default function ProductEditor({
         main_image: values.main_image ?? '',
         // 视频以前根本没传，选了也白选 —— 现在一并保存
         video_url: values.video_url ?? '',
+        // 富文本：doc 是真身，html 交给服务端用 nh3 重新清洗后落库
+        ...(richText
+          ? { description_doc: richText.doc, description_html: richText.html }
+          : {}),
         ...(typeof values.commission_percent === 'number'
           ? { commission_bps: Math.round(values.commission_percent * 100) }
           : {}),
@@ -319,9 +338,16 @@ export default function ProductEditor({
             <Button type="primary" onClick={() => setStep(1)}>
               下一步：规格
             </Button>
-          ) : (
+          ) : step === 1 ? (
             <>
               <Button onClick={() => setStep(0)}>上一步</Button>
+              <Button type="primary" onClick={() => setStep(2)}>
+                下一步：详情
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={() => setStep(1)}>上一步</Button>
               <Button type="primary" loading={saving} onClick={handleSave}>
                 保存
               </Button>
@@ -334,7 +360,7 @@ export default function ProductEditor({
         size="small"
         current={step}
         style={{ marginBottom: 20 }}
-        items={[{ title: '基础信息' }, { title: '规格' }]}
+        items={[{ title: '基础信息' }, { title: '规格' }, { title: '详情' }]}
       />
 
       {/*
@@ -742,6 +768,21 @@ export default function ProductEditor({
             </Flex>
           </div>
         </Flex>
+      </div>
+
+      {/* 第 3 步：富文本详情。
+          同样用 display 切换而不是条件卸载 —— 卸载会丢编辑器状态（同 ② 基础信息的坑）。 */}
+      <div style={{ display: step === 2 ? 'block' : 'none' }}>
+        {richLoaded ? (
+          <RichTextEditor
+            value={richText}
+            onChange={setRichText}
+            placeholder="商品详情：成色、规格、配件、使用说明…（可插入图片、表格）"
+            minHeight={360}
+          />
+        ) : (
+          <div style={{ padding: 24, textAlign: 'center' }}>加载中…</div>
+        )}
       </div>
 
       <AttachmentPicker

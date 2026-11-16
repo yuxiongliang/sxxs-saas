@@ -42,7 +42,19 @@ class Product(Base, TimestampMixin):
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
     subtitle: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 历史纯文本描述：老商品仍用它兵底渲染，新数据写下面四列
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ---- 富文本描述（产品决定：上 Tiptap v3，能力全量）----
+    # 真身：ProseMirror doc JSON，编辑器回显用它
+    description_doc: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # **服务端 nh3 清洗过**的 HTML，买家端直接渲染；不存未清洗的 HTML
+    description_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 从清洗后的 HTML 抽出的纯文本，只给搜索用
+    description_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # text（历史纯文本）/ doc（富文本），渐进迁移，老数据不动
+    description_format: Mapped[str] = mapped_column(
+        String(8), default="text", server_default="text"
+    )
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
     main_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     images: Mapped[list | None] = mapped_column(JSON, nullable=True)

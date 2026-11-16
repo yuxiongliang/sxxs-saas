@@ -502,6 +502,9 @@ export interface PublicProduct {
   video_url?: string | null;
   shop_name?: string;
   seller_name?: string;
+  /** 富文本描述：format=doc 时用 html（服务端已清洗），否则回落到纯文本 description */
+  description_format?: 'text' | 'doc';
+  description_html?: string | null;
   // ---- 店铺信息卡（详情接口才有）----
   /** 店铺 logo：买家侧「头像」就用它（users 表没有头像字段） */
   shop_logo?: string | null;

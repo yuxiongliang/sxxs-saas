@@ -15,7 +15,7 @@ from app.schemas.commerce import (
 )
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
-from app.services import catalog_stats
+from app.services import catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services.auth import AuthContext
@@ -77,6 +77,9 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
                 "id": product.id,
                 "name": product.name,
                 "description": product.description,
+                "description_format": product.description_format,
+                "description_doc": product.description_doc,
+                "description_html": product.description_html,
                 "main_image": product.main_image,
                 "video_url": product.video_url,
                 "status": product.status,
@@ -121,6 +124,18 @@ async def update_seller_product(
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
             content_changed = True
+    # ---- 富文本描述：与运营端同一条口径，服务端重新清洗 ----
+    if "description_doc" in data or "description_html" in data:
+        doc, html, text = rich_text.prepare_payload(
+            data.get("description_doc"), data.get("description_html")
+        )
+        product.description_doc = doc
+        product.description_html = html
+        product.description_text = text
+        product.description_format = "doc" if doc is not None else "text"
+        content_changed = True
+        for url in rich_text.image_urls(html):
+            await attachment_service.publish_by_public_url(db, context.tenant.id, url)
     if content_changed and ("main_image" in data or "video_url" in data):
         # 卖家上传的主图/视频也要发布给匿名访客看（原来只有控制台路径做了，卖家路径漏了）
         await attachment_service.publish_by_public_url(

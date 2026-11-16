@@ -15,6 +15,7 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import RichTextViewer from '@/components/RichTextViewer';
 import {
   isComboComplete,
   isSellable,
@@ -407,16 +408,6 @@ export default function ProductDetailPage() {
                         {favorited ? '已收藏' : '收藏'}
                       </Button>
                     </Space>
-
-                    <Typography.Paragraph
-                      type="secondary"
-                      style={{ marginTop: 8 }}
-                    >
-                      {t({
-                        id: 'product.detail.noDescription',
-                        defaultMessage: '卖家暂未填写商品描述。',
-                      })}
-                    </Typography.Paragraph>
                   </Space>
                 </Card>
               </Col>
@@ -428,6 +419,44 @@ export default function ProductDetailPage() {
               </Col>
             </Row>
           )}
+          {/* 商品详情（富文本）：全宽卡片。表格/图片很多，挤在信息列里根本展不开 */}
+          {!isLoading && !isError && data ? (
+            <Card
+              title={t({
+                id: 'product.detail.descriptionTitle',
+                defaultMessage: '商品详情',
+              })}
+              style={{ marginTop: 16 }}
+            >
+              {data.description_format === 'doc' && data.description_html ? (
+                <RichTextViewer
+                  html={data.description_html}
+                  fallback={
+                    <Typography.Text type="secondary">
+                      {t({
+                        id: 'product.detail.noDescription',
+                        defaultMessage: '卖家暂未填写商品描述。',
+                      })}
+                    </Typography.Text>
+                  }
+                />
+              ) : data.description ? (
+                // 老商品仍是纯文本：保留换行，不要挤成一团
+                <Typography.Paragraph
+                  style={{ whiteSpace: 'pre-line', marginBottom: 0 }}
+                >
+                  {data.description}
+                </Typography.Paragraph>
+              ) : (
+                <Typography.Text type="secondary">
+                  {t({
+                    id: 'product.detail.noDescription',
+                    defaultMessage: '卖家暂未填写商品描述。',
+                  })}
+                </Typography.Text>
+              )}
+            </Card>
+          ) : null}
           {/* 评价区：只展示 visible；匿名的已脱敏（见 public_reviews） */}
           {!isLoading && !isError ? (
             <ReviewsPanel productId={productId} />

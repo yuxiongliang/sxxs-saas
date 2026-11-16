@@ -55,6 +55,10 @@ export interface ProductRecord {
   category_id?: number | null;
   name: string;
   description?: string | null;
+  /** 富文本描述（Tiptap）：format=doc 时 doc/html 有值，否则回落到纯文本 description */
+  description_format?: 'text' | 'doc';
+  description_doc?: Record<string, unknown> | null;
+  description_html?: string | null;
   status: string;
   main_image?: string | null;
   images?: string[];
@@ -148,6 +152,10 @@ export interface SellerProductRecord {
   id: number;
   name: string;
   description?: string | null;
+  /** 富文本描述（与运营端同一套） */
+  description_format?: 'text' | 'doc';
+  description_doc?: Record<string, unknown> | null;
+  description_html?: string | null;
   main_image?: string | null;
   video_url?: string | null;
   status: string;

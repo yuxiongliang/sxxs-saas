@@ -1,10 +1,8 @@
 import { ShoppingCartOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { useModel } from '@umijs/max';
-import { App, Button, Card, Tag, Typography } from 'antd';
+import { App, Button, Card, Tag } from 'antd';
 import type { PublicProduct } from '@/services/commerce/api';
 import { addCartItem } from '@/services/commerce/api';
-
-const { Text } = Typography;
 
 function yuan(cents: number) {
   return (cents / 100).toFixed(2);

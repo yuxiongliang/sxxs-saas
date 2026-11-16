@@ -126,6 +126,8 @@ def _product_filters(
                 Shop.name.ilike(pattern),
                 Seller.display_name.ilike(pattern),
                 User.username.ilike(pattern),
+                # 富文本描述抽出来的纯文本：搜 HTML 会命中一堆标签垃圾，只搜它
+                Product.description_text.ilike(pattern),
             )
         )
     # 价格按「在售 SKU 的最低价」判，与卡片上展示的价格同口径
@@ -383,6 +385,13 @@ async def get_public_product(
         for sku in skus
     ]
     payload["spec_groups"] = await catalog_specs.load_spec_groups(db, product.id)
+
+    # 富文本描述：只给详情（列表不需要，白増传输体积）。
+    # html 已经是保存时 nh3 清洗过的，前端再走一层 DOMPurify 作纵深防御。
+    payload["description_format"] = product.description_format or "text"
+    payload["description_html"] = product.description_html
+    # 老商品仍是纯文本，兵底给它
+    payload["description"] = product.description
 
     # ---- 店铺信息卡（详情页右侧）要的数据 ----
     # 头像用**店铺 logo**（users 表没有头像字段）；

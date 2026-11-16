@@ -27,6 +27,11 @@ class ProductUpdate(BaseModel):
     main_image: str | None = Field(default=None, max_length=512)
     # 商品视频：编辑器里已经能选，之前 schema 没这个字段 → 选了也不保存
     video_url: str | None = Field(default=None, max_length=512)
+    # ---- 富文本描述（Tiptap v3）----
+    # 前端同时传两份：doc 是真身（回显用），html 由编辑器生成。
+    # 服务端会用 nh3 重新清洗 html 再落库，**不信任前端传来的 html**。
+    description_doc: dict | None = None
+    description_html: str | None = None
     images: list[str] | None = None
     category_id: int | None = None
     # 租户向卖家抽佣的比例（万分比）：>=100 即 1%；不传 = 保持原值
@@ -70,6 +75,9 @@ class SellerProductUpdate(BaseModel):
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
     video_url: str | None = Field(default=None, max_length=512)
+    # 卖家也能用富文本描述（卖家是主要填写方）
+    description_doc: dict | None = None
+    description_html: str | None = None
     sku_id: int | None = Field(default=None, description="要改价/改库存的 SKU；单规格可省略")
     price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
     stock: int | None = Field(default=None, ge=0, le=1_000_000)

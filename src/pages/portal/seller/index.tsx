@@ -20,6 +20,8 @@ import React, { useState } from 'react';
 import MediaField from '@/components/MediaField';
 import ProductFavoriteTable from '@/components/ProductFavoriteTable';
 import ProductReviewTable from '@/components/ProductReviewTable';
+import type { RichTextValue } from '@/components/RichTextEditor';
+import RichTextEditor from '@/components/RichTextEditor';
 import PortalShell from '@/pages/portal/components/PortalShell';
 import {
   applySeller,
@@ -84,6 +86,8 @@ const SellerPage: React.FC = () => {
   const [reviewKeyword, setReviewKeyword] = useState<string>();
   const [replyingReview, setReplyingReview] = useState<ReviewRecord>();
   const [reviewReply, setReviewReply] = useState('');
+  // 富文本描述：卖家中心与运营端用同一个编辑器组件（能力/清洗口径完全一致）
+  const [richDesc, setRichDesc] = useState<RichTextValue | null>(null);
 
   const { data: profile } = useQuery({
     queryKey: ['seller-profile'],
@@ -151,6 +155,12 @@ const SellerPage: React.FC = () => {
 
   const openEdit = (record: SellerProductRecord) => {
     setEditing(record);
+    // 富文本回显：doc 优先；老数据没 doc 就留空，纯文本仍在 description 里兜底
+    setRichDesc(
+      record.description_format === 'doc' && record.description_doc
+        ? { doc: record.description_doc, html: record.description_html ?? '' }
+        : null,
+    );
     editForm.setFieldsValue({
       name: record.name,
       description: record.description ?? '',
@@ -173,6 +183,9 @@ const SellerPage: React.FC = () => {
       const result = await updateSellerProduct(editing.id, {
         name: values.name,
         description: values.description,
+        ...(richDesc
+          ? { description_doc: richDesc.doc, description_html: richDesc.html }
+          : {}),
         main_image: values.main_image || undefined,
         video_url: values.video_url || undefined,
         price_cents: Math.round(Number(values.price_yuan) * 100),
@@ -589,8 +602,14 @@ const SellerPage: React.FC = () => {
             >
               <Input />
             </Form.Item>
-            <Form.Item label="商品描述" name="description">
-              <Input.TextArea rows={3} placeholder="成色、规格、卖点" />
+            <Form.Item label="商品详情">
+              {/* 不是 Form 字段：富文本是重组件，单独状态更好控 */}
+              <RichTextEditor
+                value={richDesc}
+                onChange={setRichDesc}
+                placeholder="商品详情：成色、规格、配件、使用说明…（可插入图片、表格）"
+                minHeight={260}
+              />
             </Form.Item>
             <Form.Item label="商品主图" name="main_image">
               <MediaField kind="image" title="选择商品主图" boxSize={96} />

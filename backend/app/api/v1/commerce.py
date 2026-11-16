@@ -21,7 +21,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.order import OrderCreateRequest
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
-from app.services import catalog_specs, catalog_stats
+from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
@@ -75,6 +75,10 @@ def _product_dict(
         "category_id": product.category_id,
         "name": product.name,
         "description": product.description,
+        # 富文本：编辑器回显需要 doc，审核页要能直接看渲染效果
+        "description_format": product.description_format,
+        "description_doc": product.description_doc,
+        "description_html": product.description_html,
         "status": product.status,
         "main_image": product.main_image,
         "images": product.images or [],
@@ -523,6 +527,20 @@ async def update_product(
     if "category_id" in data:
         product.category_id = data["category_id"]
         applied["category_id"] = data["category_id"]
+    # ---- 富文本描述：服务端重新清洗 html，不信任前端传来的 html ----
+    if "description_doc" in data or "description_html" in data:
+        doc, html, text = rich_text.prepare_payload(
+            data.get("description_doc"), data.get("description_html")
+        )
+        product.description_doc = doc
+        product.description_html = html
+        product.description_text = text
+        product.description_format = "doc" if doc is not None else "text"
+        # 审计里只记摘要：整份 doc 会把审计表灌炚
+        applied["description"] = f"富文本（{len(text or '')} 字）"
+        # 富文本里的图片也要发布给匿名买家看
+        for url in rich_text.image_urls(html):
+            await attachment_service.publish_by_public_url(db, context.tenant.id, url)
     if data.get("commission_bps") is not None:
         # 运营改比例 → 锁定，卖家不能再改回去（Q7）
         product.commission_bps = data["commission_bps"]
