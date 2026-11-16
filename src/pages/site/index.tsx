@@ -261,7 +261,7 @@ export default function SiteLandingPage() {
         </section>
       </main>
 
-      <SiteFooter showLinks={false} />
+      <SiteFooter />
     </div>
   );
 }

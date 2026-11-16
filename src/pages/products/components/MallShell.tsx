@@ -9,7 +9,7 @@ import useStyles from '@/pages/site/style';
 /**
  * 商城前台外壳：`/`、`/products`、`/products/:id` 共用。
  *
- * 导航固定三项（首页 / 商品 / 赛霄玄思），与站点根保持一致；
+ * 导航固定两项（首页 / 商品），与站点根保持一致；
  * 用户登录态、主题、语言、搜索都由 SiteHeader 统一提供。
  */
 export default function MallShell({
@@ -35,12 +35,8 @@ export default function MallShell({
       defaultLabel: '商品',
       href: '/products',
     },
-    {
-      key: 'brand',
-      labelId: 'mall.nav.brand',
-      defaultLabel: '赛霄玄思',
-      href: '/site',
-    },
+    // 「赛霄玄思」入口已隐藏：那是平台自己的旧介绍页，
+    // 买家在租户商城里点它会被带去别家的站，纯噪音。
   ];
 
   const entries: SearchEntry[] = nav.map((item) => ({

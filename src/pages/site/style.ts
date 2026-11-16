@@ -194,6 +194,29 @@ export default createStyles(({ token, css }) => ({
     font-weight: 600;
     font-size: 13px;
   `,
+  // 页脚品牌块：logo + 一句话介绍，整体居中（页脚现在只有这一块 + 版权行）
+  footerBrand: css`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  `,
+  footerLogo: css`
+    height: 32px;
+    object-fit: contain;
+  `,
+  footerBrandName: css`
+    font-size: 18px;
+    font-weight: 700;
+  `,
+  footerTagline: css`
+    max-width: 640px;
+    text-align: center;
+    white-space: pre-line;
+    color: ${token.colorTextSecondary};
+    font-size: 13px;
+    line-height: 1.7;
+  `,
   footerLink: css`
     display: block;
     margin-bottom: 8px;
@@ -206,8 +229,9 @@ export default createStyles(({ token, css }) => ({
   `,
   footerBottom: css`
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    text-align: center;
     margin-top: 32px;
     padding-top: 20px;
     border-top: 1px solid ${token.colorBorderSecondary};

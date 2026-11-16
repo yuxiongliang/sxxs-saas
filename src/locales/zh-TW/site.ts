@@ -25,6 +25,7 @@ export default {
 
   'site.hero.badge': '多租戶 · C2C 多賣家 · SaaS 計費',
   'site.hero.title': '賽霄玄思',
+  'site.footer.copyright.reserved': '保留所有權利',
   'site.hero.subtitle':
     '一套能真正跑起來的 C2C 多賣家商城後台：租戶與權限、賣家與商品、交易履約、IM 客服、佣金結算、SaaS 計費與稽核，前端與後端同倉庫交付。',
   'site.hero.ctaConsole': '進入控制台',
@@ -83,18 +84,6 @@ export default {
   'site.quickstart.s3.desc': 'npm install → npm start，開發代理自動轉發介面。',
 
   'site.footer.tagline': '多租戶 C2C 商城管理後台',
-  'site.footer.col.product': '產品',
-  'site.footer.col.resource': '資源',
-  'site.footer.col.account': '帳戶',
-  'site.footer.link.console': '控制台',
-  'site.footer.link.portal': '買家商城',
-  'site.footer.link.seller': '賣家中心',
-  'site.footer.link.docs': '維運文件',
-  'site.footer.link.api': '介面文件',
-  'site.footer.link.readme': '專案說明',
-  'site.footer.link.login': '登入',
-  'site.footer.link.register': '註冊',
-  'site.footer.copyright': '賽霄玄思 · 保留所有權利',
 
   'mall.nav.home': '首頁',
   'mall.nav.products': '商品',

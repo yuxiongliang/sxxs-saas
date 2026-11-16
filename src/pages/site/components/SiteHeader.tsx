@@ -234,7 +234,14 @@ export default function SiteHeader({
     <header className={styles.header}>
       <div className={styles.container}>
         <div className={styles.headerInner}>
-          <a className={styles.brand} href="/">
+          {/* 头部只显 logo：站名文字占位、又会把头部挤高，
+              租户没传 logo 才回落到图标，不显示文字 */}
+          <a
+            className={styles.brand}
+            href="/"
+            aria-label={brand?.display_name}
+            title={brand?.display_name}
+          >
             {brand?.logo_url ? (
               <img
                 src={brand.logo_url}
@@ -244,11 +251,6 @@ export default function SiteHeader({
             ) : (
               <ShopOutlined style={{ color: 'var(--ant-color-primary)' }} />
             )}
-            {brand?.display_name ??
-              formatMessage({
-                id: 'site.hero.title',
-                defaultMessage: '赛霄玄思',
-              })}
           </a>
 
           <nav className={styles.nav}>

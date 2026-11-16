@@ -25,6 +25,7 @@ export default {
 
   'site.hero.badge': 'マルチテナント · C2C マルチセラー · SaaS 課金',
   'site.hero.title': '赛霄玄思',
+  'site.footer.copyright.reserved': '無断転載を禁じます',
   'site.hero.subtitle':
     '実際に運用できる C2C マルチセラー向けモール管理基盤。テナントと権限、出品者と商品、受注・出荷、IM サポート、手数料精算、SaaS 課金と監査を、フロントエンドとバックエンド同一リポジトリで提供します。',
   'site.hero.ctaConsole': 'コンソールを開く',
@@ -85,18 +86,6 @@ export default {
     'npm install → npm start。開発プロキシが API を転送します。',
 
   'site.footer.tagline': 'マルチテナント C2C モール管理基盤',
-  'site.footer.col.product': 'プロダクト',
-  'site.footer.col.resource': 'リソース',
-  'site.footer.col.account': 'アカウント',
-  'site.footer.link.console': 'コンソール',
-  'site.footer.link.portal': 'ストア',
-  'site.footer.link.seller': '出品者センター',
-  'site.footer.link.docs': '運用ドキュメント',
-  'site.footer.link.api': 'API リファレンス',
-  'site.footer.link.readme': 'README',
-  'site.footer.link.login': 'ログイン',
-  'site.footer.link.register': '新規登録',
-  'site.footer.copyright': '赛霄玄思 · All rights reserved',
 
   'mall.nav.home': 'ホーム',
   'mall.nav.products': '商品',

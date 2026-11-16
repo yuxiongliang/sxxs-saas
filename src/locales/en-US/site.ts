@@ -25,6 +25,7 @@ export default {
 
   'site.hero.badge': 'Multi-tenant · C2C marketplace · SaaS billing',
   'site.hero.title': 'Saixiao Xuansi',
+  'site.footer.copyright.reserved': 'All rights reserved.',
   'site.hero.subtitle':
     'A production-shaped C2C marketplace console: tenants and RBAC, sellers and catalog, order fulfilment, IM support, commission settlement, SaaS billing and audit — frontend and backend in one repository.',
   'site.hero.ctaConsole': 'Open console',
@@ -85,18 +86,6 @@ export default {
     'npm install then npm start; the dev proxy forwards the API.',
 
   'site.footer.tagline': 'Multi-tenant C2C marketplace console',
-  'site.footer.col.product': 'Product',
-  'site.footer.col.resource': 'Resources',
-  'site.footer.col.account': 'Account',
-  'site.footer.link.console': 'Console',
-  'site.footer.link.portal': 'Storefront',
-  'site.footer.link.seller': 'Seller center',
-  'site.footer.link.docs': 'Ops docs',
-  'site.footer.link.api': 'API reference',
-  'site.footer.link.readme': 'README',
-  'site.footer.link.login': 'Sign in',
-  'site.footer.link.register': 'Register',
-  'site.footer.copyright': 'Saixiao Xuansi · All rights reserved',
 
   // ---- Storefront home (site root /) ----
   'mall.nav.home': 'Home',
