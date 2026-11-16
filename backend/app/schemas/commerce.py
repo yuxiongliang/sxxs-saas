@@ -23,7 +23,6 @@ class ProductUpdate(BaseModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    subtitle: str | None = Field(default=None, max_length=255)
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
     images: list[str] | None = None
@@ -47,7 +46,6 @@ class ProductSkuUpdate(BaseModel):
 
 class SellerProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    subtitle: str | None = Field(default=None, max_length=255)
     price_cents: int = Field(gt=0)
     stock: int = Field(ge=0)
     category_id: int | None = None
@@ -63,7 +61,6 @@ class SellerProductUpdate(BaseModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    subtitle: str | None = Field(default=None, max_length=255)
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
     sku_id: int | None = Field(default=None, description="要改价/改库存的 SKU；单规格可省略")

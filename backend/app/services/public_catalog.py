@@ -61,13 +61,16 @@ async def _resolve_tenant(db: AsyncSession, slug: str) -> Tenant:
 
 
 def _product_public_dict(product, shop, seller, sku) -> dict:
-    """列表与详情共用的一份字段白名单。"""
+    """列表与详情共用的一份字段白名单。
+
+    **副标题已全站下线**（产品决定）：不再返回 `subtitle`。
+    数据库列保留（历史数据不丢），但接口、搜索、界面都不再读写它。
+    """
     return {
         "id": product.id,
         "seller_id": product.seller_id,
         "shop_id": product.shop_id,
         "name": product.name,
-        "subtitle": product.subtitle,
         "status": product.status,
         "main_image": product.main_image,
         "shop_name": shop.name,
@@ -120,7 +123,6 @@ def _product_filters(
         filters.append(
             or_(
                 Product.name.ilike(pattern),
-                Product.subtitle.ilike(pattern),
                 Shop.name.ilike(pattern),
                 Seller.display_name.ilike(pattern),
                 User.username.ilike(pattern),
@@ -381,6 +383,18 @@ async def get_public_product(
         for sku in skus
     ]
     payload["spec_groups"] = await catalog_specs.load_spec_groups(db, product.id)
+
+    # ---- 店铺信息卡（详情页右侧）要的数据 ----
+    # 头像用**店铺 logo**（users 表没有头像字段）；
+    # 用户名取卖家 owner（买家侧只展示 username，不展示 usr_ 编号）；
+    # 全站名称取租户品牌名；`seller_id` 用于点「在线客服」时建 IM 会话。
+    owner = (
+        await db.scalars(select(User).where(User.id == seller.owner_user_id))
+    ).first()
+    payload["shop_logo"] = shop.logo
+    payload["shop_description"] = shop.description
+    payload["seller_username"] = owner.username if owner else None
+    payload["tenant_name"] = tenant.display_name or tenant.name
     prices = [sku.price_cents for sku in skus]
     payload["price_min_cents"] = min(prices) if prices else None
     payload["price_max_cents"] = max(prices) if prices else None

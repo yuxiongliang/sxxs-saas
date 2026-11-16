@@ -70,10 +70,18 @@ test.describe('portal: buyer journey', () => {
     await expect(page).toHaveURL(/\/products\/\d+/, {
       timeout: 30_000,
     });
-    await expect(page.getByText('卖家：').first()).toBeVisible();
+    // 「卖家：xxx」Tag 已移到右侧店铺卡（只显示 username）
+    await expect(page.getByTestId('shop-card')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId('shop-owner-username')).not.toBeEmpty();
+    await expect(page.getByTestId('shop-customer-service')).toBeVisible();
+    await expect(page.getByTestId('shop-visit')).toBeVisible();
     await expect(
       page.getByRole('button', { name: '加入购物车' }).first(),
     ).toBeVisible();
+    // 副标题已全站下线：详情页不应再出现「自用闲置」这类副标题
+    await expect(page.getByText('自用闲置，功能正常')).toHaveCount(0);
   });
 
   test('adds a product to the cart and sees it listed', async ({ page }) => {

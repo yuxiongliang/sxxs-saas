@@ -128,7 +128,6 @@ async def seed_commerce_data(db: AsyncSession) -> None:
             shop_id=shop.id,
             category_id=category.id,
             name="九成新机械键盘",
-            subtitle="自用闲置，功能正常",
             description="C2C 演示商品",
             status="on_sale",
             created_by=owner.id,

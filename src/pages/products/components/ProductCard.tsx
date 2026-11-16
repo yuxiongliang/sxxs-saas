@@ -129,13 +129,6 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
       >
         {product.name}
       </div>
-      <Text
-        type="secondary"
-        style={{ fontSize: 12, display: 'block', height: 20 }}
-        ellipsis
-      >
-        {product.subtitle || '—'}
-      </Text>
 
       <div
         style={{

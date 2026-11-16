@@ -76,7 +76,6 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
             {
                 "id": product.id,
                 "name": product.name,
-                "subtitle": product.subtitle,
                 "description": product.description,
                 "main_image": product.main_image,
                 "status": product.status,
@@ -113,7 +112,7 @@ async def update_seller_product(
     data = payload.model_dump(exclude_unset=True)
 
     content_changed = False
-    for key in ("name", "subtitle", "description", "main_image"):
+    for key in ("name", "description", "main_image"):
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
             content_changed = True
@@ -267,7 +266,6 @@ async def create_seller_product(
         shop_id=shop.id,
         category_id=payload.category_id,
         name=payload.name,
-        subtitle=payload.subtitle,
         status="pending_review",
         created_by=context.user.id,
     )

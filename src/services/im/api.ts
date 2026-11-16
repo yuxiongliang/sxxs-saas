@@ -25,6 +25,18 @@ export async function listConversations() {
   );
 }
 
+/**
+ * 建（或取回已有）与卖家的会话。
+ *
+ * 商品详情页的「在线客服」靠它：同一买家 + 同一卖家只会有一个会话，
+ * 服务端会复用，不会点一次建一个。
+ */
+export async function createConversation(payload: { seller_id: number }) {
+  return unwrap<ConversationRecord>(
+    request('/api/v1/im/conversations', { method: 'POST', data: payload }),
+  );
+}
+
 export async function listMessages(conversationId: number, afterSeq = 0) {
   return unwrap<MessageRecord[]>(
     request(`/api/v1/im/conversations/${conversationId}/messages`, {

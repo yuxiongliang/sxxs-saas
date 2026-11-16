@@ -65,7 +65,6 @@ async def test_response_is_whitelisted(client):
         "seller_id",
         "shop_id",
         "name",
-        "subtitle",
         "status",
         "main_image",
         "shop_name",

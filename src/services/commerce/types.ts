@@ -54,7 +54,6 @@ export interface ProductRecord {
   shop_id: number;
   category_id?: number | null;
   name: string;
-  subtitle?: string | null;
   description?: string | null;
   status: string;
   main_image?: string | null;
@@ -132,7 +131,6 @@ export interface PortalProduct {
   seller_id: number;
   shop_id: number;
   name: string;
-  subtitle?: string;
   status: string;
   main_image?: string;
   sku?: { id: number; name: string; price_cents: number; stock: number };
@@ -149,7 +147,6 @@ export interface SellerProfile {
 export interface SellerProductRecord {
   id: number;
   name: string;
-  subtitle?: string | null;
   description?: string | null;
   main_image?: string | null;
   status: string;
@@ -209,30 +206,6 @@ export interface SellerLedger {
 export interface OrderDetail extends OrderRecord {
   seller_orders: SellerOrderRecord[];
   items: OrderItemRecord[];
-}
-
-export interface PortalProductSku {
-  id: number;
-  sku_code: string;
-  name: string;
-  price_cents: number;
-  stock: number;
-  status: string;
-}
-
-export interface PortalProductDetail {
-  id: number;
-  name: string;
-  subtitle?: string;
-  description?: string;
-  status: string;
-  main_image?: string;
-  images?: string[];
-  seller_id: number;
-  seller_name?: string;
-  shop_id: number;
-  shop_name?: string;
-  skus: PortalProductSku[];
 }
 
 export interface CartItemRecord {

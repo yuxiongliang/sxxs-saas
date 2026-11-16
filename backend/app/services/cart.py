@@ -55,7 +55,6 @@ async def product_detail(
     return PortalProductDetail(
         id=product.id,
         name=product.name,
-        subtitle=product.subtitle,
         description=product.description,
         status=product.status,
         main_image=product.main_image,

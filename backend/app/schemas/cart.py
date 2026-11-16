@@ -51,7 +51,6 @@ class ProductSkuOut(BaseModel):
 class PortalProductDetail(BaseModel):
     id: int
     name: str
-    subtitle: str | None = None
     description: str | None = None
     status: str
     main_image: str | None = None

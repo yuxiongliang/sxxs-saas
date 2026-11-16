@@ -59,7 +59,9 @@ def _product_dict(
     """商品对外的统一形状。
 
     带上了价格/库存/SKU 数与卖家店铺名：运营在商品管理页要直接看出「卖多少钱、还有几件」，
-    原来只回 name/subtitle/status，连改价改库存在界面上都无从下手。
+    原来只回 name/status，连改价改库存在界面上都无从下手。
+
+    不再返回 `subtitle` —— 副标题已全站下线（列保留，历史数据不丢）。
     """
     sku_list = skus if skus is not None else ([sku] if sku is not None else [])
     # 统计只算**在售（active）**的 SKU：停用的历史 SKU 还留在库里（订单外键指着它），
@@ -72,7 +74,6 @@ def _product_dict(
         "shop_id": product.shop_id,
         "category_id": product.category_id,
         "name": product.name,
-        "subtitle": product.subtitle,
         "description": product.description,
         "status": product.status,
         "main_image": product.main_image,
@@ -496,7 +497,7 @@ async def save_product_specs(
 
 
 # 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。
-PRODUCT_EDITABLE_FIELDS = ("name", "subtitle", "description", "main_image", "images")
+PRODUCT_EDITABLE_FIELDS = ("name", "description", "main_image", "images")
 
 
 @router.put("/admin/products/{product_id}")

@@ -413,6 +413,35 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 封面 **1:1**；不展示店铺/卖家；**没有「查看详情」按钮**（整卡就是入口，`role=link` + Enter/Space 可键盘打开）；
 展示**已售 / 浏览**；底部两枚按钮 `flex: 1 1 0` 均分容器，窄屏不溢出。
 
+### 商品详情页的「店铺信息」卡（`detail/ShopCard.tsx`）
+
+详情页是三栏：主图（1:1）/ 商品信息 / 店铺卡（sticky）。
+
+| 项             | 取值                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------ |
+| 头像           | **`shops.logo`**（`users` 表**没有**头像字段）；没 logo 时用店铺名首字生成色块       |
+| 用户名         | 卖家 owner 的 `username` —— **只显 username，不显 `usr_xxx`**（见下方例外）          |
+| 全站名称       | `tenants.display_name`                                                               |
+| 客服：在线客服 | 复用 IM：`POST /im/conversations {seller_id}` 建/取会话 → 跳 `/im`；未登录先引导登录 |
+| 进店逛逛       | **按钮已做好，但店铺主页本轮未做**，点击只给「建设中」提示，不留点了没反应的死按钮   |
+
+原来商品信息区的「卖家：xxx」「店铺：xxx」两个 Tag 已移除（信息搬到店铺卡），
+库存 / 已售 · 收藏 / 评分 三个 Tag 保留。
+
+> **全站「用户ID + 用户名」口径的买家侧例外**：买家看卖家只需要 `username`，
+> `usr_xxx` 是运营/平台排查用的编号，前置给买家没有意义。
+> **管理类界面（运营 / 卖家中心 / 平台）仍必须给 用户ID + 用户名**。
+
+### 副标题（subtitle）已全站下线
+
+`products.subtitle` **列保留**（历史数据不丢），但**代码不再读写**：
+
+- 展示：详情页、列表卡片、运营端商品列表副行、旧 `/portal/products/:id` 页（**该页已删**，路由保留重定向）
+- 写入：卖家中心「新增/编辑商品」表单、`PRODUCT_EDITABLE_FIELDS`、三个 schema（admin/seller create+update）
+- 搜索：`keyword` 不再匹配 `subtitle`——否则会出现「能搜到但卡片上没这个词」
+
+所以现在**没有任何入口能写入副标题**，也不需要再展示它。
+
 Standalone pages (declared with `layout: false`, so they render their own header):
 
 | Route                             | Page                           | File                              |

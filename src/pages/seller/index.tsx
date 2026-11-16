@@ -63,7 +63,6 @@ const SellerPage: React.FC = () => {
     const values = await productForm.validateFields();
     await createSellerProduct({
       name: values.name,
-      subtitle: values.subtitle,
       price_cents: Math.round(values.price * 100),
       stock: values.stock,
     });
@@ -242,9 +241,6 @@ const SellerPage: React.FC = () => {
             name="name"
             rules={[{ required: true, message: '请输入商品名称' }]}
           >
-            <Input />
-          </Form.Item>
-          <Form.Item label="副标题" name="subtitle">
             <Input />
           </Form.Item>
           <Form.Item

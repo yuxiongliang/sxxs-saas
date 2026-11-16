@@ -29,6 +29,7 @@ import {
 } from '@/services/commerce/api';
 import MallShell from '../components/MallShell';
 import ReviewsPanel from './ReviewsPanel';
+import ShopCard from './ShopCard';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 
@@ -195,7 +196,8 @@ export default function ProductDetailPage() {
             />
           ) : (
             <Row gutter={[24, 24]}>
-              <Col xs={24} md={10}>
+              {/* 主图：正方形 1:1（与列表卡片同一口径），不再写死 320px */}
+              <Col xs={24} md={9} lg={8}>
                 <Card
                   styles={{ body: { padding: 0 } }}
                   cover={
@@ -203,16 +205,20 @@ export default function ProductDetailPage() {
                       <img
                         src={skuImage}
                         alt={data.name}
+                        data-testid="product-cover"
                         style={{
                           width: '100%',
-                          height: 320,
+                          aspectRatio: '1 / 1',
                           objectFit: 'cover',
+                          display: 'block',
                         }}
                       />
                     ) : (
                       <div
+                        data-testid="product-cover"
                         style={{
-                          height: 320,
+                          width: '100%',
+                          aspectRatio: '1 / 1',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -228,7 +234,7 @@ export default function ProductDetailPage() {
                   }
                 />
               </Col>
-              <Col xs={24} md={14}>
+              <Col xs={24} md={9} lg={10}>
                 <Card>
                   <Typography.Title level={3} style={{ marginTop: 0 }}>
                     {data.name}
@@ -238,10 +244,7 @@ export default function ProductDetailPage() {
                     size={14}
                     style={{ width: '100%' }}
                   >
-                    <Typography.Text type="secondary">
-                      {data.subtitle || '—'}
-                    </Typography.Text>
-
+                    {/* 副标题已全站下线，不再展示 */}
                     <div
                       style={{
                         color: 'var(--ant-color-error)',
@@ -253,20 +256,7 @@ export default function ProductDetailPage() {
                     </div>
 
                     <Space size={8} wrap>
-                      <Tag color="blue">
-                        {t({
-                          id: 'product.detail.seller',
-                          defaultMessage: '卖家',
-                        })}
-                        ：{data.seller_name || '-'}
-                      </Tag>
-                      <Tag>
-                        {t({
-                          id: 'product.detail.shop',
-                          defaultMessage: '店铺',
-                        })}
-                        ：{data.shop_name || '-'}
-                      </Tag>
+                      {/* 「卖家 / 店铺」两个 Tag 已移到右侧店铺卡，这里不再重复展示 */}
                       <Tag color={outOfStock ? 'red' : 'green'}>
                         {t(
                           {
@@ -429,6 +419,12 @@ export default function ProductDetailPage() {
                     </Typography.Paragraph>
                   </Space>
                 </Card>
+              </Col>
+              {/* 店铺信息卡：头像/用户名/全站名称/在线客服/进店逛逛 */}
+              <Col xs={24} md={6}>
+                <div style={{ position: 'sticky', top: 16 }}>
+                  <ShopCard product={data} />
+                </div>
               </Col>
             </Row>
           )}

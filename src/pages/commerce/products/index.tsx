@@ -212,9 +212,6 @@ const ProductManagementPage: React.FC = () => {
           )}
           <div>
             <div style={{ fontWeight: 600 }}>{record.name}</div>
-            <div style={{ color: '#8c8c8c', fontSize: 12 }}>
-              {record.subtitle || '—'}
-            </div>
           </div>
         </Space>
       ),

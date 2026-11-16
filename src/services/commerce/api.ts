@@ -10,7 +10,6 @@ import type {
   OrderRecord,
   PortalOrder,
   PortalProduct,
-  PortalProductDetail,
   PayoutRecord,
   ProductRecord,
   ProductSkuRecord,
@@ -45,7 +44,6 @@ export async function listSellerProducts() {
 
 export async function createSellerProduct(data: {
   name: string;
-  subtitle?: string;
   price_cents: number;
   stock: number;
 }) {
@@ -59,7 +57,6 @@ export async function updateSellerProduct(
   id: number,
   data: {
     name?: string;
-    subtitle?: string;
     description?: string;
     main_image?: string;
     price_cents?: number;
@@ -200,7 +197,6 @@ export async function updateAdminProduct(
   id: number,
   data: {
     name?: string;
-    subtitle?: string;
     description?: string;
     main_image?: string;
     images?: string[];
@@ -330,14 +326,10 @@ export async function cancelOrder(id: number) {
 }
 
 // ---------------------------------------------------------------------------
-// 买家商城：商品详情 / 购物车 / 地址簿
+// 买家商城：购物车 / 地址簿
+// （商品详情已全部走 `/public/products/{id}`，旧的 `/portal/products/{id}` 页面已删除；
+//   副标题也随之下线，`getPortalProductDetail` 一并移除）
 // ---------------------------------------------------------------------------
-
-export async function getPortalProductDetail(id: number) {
-  return unwrap<PortalProductDetail>(
-    request(`/api/v1/portal/products/${id}`, { method: 'GET' }),
-  );
-}
 
 export async function getPortalCart() {
   return unwrap<CartSummary>(request('/api/v1/portal/cart', { method: 'GET' }));
@@ -498,7 +490,6 @@ export interface PublicProduct {
   seller_id: number;
   shop_id: number;
   name: string;
-  subtitle?: string | null;
   description?: string | null;
   status: string;
   main_image?: string | null;
@@ -506,6 +497,14 @@ export interface PublicProduct {
   video_url?: string | null;
   shop_name?: string;
   seller_name?: string;
+  // ---- 店铺信息卡（详情接口才有）----
+  /** 店铺 logo：买家侧「头像」就用它（users 表没有头像字段） */
+  shop_logo?: string | null;
+  shop_description?: string | null;
+  /** 卖家 owner 的用户名（买家侧只展示 username，不展示 usr_ 编号） */
+  seller_username?: string | null;
+  /** 全站名称（租户品牌名） */
+  tenant_name?: string | null;
   sku?: { id: number; name: string; price_cents: number; stock: number } | null;
   /** 列表：可用 SKU 的起售价/最高价（多规格展示「¥xx 起」） */
   price_min_cents?: number | null;

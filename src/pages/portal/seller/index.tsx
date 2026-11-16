@@ -117,7 +117,6 @@ const SellerPage: React.FC = () => {
     const values = await productForm.validateFields();
     await createSellerProduct({
       name: values.name,
-      subtitle: values.subtitle,
       price_cents: Math.round(values.price * 100),
       stock: values.stock,
     });
@@ -151,7 +150,6 @@ const SellerPage: React.FC = () => {
     setEditing(record);
     editForm.setFieldsValue({
       name: record.name,
-      subtitle: record.subtitle ?? '',
       description: record.description ?? '',
       price_yuan: record.price_cents / 100,
       stock: record.stock,
@@ -169,7 +167,6 @@ const SellerPage: React.FC = () => {
       const values = await editForm.validateFields();
       const result = await updateSellerProduct(editing.id, {
         name: values.name,
-        subtitle: values.subtitle,
         description: values.description,
         price_cents: Math.round(Number(values.price_yuan) * 100),
         stock: Number(values.stock),
@@ -520,9 +517,6 @@ const SellerPage: React.FC = () => {
             >
               <Input />
             </Form.Item>
-            <Form.Item label="副标题" name="subtitle">
-              <Input />
-            </Form.Item>
             <Form.Item
               label="价格（元）"
               name="price"
@@ -579,9 +573,6 @@ const SellerPage: React.FC = () => {
               name="name"
               rules={[{ required: true, message: '请输入商品名称' }]}
             >
-              <Input />
-            </Form.Item>
-            <Form.Item label="副标题" name="subtitle">
               <Input />
             </Form.Item>
             <Form.Item label="商品描述" name="description">

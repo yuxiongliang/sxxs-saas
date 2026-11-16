@@ -60,7 +60,6 @@ async def list_audit_logs(
                 "actor_public_id": public_id,
                 "action": row.action,
                 "action_label": audit_service.action_label(row.action),
-                "action_label": audit_service.action_label(row.action),
                 "target_type": row.target_type,
                 # 界面上不再拼 `#id`：直接给中文类型 + 人能读的标签
                 # （订单号 / 商品名 / 用户ID+用户名 / 角色名…）
