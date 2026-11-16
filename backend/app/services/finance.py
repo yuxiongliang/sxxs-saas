@@ -428,16 +428,13 @@ async def create_settlement_batch(
     return batch
 
 
-async def list_settlement_batches(db: AsyncSession, context: AuthContext) -> list[SettlementBatch]:
-    return list(
-        (
-            await db.scalars(
-                select(SettlementBatch)
-                .where(SettlementBatch.tenant_id == context.tenant.id)
-                .order_by(SettlementBatch.id.desc())
-            )
-        ).all()
-    )
+async def list_settlement_batches(
+    db: AsyncSession, context: AuthContext, status: str | None = None
+) -> list[SettlementBatch]:
+    stmt = select(SettlementBatch).where(SettlementBatch.tenant_id == context.tenant.id)
+    if status:
+        stmt = stmt.where(SettlementBatch.status == status)
+    return list((await db.scalars(stmt.order_by(SettlementBatch.id.desc()))).all())
 
 
 async def _get_batch(db: AsyncSession, context: AuthContext, batch_id: int) -> SettlementBatch:

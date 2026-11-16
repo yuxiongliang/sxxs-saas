@@ -53,6 +53,8 @@ export default {
   'menu.user-management': 'User Management',
   'menu.seller-management': 'Seller Management',
   'menu.product-management': 'Product Management',
+  'menu.product-management.productList': 'Products',
+  'menu.product-management.productCategories': 'Categories',
   'menu.productList': 'Products',
   'menu.productCategories': 'Categories',
   'menu.order-management': 'Order Management',

@@ -152,17 +152,32 @@ export async function confirmPortalOrder(id: number) {
   );
 }
 
-export async function listAdminSellers() {
-  return unwrap<SellerRecord[]>(request('/api/v1/admin/sellers', { method: 'GET' }));
+export async function listAdminSellers(params?: {
+  keyword?: string;
+  status?: string;
+  seller_type?: string;
+  kyc_status?: string;
+}) {
+  return unwrap<SellerRecord[]>(
+    request('/api/v1/admin/sellers', { method: 'GET', params }),
+  );
 }
 
 /** 商品分类：平台统一定义，租户端只读。 */
-export async function listAdminCategories() {
-  return unwrap<CategoryRecord[]>(request('/api/v1/admin/categories', { method: 'GET' }));
+export async function listAdminCategories(params?: { keyword?: string }) {
+  return unwrap<CategoryRecord[]>(
+    request('/api/v1/admin/categories', { method: 'GET', params }),
+  );
 }
 
-export async function listAdminProducts() {
-  return unwrap<ProductRecord[]>(request('/api/v1/admin/products', { method: 'GET' }));
+export async function listAdminProducts(params?: {
+  keyword?: string;
+  status?: string;
+  category_id?: number;
+}) {
+  return unwrap<ProductRecord[]>(
+    request('/api/v1/admin/products', { method: 'GET', params }),
+  );
 }
 
 export async function getAdminProduct(id: number) {
@@ -268,8 +283,10 @@ export async function createSellerPayout(id: number) {
   );
 }
 
-export async function listAdminOrders() {
-  return unwrap<OrderRecord[]>(request('/api/v1/admin/orders', { method: 'GET' }));
+export async function listAdminOrders(params?: { keyword?: string; status?: string }) {
+  return unwrap<OrderRecord[]>(
+    request('/api/v1/admin/orders', { method: 'GET', params }),
+  );
 }
 
 export async function getAdminOrderDetail(id: number) {
@@ -403,7 +420,6 @@ export async function listPayouts(status?: string) {
     request('/api/v1/admin/payouts', { method: 'GET', params: { status } }),
   );
 }
-
 export async function approvePayout(id: number) {
   return unwrap<PayoutRecord>(
     request(`/api/v1/admin/payouts/${id}/approve`, { method: 'POST' }),
@@ -422,9 +438,9 @@ export async function payPayout(id: number) {
   );
 }
 
-export async function listSettlementBatches() {
+export async function listSettlementBatches(params?: { status?: string }) {
   return unwrap<SettlementBatchRecord[]>(
-    request('/api/v1/admin/settlement-batches', { method: 'GET' }),
+    request('/api/v1/admin/settlement-batches', { method: 'GET', params }),
   );
 }
 

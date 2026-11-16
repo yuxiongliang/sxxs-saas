@@ -12,6 +12,7 @@ import {
   Form,
   Input,
   Modal,
+  Select,
   Space,
   Table,
   Tabs,
@@ -22,6 +23,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
+import ListToolbar from '@/components/ListToolbar';
 import {
   approvePayout,
   confirmSettlementBatch,
@@ -65,6 +67,12 @@ const FinancePage: React.FC = () => {
   const { message } = App.useApp();
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchForm] = Form.useForm();
+  // 三个 tab 各自的搜索/筛选（卖家余额与提现是按人筛，走客户端；批次走服务端状态）
+  const [sellerKeyword, setSellerKeyword] = useState('');
+  const [payoutKeyword, setPayoutKeyword] = useState('');
+  const [payoutStatus, setPayoutStatus] = useState<string>();
+  const [batchStatus, setBatchStatus] = useState<string>();
+  const [batchKeyword, setBatchKeyword] = useState('');
 
   const {
     data: sellers,
@@ -90,14 +98,25 @@ const FinancePage: React.FC = () => {
   });
 
   const { data: payouts, refetch: refetchPayouts } = useQuery({
-    queryKey: ['payouts'],
-    queryFn: () => listPayouts(),
+    queryKey: ['payouts', payoutStatus],
+    queryFn: () => listPayouts(payoutStatus),
   });
 
   const { data: batches, refetch: refetchBatches } = useQuery({
-    queryKey: ['settlement-batches'],
-    queryFn: listSettlementBatches,
+    queryKey: ['settlement-batches', batchStatus],
+    queryFn: () => listSettlementBatches({ status: batchStatus }),
   });
+
+  const matchSeller = (
+    keyword: string,
+    ...values: Array<string | null | undefined>
+  ) => {
+    const needle = keyword.trim().toLowerCase();
+    if (!needle) return true;
+    return values
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle));
+  };
 
   const refreshAll = async () => {
     await Promise.all([refetch(), refetchPayouts(), refetchBatches()]);
@@ -397,11 +416,24 @@ const FinancePage: React.FC = () => {
             label: '卖家余额',
             children: (
               <Card>
+                <ListToolbar
+                  searchPlaceholder="搜用户名 / 用户ID / 卖家名"
+                  keyword={sellerKeyword}
+                  onKeywordChange={setSellerKeyword}
+                  onRefresh={() => refetch()}
+                />
                 <Table
                   rowKey="id"
                   loading={isLoading}
                   columns={sellerColumns}
-                  dataSource={sellers ?? []}
+                  dataSource={(sellers ?? []).filter((item) =>
+                    matchSeller(
+                      sellerKeyword,
+                      item.owner_username,
+                      item.owner_public_id,
+                      item.display_name,
+                    ),
+                  )}
                   pagination={false}
                 />
               </Card>
@@ -412,10 +444,38 @@ const FinancePage: React.FC = () => {
             label: '提现审核',
             children: (
               <Card>
+                <ListToolbar
+                  searchPlaceholder="搜用户名 / 用户ID / 卖家名"
+                  keyword={payoutKeyword}
+                  onKeywordChange={setPayoutKeyword}
+                  onRefresh={() => refetchPayouts()}
+                  filters={
+                    <Select
+                      allowClear
+                      placeholder="提现状态"
+                      style={{ width: 140 }}
+                      value={payoutStatus}
+                      onChange={setPayoutStatus}
+                      options={[
+                        { label: '待审核', value: 'pending' },
+                        { label: '已通过', value: 'approved' },
+                        { label: '已驳回', value: 'rejected' },
+                        { label: '已打款', value: 'paid' },
+                      ]}
+                    />
+                  }
+                />
                 <Table
                   rowKey="id"
                   columns={payoutColumns}
-                  dataSource={payouts ?? []}
+                  dataSource={(payouts ?? []).filter((item) =>
+                    matchSeller(
+                      payoutKeyword,
+                      item.seller_username,
+                      item.seller_public_id,
+                      item.seller_name,
+                    ),
+                  )}
                   pagination={false}
                 />
               </Card>
@@ -439,10 +499,32 @@ const FinancePage: React.FC = () => {
                   </Button>
                 }
               >
+                <ListToolbar
+                  searchPlaceholder="搜批次号"
+                  keyword={batchKeyword}
+                  onKeywordChange={setBatchKeyword}
+                  onRefresh={() => refetchBatches()}
+                  filters={
+                    <Select
+                      allowClear
+                      placeholder="批次状态"
+                      style={{ width: 140 }}
+                      value={batchStatus}
+                      onChange={setBatchStatus}
+                      options={[
+                        { label: '草稿', value: 'draft' },
+                        { label: '已确认', value: 'confirmed' },
+                        { label: '已打款', value: 'paid' },
+                      ]}
+                    />
+                  }
+                />
                 <Table
                   rowKey="id"
                   columns={batchColumns}
-                  dataSource={batches ?? []}
+                  dataSource={(batches ?? []).filter((item) =>
+                    matchSeller(batchKeyword, item.batch_no),
+                  )}
                   pagination={false}
                 />
               </Card>

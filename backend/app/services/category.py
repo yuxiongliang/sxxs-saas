@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import Category, Product
@@ -31,9 +31,26 @@ def _serialize(row: Category, product_count: int = 0) -> dict:
     }
 
 
-async def list_categories(db: AsyncSession, *, include_archived: bool = False) -> list[dict]:
-    """平台级分类列表（附带被多少商品引用，便于删除前判断）。"""
-    stmt = select(Category).where(Category.tenant_id.is_(None)).order_by(Category.sort, Category.id)
+async def list_categories(
+    db: AsyncSession,
+    *,
+    include_archived: bool = False,
+    keyword: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """平台级分类列表（附带被多少商品引用，便于删除前判断）。
+
+    `keyword` 同时匹配名称与 slug；`status` 可精确筛启用/停用。
+    """
+    stmt = select(Category).where(Category.tenant_id.is_(None))
+    if status:
+        stmt = stmt.where(Category.status == status)
+    elif not include_archived:
+        stmt = stmt.where(Category.status == "active")
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(or_(Category.name.ilike(pattern), Category.slug.ilike(pattern)))
+    stmt = stmt.order_by(Category.sort, Category.id)
     rows = list((await db.scalars(stmt)).all())
     counts = dict(
         (
@@ -44,11 +61,7 @@ async def list_categories(db: AsyncSession, *, include_archived: bool = False) -
             )
         ).all()
     )
-    items = [
-        _serialize(row, int(counts.get(row.id, 0)))
-        for row in rows
-        if include_archived or row.status == "active"
-    ]
+    items = [_serialize(row, int(counts.get(row.id, 0))) for row in rows]
     return items
 
 

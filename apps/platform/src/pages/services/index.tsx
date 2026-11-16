@@ -25,11 +25,31 @@ import {
 } from '@/services/api';
 
 const CATEGORIES = [
-  { key: 'payment', label: '支付', hint: '平台不代收业务款：这里的配置只影响「跟随系统」的租户，支付类配置对租户强制自定义。' },
-  { key: 'sms', label: '短信', hint: '平台统一短信通道。租户可跟随，也可用自己申请的服务商账号。' },
-  { key: 'email', label: '邮件', hint: '平台统一 SMTP。租户跟随时，发件人显示平台，replyTo 用租户地址。' },
-  { key: 'storage', label: '存储', hint: '平台统一存储。切换后历史文件仍可访问（双读兜底）。' },
-  { key: 'amap', label: '高德地图', hint: '平台统一 key。注意 Web服务 key 有 QPS 限额，多租户共用需留意。' },
+  {
+    key: 'payment',
+    label: '支付',
+    hint: '平台不代收业务款：这里的配置只影响「跟随系统」的租户，支付类配置对租户强制自定义。',
+  },
+  {
+    key: 'sms',
+    label: '短信',
+    hint: '平台统一短信通道。租户可跟随，也可用自己申请的服务商账号。',
+  },
+  {
+    key: 'email',
+    label: '邮件',
+    hint: '平台统一 SMTP。租户跟随时，发件人显示平台，replyTo 用租户地址。',
+  },
+  {
+    key: 'storage',
+    label: '存储',
+    hint: '平台统一存储。切换后历史文件仍可访问（双读兜底）。',
+  },
+  {
+    key: 'amap',
+    label: '高德地图',
+    hint: '平台统一 key。注意 Web服务 key 有 QPS 限额，多租户共用需留意。',
+  },
 ];
 
 const SECRET_HINTS = [
@@ -55,13 +75,7 @@ function isSecret(key: string): boolean {
  * 而配置结构是后端给定的，直接根据值类型渲染即可：
  *   布尔 → Switch、数字 → InputNumber、密钥类 → 密码框、其余 → Input、对象 → 分组递归。
  */
-function ConfigFields({
-  path,
-  value,
-}: {
-  path: string[];
-  value: unknown;
-}) {
+function ConfigFields({ path, value }: { path: string[]; value: unknown }) {
   const label = path[path.length - 1];
   const name = ['config', ...path];
 
@@ -83,7 +97,10 @@ function ConfigFields({
     return (
       <Form.Item name={name} label={label}>
         {isSecret(label) ? (
-          <Input.Password autoComplete="new-password" placeholder="密钥类字段" />
+          <Input.Password
+            autoComplete="new-password"
+            placeholder="密钥类字段"
+          />
         ) : (
           <Input allowClear />
         )}
@@ -93,9 +110,11 @@ function ConfigFields({
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return (
       <Card size="small" title={label} style={{ marginBottom: 12 }}>
-        {Object.entries(value as Record<string, unknown>).map(([key, child]) => (
-          <ConfigFields key={key} path={[...path, key]} value={child} />
-        ))}
+        {Object.entries(value as Record<string, unknown>).map(
+          ([key, child]) => (
+            <ConfigFields key={key} path={[...path, key]} value={child} />
+          ),
+        )}
       </Card>
     );
   }
@@ -133,7 +152,9 @@ function CategoryPanel({ category }: { category: string }) {
       }),
     onSuccess: () => {
       message.success('已保存，跟随系统的租户立即生效');
-      queryClient.invalidateQueries({ queryKey: ['platform-setting', category] });
+      queryClient.invalidateQueries({
+        queryKey: ['platform-setting', category],
+      });
       queryClient.invalidateQueries({
         queryKey: ['platform-setting-impact', category],
       });
@@ -212,7 +233,8 @@ function CategoryPanel({ category }: { category: string }) {
               <Space>
                 <Tag color="geekblue">v{setting.data.version ?? 1}</Tag>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  后两位：{setting.data.updated_at?.slice(0, 19).replace('T', ' ')}
+                  后两位：
+                  {setting.data.updated_at?.slice(0, 19).replace('T', ' ')}
                 </Typography.Text>
               </Space>
             </Form.Item>

@@ -1,4 +1,4 @@
-import { TagsOutlined } from '@ant-design/icons';
+import { ReloadOutlined, TagsOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -52,10 +52,13 @@ export default function ProductCategoriesPage() {
   const [editing, setEditing] = useState<ProductCategoryRecord>();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<FormValues>();
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<string>();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['platform-product-categories'],
-    queryFn: listProductCategories,
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['platform-product-categories', keyword, status],
+    queryFn: () =>
+      listProductCategories({ keyword: keyword || undefined, status }),
   });
 
   const refresh = () =>
@@ -192,6 +195,28 @@ export default function ProductCategoriesPage() {
       }
     >
       <Card>
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Input.Search
+            allowClear
+            placeholder="搜分类名称 / 标识"
+            style={{ width: 280 }}
+            onSearch={(value) => setKeyword(value.trim())}
+          />
+          <Select
+            allowClear
+            placeholder="状态"
+            style={{ width: 120 }}
+            value={status}
+            onChange={setStatus}
+            options={[
+              { label: '启用', value: 'active' },
+              { label: '停用', value: 'archived' },
+            ]}
+          />
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
+            刷新
+          </Button>
+        </Space>
         <Table
           rowKey="id"
           loading={isLoading}

@@ -14,14 +14,17 @@ import {
   Input,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Table,
   Tag,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import ListToolbar from '@/components/ListToolbar';
 import {
   changeAdminProductStatus,
+  listAdminCategories,
   listAdminProducts,
 } from '@/services/commerce/api';
 import type { ProductRecord } from '@/services/commerce/types';
@@ -119,10 +122,23 @@ const ProductManagementPage: React.FC = () => {
   const [editorId, setEditorId] = useState<number>();
   const [rejectTarget, setRejectTarget] = useState<ProductRecord>();
   const [rejectForm] = Form.useForm<{ reason: string }>();
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<string>();
+  const [categoryId, setCategoryId] = useState<number>();
+
+  const categories = useQuery({
+    queryKey: ['admin-categories'],
+    queryFn: () => listAdminCategories(),
+  });
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin-products'],
-    queryFn: listAdminProducts,
+    queryKey: ['admin-products', keyword, status, categoryId],
+    queryFn: () =>
+      listAdminProducts({
+        keyword: keyword || undefined,
+        status,
+        category_id: categoryId,
+      }),
   });
 
   const openEdit = (record: ProductRecord) => {
@@ -299,6 +315,41 @@ const ProductManagementPage: React.FC = () => {
       }
     >
       <Card>
+        <ListToolbar
+          searchPlaceholder="搜商品名 / 卖家用户名 / 店铺名"
+          keyword={keyword}
+          onKeywordChange={setKeyword}
+          onRefresh={() => refetch()}
+          filters={
+            <>
+              <Select
+                allowClear
+                placeholder="状态"
+                style={{ width: 130 }}
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { label: '待审核', value: 'pending_review' },
+                  { label: '在售', value: 'on_sale' },
+                  { label: '已下架', value: 'off_sale' },
+                  { label: '已驳回', value: 'rejected' },
+                  { label: '草稿', value: 'draft' },
+                ]}
+              />
+              <Select
+                allowClear
+                placeholder="分类"
+                style={{ width: 160 }}
+                value={categoryId}
+                onChange={setCategoryId}
+                options={(categories.data ?? []).map((item) => ({
+                  label: item.name,
+                  value: item.id,
+                }))}
+              />
+            </>
+          }
+        />
         <Table
           rowKey="id"
           loading={isLoading}

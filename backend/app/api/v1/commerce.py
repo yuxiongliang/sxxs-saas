@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
@@ -116,19 +116,35 @@ def _product_dict(
 
 @router.get("/admin/sellers")
 async def admin_sellers(
+    keyword: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, max_length=16),
+    seller_type: str | None = Query(default=None, max_length=16),
+    kyc_status: str | None = Query(default=None, max_length=16),
     context: AuthContext = Depends(require_permission("seller:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = list(
-        (
-            await db.execute(
-                select(Seller, User)
-                .join(User, User.id == Seller.owner_user_id, isouter=True)
-                .where(Seller.tenant_id == context.tenant.id)
-                .order_by(Seller.id)
-            )
-        ).all()
+    """卖家列表。keyword 同时匹配 用户名 / 用户ID / 卖家名。"""
+    stmt = (
+        select(Seller, User)
+        .join(User, User.id == Seller.owner_user_id, isouter=True)
+        .where(Seller.tenant_id == context.tenant.id)
     )
+    if status:
+        stmt = stmt.where(Seller.status == status)
+    if seller_type:
+        stmt = stmt.where(Seller.seller_type == seller_type)
+    if kyc_status:
+        stmt = stmt.where(Seller.kyc_status == kyc_status)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Seller.display_name.ilike(pattern),
+                User.username.ilike(pattern),
+                User.public_id.ilike(pattern),
+            )
+        )
+    rows = list((await db.execute(stmt.order_by(Seller.id))).all())
     return ok([_seller_dict(seller, owner) for seller, owner in rows])
 
 
@@ -294,11 +310,14 @@ async def _load_product(db: AsyncSession, context: AuthContext, product_id: int)
 
 @router.get("/admin/categories", response_model=ApiResponse[list[dict]])
 async def admin_categories(
+    keyword: str | None = Query(default=None, max_length=64),
     context: AuthContext = Depends(require_permission("product:read")),
     db: AsyncSession = Depends(get_db),
 ):
     """租户端只读：商品分类是平台统一定的，租户只负责选。"""
-    return ok(await category_service.list_categories(db, include_archived=False))
+    return ok(
+        await category_service.list_categories(db, include_archived=False, keyword=keyword)
+    )
 
 
 async def _identity_map(db: AsyncSession, user_ids: set[int]) -> dict[int, tuple[str, str]]:
@@ -328,21 +347,34 @@ async def _seller_identity_map(db: AsyncSession, seller_ids: set[int]) -> dict[i
 
 @router.get("/admin/products")
 async def admin_products(
+    keyword: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, max_length=24),
+    category_id: int | None = Query(default=None),
     context: AuthContext = Depends(require_permission("product:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = list(
-        (
-            await db.execute(
-                select(Product, Seller, Shop, User)
-                .join(Seller, Seller.id == Product.seller_id, isouter=True)
-                .join(Shop, Shop.id == Product.shop_id, isouter=True)
-                .join(User, User.id == Seller.owner_user_id, isouter=True)
-                .where(Product.tenant_id == context.tenant.id)
-                .order_by(Product.id.desc())
-            )
-        ).all()
+    """商品列表。keyword 同时匹配 商品名 / 卖家用户名 / 店铺名。"""
+    stmt = (
+        select(Product, Seller, Shop, User)
+        .join(Seller, Seller.id == Product.seller_id, isouter=True)
+        .join(Shop, Shop.id == Product.shop_id, isouter=True)
+        .join(User, User.id == Seller.owner_user_id, isouter=True)
+        .where(Product.tenant_id == context.tenant.id)
     )
+    if status:
+        stmt = stmt.where(Product.status == status)
+    if category_id is not None:
+        stmt = stmt.where(Product.category_id == category_id)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Product.name.ilike(pattern),
+                Shop.name.ilike(pattern),
+                User.username.ilike(pattern),
+            )
+        )
+    rows = list((await db.execute(stmt.order_by(Product.id.desc()))).all())
     skus = await _product_skus(db, [row[0].id for row in rows])
     return ok(
         [
@@ -610,16 +642,29 @@ async def update_product_sku(
 
 @router.get("/admin/orders")
 async def admin_orders(
+    keyword: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, max_length=24),
     context: AuthContext = Depends(require_permission("order:read:tenant")),
     db: AsyncSession = Depends(get_db),
 ):
-    orders = list(
-        (
-            await db.scalars(
-                select(Order).where(Order.tenant_id == context.tenant.id).order_by(Order.id.desc())
-            )
-        ).all()
+    """订单列表。keyword 同时匹配 订单号 / 买家用户名 / 买家用户ID。"""
+    stmt = (
+        select(Order)
+        .join(User, User.id == Order.buyer_id, isouter=True)
+        .where(Order.tenant_id == context.tenant.id)
     )
+    if status:
+        stmt = stmt.where(Order.status == status)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Order.order_no.ilike(pattern),
+                User.username.ilike(pattern),
+                User.public_id.ilike(pattern),
+            )
+        )
+    orders = list((await db.scalars(stmt.order_by(Order.id.desc()))).all())
     buyers = await _identity_map(db, {item.buyer_id for item in orders})
     payload = []
     for item in orders:

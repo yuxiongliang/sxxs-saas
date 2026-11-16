@@ -589,8 +589,13 @@ export interface ProductCategoryRecord {
   product_count: number;
 }
 
-export const listProductCategories = () =>
-  apiGet<ProductCategoryRecord[]>('/platform/categories');
+export const listProductCategories = (params?: { keyword?: string; status?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.keyword) query.set('keyword', params.keyword);
+  if (params?.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiGet<ProductCategoryRecord[]>(`/platform/categories${suffix}`);
+};
 
 export const createProductCategory = (data: {
   name: string;

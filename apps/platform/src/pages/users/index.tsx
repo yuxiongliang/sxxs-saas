@@ -7,6 +7,7 @@ import {
   Card,
   Input,
   Popconfirm,
+  Select,
   Space,
   Table,
   Tag,
@@ -23,6 +24,7 @@ export default function PlatformUsersPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<string>();
 
   const toggle = useMutation({
     mutationFn: (record: PlatformUserRecord) =>
@@ -37,9 +39,13 @@ export default function PlatformUsersPage() {
     onError: (error: Error) => message.error(error.message),
   });
   const users = useQuery({
-    queryKey: ['platform-users', keyword],
+    queryKey: ['platform-users', keyword, status],
     queryFn: () =>
-      listPlatformUsers({ pageSize: 100, keyword: keyword || undefined }),
+      listPlatformUsers({
+        pageSize: 100,
+        keyword: keyword || undefined,
+        status,
+      }),
   });
 
   const columns: ColumnsType<PlatformUserRecord> = [
@@ -124,12 +130,23 @@ export default function PlatformUsersPage() {
       subTitle="全站用户（跨租户，只读）：租户控制台只能看到自己租户的成员"
       icon={<TeamOutlined />}
       extra={
-        <Space>
+        <Space wrap>
           <Input.Search
             allowClear
             placeholder="用户名 / 昵称 / 邮箱 / 用户ID"
             style={{ width: 300 }}
             onSearch={(value) => setKeyword(value.trim())}
+          />
+          <Select
+            allowClear
+            placeholder="账号状态"
+            style={{ width: 130 }}
+            value={status}
+            onChange={setStatus}
+            options={[
+              { label: '启用', value: 'active' },
+              { label: '停用', value: 'disabled' },
+            ]}
           />
           <Button icon={<ReloadOutlined />} onClick={() => users.refetch()}>
             刷新

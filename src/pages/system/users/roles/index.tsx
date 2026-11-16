@@ -24,6 +24,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import ListToolbar from '@/components/ListToolbar';
 import {
   createRole,
   deleteRole,
@@ -46,10 +47,11 @@ const RoleManagementPage: React.FC = () => {
   const [permData, setPermData] = useState<RolePermissions>();
   const [permSelected, setPermSelected] = useState<string[]>([]);
   const [permSaving, setPermSaving] = useState(false);
+  const [keyword, setKeyword] = useState('');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['roles', 'page'],
-    queryFn: () => listRoles({ pageSize: 200 }),
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['roles', 'page', keyword],
+    queryFn: () => listRoles({ pageSize: 200, keyword: keyword || undefined }),
   });
 
   const openCreate = () => {
@@ -219,6 +221,12 @@ const RoleManagementPage: React.FC = () => {
       }
     >
       <Card>
+        <ListToolbar
+          searchPlaceholder="搜角色名称 / 编码 / 描述"
+          keyword={keyword}
+          onKeywordChange={setKeyword}
+          onRefresh={() => refetch()}
+        />
         <Table
           rowKey="id"
           loading={isLoading}

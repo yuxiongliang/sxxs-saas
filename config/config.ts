@@ -133,11 +133,12 @@ export default defineConfig({
    * @doc https://umijs.org/docs/max/i18n
    */
   locale: {
-    // default zh-CN
+    // 默认为中文：这个控制台的业务文案全是硬编码中文，
+    // 跟着 navigator.language 走会出现「菜单英文 + 内容中文」的撕裂感。
+    // 用户仍可用头部语言切换器显式改语言（会写 localStorage，优先于这个默认值）。
     default: 'zh-CN',
     antd: true,
-    // default true, when it is true, will use `navigator.language` overwrite default
-    baseNavigator: true,
+    baseNavigator: false,
   },
   /**
    * @name antd 插件

@@ -116,10 +116,11 @@ async def pay_payout(
 
 @router.get("/settlement-batches", response_model=ApiResponse[list[SettlementBatchOut]])
 async def list_settlement_batches(
+    status: str | None = Query(default=None, max_length=16),
     context: AuthContext = Depends(require_permission("payout:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    batches = await finance_service.list_settlement_batches(db, context)
+    batches = await finance_service.list_settlement_batches(db, context, status)
     return ok([SettlementBatchOut.model_validate(item) for item in batches])
 
 

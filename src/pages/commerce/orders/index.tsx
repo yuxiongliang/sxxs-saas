@@ -10,6 +10,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Select,
   Space,
   Table,
   Tag,
@@ -17,6 +18,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import ListToolbar from '@/components/ListToolbar';
 import {
   cancelOrder,
   getAdminOrderDetail,
@@ -52,10 +54,12 @@ const OrderManagementPage: React.FC = () => {
   const [selected, setSelected] = useState<SellerOrderRecord>();
   const [shipForm] = Form.useForm();
   const [refundForm] = Form.useForm();
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<string>();
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin-orders'],
-    queryFn: listAdminOrders,
+    queryKey: ['admin-orders', keyword, status],
+    queryFn: () => listAdminOrders({ keyword: keyword || undefined, status }),
   });
 
   const openDetail = async (record: OrderRecord) => {
@@ -264,6 +268,25 @@ const OrderManagementPage: React.FC = () => {
       }
     >
       <Card>
+        <ListToolbar
+          searchPlaceholder="搜订单号 / 买家用户名 / 用户ID"
+          keyword={keyword}
+          onKeywordChange={setKeyword}
+          onRefresh={() => refetch()}
+          filters={
+            <Select
+              allowClear
+              placeholder="订单状态"
+              style={{ width: 150 }}
+              value={status}
+              onChange={setStatus}
+              options={Object.entries(ORDER_STATUS).map(([value, label]) => ({
+                label,
+                value,
+              }))}
+            />
+          }
+        />
         <Table
           rowKey="id"
           loading={isLoading}

@@ -25,10 +25,16 @@ WRITE = "platform:tenant:manage"
 @router.get("", response_model=ApiResponse[list[dict]])
 async def list_categories(
     include_archived: bool = Query(default=True),
+    keyword: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, pattern="^(active|archived)$"),
     _context=Depends(require_platform_permission(READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    return ok(await category_service.list_categories(db, include_archived=include_archived))
+    return ok(
+        await category_service.list_categories(
+            db, include_archived=include_archived, keyword=keyword, status=status
+        )
+    )
 
 
 @router.post("", response_model=ApiResponse[dict])
