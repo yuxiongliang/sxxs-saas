@@ -104,7 +104,18 @@ async def test_resaving_keeps_prices_and_deactivates_missing_combos(client, admi
     assert kept_row.price_cents == 12345
 
 
-async def test_on_sale_product_is_bounced_to_review(client, admin_token):
+async def test_operator_saving_specs_does_not_bounce_an_on_sale_product(
+    client, admin_token
+):
+    """运营端保存规格**不应该**把在售商品打回待审核。
+
+    这条原来是反的（断言会变成 pending_review）。那样一来，运营只是在编辑器里
+    换了个主图 / 改了个库存，商品就会立刻从「在售」变「待审核」，买家端直接搜不到——
+    表现得就像「主图保存了但不显示」。运营本身就是审核方，不需要自我重审。
+
+    卖家改内容仍会打回待审，那个逻辑在 `seller_center.update_seller_product`，
+    由 `test_seller_product_management.py` 覆盖。
+    """
     product = await _product(client, admin_token)
     await client.post(
         f"/api/v1/admin/products/{product['id']}/status",
@@ -113,7 +124,7 @@ async def test_on_sale_product_is_bounced_to_review(client, admin_token):
     )
     response = await _save_specs(client, admin_token, product["id"], SIZE_COLOR)
     assert response.status_code == 200, response.text
-    assert response.json()["data"]["status"] == "pending_review"
+    assert response.json()["data"]["status"] == "on_sale"
 
 
 async def test_more_than_three_groups_is_rejected(client, admin_token):

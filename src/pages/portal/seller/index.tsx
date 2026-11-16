@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import MediaField from '@/components/MediaField';
 import ProductFavoriteTable from '@/components/ProductFavoriteTable';
 import ProductReviewTable from '@/components/ProductReviewTable';
 import PortalShell from '@/pages/portal/components/PortalShell';
@@ -119,6 +120,8 @@ const SellerPage: React.FC = () => {
       name: values.name,
       price_cents: Math.round(values.price * 100),
       stock: values.stock,
+      main_image: values.main_image || undefined,
+      video_url: values.video_url || undefined,
     });
     message.success('商品已提交审核');
     setProductOpen(false);
@@ -151,6 +154,8 @@ const SellerPage: React.FC = () => {
     editForm.setFieldsValue({
       name: record.name,
       description: record.description ?? '',
+      main_image: record.main_image ?? '',
+      video_url: record.video_url ?? '',
       price_yuan: record.price_cents / 100,
       stock: record.stock,
       commission_percent:
@@ -168,6 +173,8 @@ const SellerPage: React.FC = () => {
       const result = await updateSellerProduct(editing.id, {
         name: values.name,
         description: values.description,
+        main_image: values.main_image || undefined,
+        video_url: values.video_url || undefined,
         price_cents: Math.round(Number(values.price_yuan) * 100),
         stock: Number(values.stock),
         ...(typeof values.commission_percent === 'number'
@@ -531,6 +538,13 @@ const SellerPage: React.FC = () => {
             >
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
+            {/* 卖家新建商品也必须能传主图，否则前台只有占位图 */}
+            <Form.Item label="商品主图" name="main_image">
+              <MediaField kind="image" title="选择商品主图" boxSize={96} />
+            </Form.Item>
+            <Form.Item label="商品视频（可选）" name="video_url">
+              <MediaField kind="video" title="选择商品视频" boxSize={96} />
+            </Form.Item>
           </Form>
         </Modal>
 
@@ -577,6 +591,12 @@ const SellerPage: React.FC = () => {
             </Form.Item>
             <Form.Item label="商品描述" name="description">
               <Input.TextArea rows={3} placeholder="成色、规格、卖点" />
+            </Form.Item>
+            <Form.Item label="商品主图" name="main_image">
+              <MediaField kind="image" title="选择商品主图" boxSize={96} />
+            </Form.Item>
+            <Form.Item label="商品视频（可选）" name="video_url">
+              <MediaField kind="video" title="选择商品视频" boxSize={96} />
             </Form.Item>
             <Form.Item
               label="价格（元）"

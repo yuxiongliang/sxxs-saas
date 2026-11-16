@@ -409,6 +409,33 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 刻意不用加权打分 —— 权重一变结果就漂，既没法解释也没法验收。
 销量/收藏/在售价全部是 SQL 子查询一次算完，不在 Python 里循环。
 
+### 商品图片 / 视频字段（`components/MediaField`）
+
+商品编辑器的「主图」「商品视频」、站点品牌的 Logo/Favicon 共用同一个组件：
+**选中即预览**（图片 `<img>`、视频 `<video>`），不再用只读输入框显示链接，也不显示 URL 文本。
+
+四条硬规矩（都是踩过的坑）：
+
+1. **存相对直链** `/api/v1/attachments/public/{id}`，不存附件表的绝对 url（换域名会打错站）。
+2. **引用即发布**：附件上传默认 `tenant` 可见，`/public/{id}` 只放行 `public`。
+   主图 / 视频 / SKU 图 / 规格值图在**保存时**统一调 `publish_by_public_url`，否则前台破图。
+3. **刚选完的预览用 `record.url`**：那一瞬附件还没发布，直链仍是 404。
+4. **槽位类型必须匹配**：主图槽选了视频直接提示拒绝，**不能静默清空主图**
+   （以前会把 `main_image` 至于空，用户以为存上了，回前台发现图没了）。
+
+### 运营端保存**不再**把在售商品打回待审核
+
+`catalog_specs.save_specs` 原来无条件 `on_sale → pending_review`，结果运营只是换了个主图、
+改了个库存，商品就立刻下线待审——看上去就是「图保存了但不显示」。
+
+口径：**运营自己就是审核方**，运营端（`/admin/products/*`）的保存不改状态；
+**卖家**改内容仍会打回待审（`seller_center.update_seller_product`）。
+
+### 卖家也要能传主图/视频
+
+`SellerProductCreate` 原来只有 name/price/stock/category：卖家中心发的新品永远只有占位图。
+现在卖家中心「新增商品」「编辑商品」都能选主图与视频，后端创建/更新时同样发布附件。
+
 **商品卡片**（`src/pages/products/components/ProductCard.tsx`）：
 封面 **1:1**；不展示店铺/卖家；**没有「查看详情」按钮**（整卡就是入口，`role=link` + Enter/Space 可键盘打开）；
 展示**已售 / 浏览**；底部两枚按钮 `flex: 1 1 0` 均分容器，窄屏不溢出。

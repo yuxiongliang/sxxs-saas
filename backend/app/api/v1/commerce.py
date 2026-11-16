@@ -497,7 +497,7 @@ async def save_product_specs(
 
 
 # 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。
-PRODUCT_EDITABLE_FIELDS = ("name", "description", "main_image", "images")
+PRODUCT_EDITABLE_FIELDS = ("name", "description", "main_image", "video_url", "images")
 
 
 @router.put("/admin/products/{product_id}")
@@ -528,6 +528,10 @@ async def update_product(
         # 商品主图要给匿名访客看：引用的附件必须发布，否则前台只显示破图
         await attachment_service.publish_by_public_url(
             db, context.tenant.id, product.main_image
+        )
+    if "video_url" in applied:
+        await attachment_service.publish_by_public_url(
+            db, context.tenant.id, product.video_url
         )
     if "images" in applied:
         for image in product.images or []:

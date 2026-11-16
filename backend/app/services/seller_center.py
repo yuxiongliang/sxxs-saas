@@ -78,6 +78,7 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
                 "name": product.name,
                 "description": product.description,
                 "main_image": product.main_image,
+                "video_url": product.video_url,
                 "status": product.status,
                 # 驳回原因要给卖家看，否则只能反复重提
                 "reject_reason": product.reject_reason,
@@ -112,14 +113,17 @@ async def update_seller_product(
     data = payload.model_dump(exclude_unset=True)
 
     content_changed = False
-    for key in ("name", "description", "main_image"):
+    for key in ("name", "description", "main_image", "video_url"):
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
             content_changed = True
-    if content_changed and "main_image" in data:
-        # 卖家上传的主图也要发布给匿名访客看（原来只有控制台路径做了，卖家路径漏了）
+    if content_changed and ("main_image" in data or "video_url" in data):
+        # 卖家上传的主图/视频也要发布给匿名访客看（原来只有控制台路径做了，卖家路径漏了）
         await attachment_service.publish_by_public_url(
             db, context.tenant.id, product.main_image
+        )
+        await attachment_service.publish_by_public_url(
+            db, context.tenant.id, product.video_url
         )
 
     if data.get("commission_bps") is not None:
@@ -266,11 +270,20 @@ async def create_seller_product(
         shop_id=shop.id,
         category_id=payload.category_id,
         name=payload.name,
+        main_image=payload.main_image,
+        video_url=payload.video_url,
         status="pending_review",
         created_by=context.user.id,
     )
     db.add(product)
     await db.flush()
+    # 主图/视频是给匿名买家看的，引用的附件必须发布
+    await attachment_service.publish_by_public_url(
+        db, context.tenant.id, product.main_image
+    )
+    await attachment_service.publish_by_public_url(
+        db, context.tenant.id, product.video_url
+    )
     db.add(
         ProductSku(
             tenant_id=context.tenant.id,

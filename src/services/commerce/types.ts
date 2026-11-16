@@ -149,6 +149,7 @@ export interface SellerProductRecord {
   name: string;
   description?: string | null;
   main_image?: string | null;
+  video_url?: string | null;
   status: string;
   /** 被驳回时运营给的原因，重新提交后清空 */
   reject_reason?: string | null;

@@ -25,6 +25,8 @@ class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
+    # 商品视频：编辑器里已经能选，之前 schema 没这个字段 → 选了也不保存
+    video_url: str | None = Field(default=None, max_length=512)
     images: list[str] | None = None
     category_id: int | None = None
     # 租户向卖家抽佣的比例（万分比）：>=100 即 1%；不传 = 保持原值
@@ -49,6 +51,10 @@ class SellerProductCreate(BaseModel):
     price_cents: int = Field(gt=0)
     stock: int = Field(ge=0)
     category_id: int | None = None
+    # 卖家也要能传主图/视频：卖家中心原来根本没收这两个字段，
+    # 新建的商品永远没有主图，详情页只剩占位图。
+    main_image: str | None = Field(default=None, max_length=512)
+    video_url: str | None = Field(default=None, max_length=512)
 
 
 class SellerProductUpdate(BaseModel):
@@ -63,6 +69,7 @@ class SellerProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     main_image: str | None = Field(default=None, max_length=512)
+    video_url: str | None = Field(default=None, max_length=512)
     sku_id: int | None = Field(default=None, description="要改价/改库存的 SKU；单规格可省略")
     price_cents: int | None = Field(default=None, gt=0, le=100_000_000)
     stock: int | None = Field(default=None, ge=0, le=1_000_000)

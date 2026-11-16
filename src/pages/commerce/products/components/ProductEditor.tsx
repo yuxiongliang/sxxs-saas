@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 import AttachmentPicker from '@/components/AttachmentPicker';
+import MediaField from '@/components/MediaField';
 import {
   getAdminProduct,
   listAdminCategories,
@@ -51,8 +52,6 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const MAX_GROUPS = 3;
 
 type PickerTarget =
-  | { kind: 'main_image' }
-  | { kind: 'video' }
   | { kind: 'sku_image'; comboKey: string }
   | {
       kind: 'spec';
@@ -188,18 +187,10 @@ export default function ProductEditor({
     setPreviewOverride(undefined);
   };
 
-  const applyPicked = (url: string, asVideo: boolean) => {
+  const applyPicked = (url: string, _asVideo: boolean) => {
     if (!picker) return;
     const target = picker;
     setPicker(undefined);
-    if (target.kind === 'main_image') {
-      form.setFieldValue('main_image', asVideo ? '' : url);
-      return;
-    }
-    if (target.kind === 'video') {
-      form.setFieldValue('video_url', asVideo ? url : '');
-      return;
-    }
     if (target.kind === 'sku_image') {
       setSkuDraft((prev) => ({
         ...prev,
@@ -263,6 +254,8 @@ export default function ProductEditor({
         description: values.description,
         category_id: values.category_id ?? null,
         main_image: values.main_image ?? '',
+        // 视频以前根本没传，选了也白选 —— 现在一并保存
+        video_url: values.video_url ?? '',
         ...(typeof values.commission_percent === 'number'
           ? { commission_bps: Math.round(values.commission_percent * 100) }
           : {}),
@@ -389,25 +382,15 @@ export default function ProductEditor({
           ) : null}
           <Flex gap={24} wrap>
             <Form.Item label="主图" name="main_image" style={{ flex: 1 }}>
-              <Input readOnly placeholder="点右侧按钮从附件中心选图" />
+              <MediaField kind="image" title="选择商品主图" boxSize={104} />
             </Form.Item>
-            <Button
-              style={{ marginTop: 30 }}
-              onClick={() => setPicker({ kind: 'main_image' })}
+            <Form.Item
+              label="商品视频（可选）"
+              name="video_url"
+              style={{ flex: 1 }}
             >
-              选择主图
-            </Button>
-          </Flex>
-          <Flex gap={24} wrap>
-            <Form.Item label="商品视频" name="video_url" style={{ flex: 1 }}>
-              <Input readOnly placeholder="可选，从附件中心选视频" />
+              <MediaField kind="video" title="选择商品视频" boxSize={104} />
             </Form.Item>
-            <Button
-              style={{ marginTop: 30 }}
-              onClick={() => setPicker({ kind: 'video' })}
-            >
-              选择视频
-            </Button>
           </Flex>
         </Form>
       ) : (
@@ -752,14 +735,12 @@ export default function ProductEditor({
       <AttachmentPicker
         open={Boolean(picker)}
         category={
-          picker?.kind === 'video' ||
-          (picker?.kind === 'spec' && picker.media === 'video')
+          picker?.kind === 'spec' && picker.media === 'video'
             ? 'video'
             : 'image'
         }
         title={
-          picker?.kind === 'video' ||
-          (picker?.kind === 'spec' && picker.media === 'video')
+          picker?.kind === 'spec' && picker.media === 'video'
             ? '选择视频'
             : '选择图片'
         }

@@ -1,28 +1,15 @@
 import { PictureOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useModel } from '@umijs/max';
-import {
-  App,
-  Button,
-  Card,
-  Divider,
-  Flex,
-  Form,
-  Input,
-  Space,
-  Spin,
-  Typography,
-  theme,
-} from 'antd';
-import React, { useState } from 'react';
-import AttachmentPicker from '@/components/AttachmentPicker';
+import { App, Button, Card, Divider, Form, Input, Spin } from 'antd';
+import React from 'react';
+import MediaField from '@/components/MediaField';
 import SettingPage from '@/pages/system/components/SettingPage';
 import {
   applyBrandDescription,
   applyBrandFavicon,
 } from '@/services/publicBrand';
 import { getTenantBrand, saveTenantBrand } from '@/services/system/api';
-import type { AttachmentRecord } from '@/services/system/types';
 
 interface FormValues {
   display_name: string;
@@ -32,105 +19,6 @@ interface FormValues {
   icp_number: string;
   icp_license: string;
 }
-
-/** 与后端 `api/v1/tenant_brand.py` 的 PUBLIC_ATTACHMENT_PREFIX 保持一致 */
-const PUBLIC_ATTACHMENT_PREFIX = '/api/v1/attachments/public/';
-
-/**
- * 图片字段：点缩略图或按钮弹附件中心，选图即用。
- *
- * 存的是 `/api/v1/attachments/public/{id}` 这种**相对**直链，而不是附件表里的绝对
- * url —— 绝对 url 指向后端 public_base_url，租户换了自己的域名就会打错站。
- * 保存时后端会把选中的附件标成 public，否则这个直链取不到图。
- *
- * 刚选完还没保存时，`/public/{id}` 仍是 404（附件还是 tenant 可见），
- * 所以预览临时用附件本身的 `url`，保存后自动换成稳定直链。
- */
-const ImageField: React.FC<{
-  value?: string;
-  onChange?: (value: string) => void;
-  /** 弹窗标题，如「选择站点 Logo」 */
-  title: string;
-  /** 预览框边长（logo 大一点，favicon 小一点） */
-  boxSize?: number;
-}> = ({ value, onChange, title, boxSize = 96 }) => {
-  const { token } = theme.useToken();
-  const [open, setOpen] = useState(false);
-  const [freshPreview, setFreshPreview] = useState<string>();
-  const preview = freshPreview ?? value;
-
-  return (
-    <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-      <Flex align="center" gap={16}>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          title="点击选择图片"
-          style={{
-            width: boxSize,
-            height: boxSize,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            padding: 0,
-            border: `1px dashed ${token.colorBorder}`,
-            borderRadius: 8,
-            background: token.colorFillQuaternary,
-            cursor: 'pointer',
-          }}
-        >
-          {preview ? (
-            <img
-              src={preview}
-              alt={title}
-              style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-              }}
-            />
-          ) : (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              点击选图
-            </Typography.Text>
-          )}
-        </button>
-        <Space>
-          <Button icon={<PictureOutlined />} onClick={() => setOpen(true)}>
-            {value ? '更换图片' : '从附件中心选择'}
-          </Button>
-          {value ? (
-            <Button
-              danger
-              onClick={() => {
-                setFreshPreview(undefined);
-                onChange?.('');
-              }}
-            >
-              清除
-            </Button>
-          ) : null}
-        </Space>
-      </Flex>
-      {value ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          已选：{value}
-        </Typography.Text>
-      ) : null}
-      <AttachmentPicker
-        open={open}
-        title={title}
-        onCancel={() => setOpen(false)}
-        onSelect={(record: AttachmentRecord) => {
-          setFreshPreview(record.url);
-          onChange?.(`${PUBLIC_ATTACHMENT_PREFIX}${record.id}`);
-        }}
-      />
-    </Space>
-  );
-};
-
 export default function TenantBrandPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
@@ -221,7 +109,7 @@ export default function TenantBrandPage() {
             label="站点 Logo"
             extra="从附件中心选图；设了 logo 后控制台头部只显示 logo（占掉标题位），买家商城顶部同样换图"
           >
-            <ImageField title="选择站点 Logo" boxSize={96} />
+            <MediaField kind="image" title="选择站点 Logo" boxSize={96} />
           </Form.Item>
 
           <Form.Item
@@ -229,7 +117,7 @@ export default function TenantBrandPage() {
             label="浏览器图标（Favicon）"
             extra="浏览器标签页上的小图标，建议用 32×32 或 64×64 的方图"
           >
-            <ImageField title="选择浏览器图标" boxSize={48} />
+            <MediaField kind="image" title="选择浏览器图标" boxSize={48} />
           </Form.Item>
 
           <Divider titlePlacement="start" plain>

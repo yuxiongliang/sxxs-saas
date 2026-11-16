@@ -46,6 +46,9 @@ export async function createSellerProduct(data: {
   name: string;
   price_cents: number;
   stock: number;
+  category_id?: number | null;
+  main_image?: string;
+  video_url?: string;
 }) {
   return unwrap<{ id: number; name: string; status: string }>(
     request('/api/v1/portal/seller/products', { method: 'POST', data }),
@@ -59,6 +62,7 @@ export async function updateSellerProduct(
     name?: string;
     description?: string;
     main_image?: string;
+    video_url?: string;
     price_cents?: number;
     stock?: number;
     commission_bps?: number;
@@ -199,6 +203,7 @@ export async function updateAdminProduct(
     name?: string;
     description?: string;
     main_image?: string;
+    video_url?: string;
     images?: string[];
     category_id?: number | null;
     commission_bps?: number;

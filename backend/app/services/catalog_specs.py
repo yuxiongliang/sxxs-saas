@@ -28,6 +28,7 @@ from app.models.catalog import (
     ProductSpecValue,
 )
 from app.schemas.commerce import ProductSpecsUpdate
+from app.services import attachment as attachment_service
 
 MAX_GROUPS = 3
 
@@ -209,10 +210,27 @@ async def save_specs(
         if key not in combo_keys:
             sku.status = "inactive"
 
-    # 4) 规格变了就得重新审：在售商品直接打回待审核
-    if product.status == "on_sale":
-        product.status = "pending_review"
-        product.reject_reason = None
+    # 4) **不再自动打回待审核**。
+    #
+    # 这里原来无条件把在售商品改成 `pending_review`，结果：运营只是在编辑器里换了个
+    # 主图 / 改了个库存，商品也会立刻从「在售」变成「待审核」，买家端直接搜不到——
+    # 看起来就像「主图保存了但不显示」。
+    #
+    # 口径：**运营自己就是审核方**，运营端的保存不需要自我重审；
+    # 卖家改内容仍会打回待审（在 `seller_center.update_seller_product` 里，与这里无关）。
+
+    # 5) 规格值 / SKU 上的图与视频也要对匿名访客可见，否则前台就是破图
+    for group in payload.groups:
+        for value in group.values:
+            await attachment_service.publish_by_public_url(
+                db, tenant_id, value.image_url
+            )
+            await attachment_service.publish_by_public_url(
+                db, tenant_id, value.video_url
+            )
+    for item in payload.skus:
+        await attachment_service.publish_by_public_url(db, tenant_id, item.image_url)
+        await attachment_service.publish_by_public_url(db, tenant_id, item.video_url)
 
     await db.commit()
     for sku in kept:
