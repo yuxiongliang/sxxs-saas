@@ -337,8 +337,18 @@ export default function ProductEditor({
         items={[{ title: '基础信息' }, { title: '规格' }]}
       />
 
-      {step === 0 ? (
-        <Form form={form} layout="vertical">
+      {/*
+        两步内容是「显示/隐藏」而不是「挂载/卸载」。
+
+        以前这里是 `step === 0 ? <Form>...</Form> : <规格区/>`：切到第 2 步时
+        `<Form>` 整个被卸载，antd 的字段 store 跟着没了，而「保存」按钮**只在第 2 步出现**
+        —— 于是点保存时 `validateFields()` 拿不到主图/视频/名称/分类等基础字段，
+        提交上去的 `main_image` 是空串，把库里的图**反而清掉了**。
+
+        现在 Form 始终挂载，只切换可见性，字段值不会丢。
+      */}
+      <Form form={form} layout="vertical">
+        <div style={{ display: step === 0 ? 'block' : 'none' }}>
           <Form.Item
             label="商品名称"
             name="name"
@@ -392,8 +402,10 @@ export default function ProductEditor({
               <MediaField kind="video" title="选择商品视频" boxSize={104} />
             </Form.Item>
           </Flex>
-        </Form>
-      ) : (
+        </div>
+      </Form>
+
+      <div style={{ display: step === 1 ? 'block' : 'none' }}>
         <Flex gap={16} align="flex-start">
           <div style={{ flex: 1, minWidth: 0 }}>
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
@@ -730,7 +742,7 @@ export default function ProductEditor({
             </Flex>
           </div>
         </Flex>
-      )}
+      </div>
 
       <AttachmentPicker
         open={Boolean(picker)}

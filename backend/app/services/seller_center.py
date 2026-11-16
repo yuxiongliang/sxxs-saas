@@ -111,6 +111,10 @@ async def update_seller_product(
     """卖家改自己的商品。在售商品改动后自动打回待审核。"""
     product = await _own_product(db, context, product_id)
     data = payload.model_dump(exclude_unset=True)
+    # 媒体字段的空串归一成 NULL（前端「清除」传 `''`）
+    for media_key in ("main_image", "video_url"):
+        if media_key in data and not data[media_key]:
+            data[media_key] = None
 
     content_changed = False
     for key in ("name", "description", "main_image", "video_url"):
@@ -270,8 +274,8 @@ async def create_seller_product(
         shop_id=shop.id,
         category_id=payload.category_id,
         name=payload.name,
-        main_image=payload.main_image,
-        video_url=payload.video_url,
+        main_image=payload.main_image or None,
+        video_url=payload.video_url or None,
         status="pending_review",
         created_by=context.user.id,
     )

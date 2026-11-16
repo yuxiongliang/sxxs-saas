@@ -511,6 +511,10 @@ async def update_product(
     data = payload.model_dump(exclude_unset=True)
     if "category_id" in data:
         await category_service.ensure_category_usable(db, data["category_id"])
+    # 媒体字段的空串归一成 NULL：前端「清除」传 `''`，库里不应该出现空字符串
+    for media_key in ("main_image", "video_url"):
+        if media_key in data and not data[media_key]:
+            data[media_key] = None
     applied: dict[str, object] = {}
     for key in PRODUCT_EDITABLE_FIELDS:
         if key in data:

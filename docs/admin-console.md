@@ -409,6 +409,20 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 刻意不用加权打分 —— 权重一变结果就漂，既没法解释也没法验收。
 销量/收藏/在售价全部是 SQL 子查询一次算完，不在 Python 里循环。
 
+### 商品编辑器是两步表单，但 `<Form>` 必须常驻
+
+商品编辑弹窗分「基础信息 / 规格」两步，**`<Form>` 用 `display` 切换可见性，不能用条件渲染挂卸**。
+
+原因：切到第 2 步时若 `<Form>` 被卸载，antd 的字段 store 跟着消失，而「保存」按钮
+**只在第 2 步出现** —— 点保存时 `validateFields()` 读不到主图/视频/名称/分类，
+提交的 `main_image` 是空串，**反而把库里的图清掉**。用户看到的就是「选了图保存无效，重开是空的」。
+
+回归用例：`e2e/product-editor.e2e.spec.ts`（选图 → 切步 → 回切 → 保存 → 重开回显）。
+
+> 附带一个坑：e2e 里不要用 `.ant-modal-content` 定位弹窗（antd 升级后 class 会变），
+> 用 `getByRole('dialog', { name: /编辑商品/ })`；按钮同理用 `/保\s*存/` 这类正则，
+> 因为 antd 会在两个汉字的按钮文案中间插空格。
+
 ### 商品图片 / 视频字段（`components/MediaField`）
 
 商品编辑器的「主图」「商品视频」、站点品牌的 Logo/Favicon 共用同一个组件：
