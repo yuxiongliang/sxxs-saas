@@ -13,6 +13,9 @@ Other: `npm run openapi` (regenerate `src/services/`), `npm run simple` (**irrev
 ## Critical Rules
 
 - **Never edit `src/services/ant-design-pro/`** — auto-generated, regenerate with `npm run openapi`
+- **dev server 在跑时不要 `npm run build`** —— 两者都写 `src/.umi`，会让 dev 的 chunk 图与磁盘不一致：
+  页面卡在「正在加载资源」、控制台报 `Unexpected token '<'`。顺序：先停 dev → build → 再起 dev。
+  重启与自检用 `python3 scripts/dev-up.py --restart`（会等就绪并验三个入口）。
 - **Biome only** — no ESLint, no Prettier. Both `npm run lint` and `npx antd lint ./src` must pass before commit
 - **Always `npx antd info <Component>` before writing antd code** — don't guess APIs from memory
 - **`npm run simple` is irreversible** — always commit/branch first

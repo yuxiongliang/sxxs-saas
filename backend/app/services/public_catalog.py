@@ -13,18 +13,36 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Product, ProductSku
+from app.models.catalog import Category, Product, ProductSku
 from app.models.interaction import ProductFavorite
+from app.models.order import OrderItem, SellerOrder
 from app.models.seller import Seller, Shop
 from app.models.tenant import Tenant
+from app.models.user import User
 from app.services import catalog_specs, catalog_stats
 
 DEFAULT_TENANT_SLUG = "demo"
 DEFAULT_LIMIT = 48
 MAX_LIMIT = 120
+
+# 排序：前端传 code，服务端在这里翻译成 SQL（不把排序字段名暴露给外部）
+SORT_DEFAULT = "default"
+SORT_SOLD_DESC = "sold_desc"
+SORT_NEWEST = "newest"
+SORT_PRICE_ASC = "price_asc"
+SORT_PRICE_DESC = "price_desc"
+SORT_OPTIONS = (
+    SORT_DEFAULT,
+    SORT_SOLD_DESC,
+    SORT_NEWEST,
+    SORT_PRICE_ASC,
+    SORT_PRICE_DESC,
+)
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 60
 
 
 async def resolve_tenant(db: AsyncSession, slug: str) -> Tenant:
@@ -67,56 +85,219 @@ def _product_public_dict(product, shop, seller, sku) -> dict:
     }
 
 
+async def _category_scope_ids(db: AsyncSession, category_id: int | None) -> list[int] | None:
+    """选中一级分类时，商品可能挂在它的子类下 —— 一次把整棵子树 id 取出来。
+
+    现在库里只有一级分类，这一步等于 `[category_id]`；但结构上有 `parent_id`，
+    提前按子树处理，将来加子类时筛选不会静默漏数据。
+    """
+    if category_id is None:
+        return None
+    children = (
+        await db.scalars(select(Category.id).where(Category.parent_id == category_id))
+    ).all()
+    return [category_id, *children]
+
+
+def _product_filters(
+    tenant_id: int,
+    *,
+    keyword: str | None,
+    category_ids: list[int] | None,
+    min_price_cents: int | None,
+    max_price_cents: int | None,
+):
+    """列表与 count 共用的过滤条件（两处必须一模一样，否则总数对不上）。"""
+    filters = [
+        Product.tenant_id == tenant_id,
+        Product.status == "on_sale",
+        Seller.status == "active",
+    ]
+    if category_ids is not None:
+        filters.append(Product.category_id.in_(category_ids))
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        filters.append(
+            or_(
+                Product.name.ilike(pattern),
+                Product.subtitle.ilike(pattern),
+                Shop.name.ilike(pattern),
+                Seller.display_name.ilike(pattern),
+                User.username.ilike(pattern),
+            )
+        )
+    # 价格按「在售 SKU 的最低价」判，与卡片上展示的价格同口径
+    if min_price_cents is not None:
+        filters.append(_price_min_sq.c.price_min >= min_price_cents)
+    if max_price_cents is not None:
+        filters.append(_price_min_sq.c.price_min <= max_price_cents)
+    return filters
+
+
+# 下面几个子查询是「排序/筛选要用，但不能逐商品去查」的聚合。
+# 全部在 SQL 里一次算完，避免 Python 侧 N+1。
+_price_min_sq = (
+    select(
+        ProductSku.product_id.label("product_id"),
+        func.min(ProductSku.price_cents).label("price_min"),
+    )
+    .where(ProductSku.status == "active")
+    .group_by(ProductSku.product_id)
+    .subquery("price_min")
+)
+
+_in_stock_sq = (
+    select(
+        ProductSku.product_id.label("product_id"),
+        func.max(case((ProductSku.stock > 0, 1), else_=0)).label("in_stock"),
+    )
+    .where(ProductSku.status == "active")
+    .group_by(ProductSku.product_id)
+    .subquery("stock_any")
+)
+
+_sold_sq = (
+    select(
+        OrderItem.product_id.label("product_id"),
+        func.sum(OrderItem.quantity).label("sold"),
+    )
+    .join(SellerOrder, SellerOrder.id == OrderItem.seller_order_id)
+    .where(SellerOrder.status.in_(catalog_stats.SOLD_STATUSES))
+    .group_by(OrderItem.product_id)
+    .subquery("sold")
+)
+
+_favorite_sq = (
+    select(
+        ProductFavorite.product_id.label("product_id"),
+        func.count(ProductFavorite.id).label("favorites"),
+    )
+    .group_by(ProductFavorite.product_id)
+    .subquery("favorites")
+)
+
+
+def _order_by(sort: str):
+    """排序表达式。未知值一律回落到综合排序，不报 400 —— 链接被人手改不应该白屏。"""
+    sold = func.coalesce(_sold_sq.c.sold, 0)
+    favorites = func.coalesce(_favorite_sq.c.favorites, 0)
+    in_stock = func.coalesce(_in_stock_sq.c.in_stock, 0)
+    if sort == SORT_SOLD_DESC:
+        return (sold.desc(), Product.created_at.desc(), Product.id.desc())
+    if sort == SORT_NEWEST:
+        return (Product.created_at.desc(), Product.id.desc())
+    if sort == SORT_PRICE_ASC:
+        return (
+            _price_min_sq.c.price_min.asc().nulls_last(),
+            Product.created_at.desc(),
+        )
+    if sort == SORT_PRICE_DESC:
+        return (
+            _price_min_sq.c.price_min.desc().nulls_last(),
+            Product.created_at.desc(),
+        )
+    # 综合：有货优先 → 销量 → 收藏 → 发布时间。
+    # 故意不用加权打分：权重一变结果就漂，没法解释也没法验收。
+    return (
+        in_stock.desc(),
+        sold.desc(),
+        favorites.desc(),
+        Product.created_at.desc(),
+        Product.id.desc(),
+    )
+
+
 async def list_public_products(
-    db: AsyncSession, slug: str = DEFAULT_TENANT_SLUG, limit: int = DEFAULT_LIMIT
-) -> list[dict]:
-    """在售商品列表（公开）。
+    db: AsyncSession,
+    slug: str = DEFAULT_TENANT_SLUG,
+    *,
+    keyword: str | None = None,
+    category_id: int | None = None,
+    min_price_cents: int | None = None,
+    max_price_cents: int | None = None,
+    sort: str = SORT_DEFAULT,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
+) -> dict:
+    """在售商品列表（公开）：搜索 + 分类 + 价格区间 + 排序 + 分页。
 
     多规格后不能再拿「第一条 SKU」当报价：那条可能是下架的/售罄的。
     列表统一用**可用 SKU 的起售价**（`price_min_cents`），并给出价格区间与规格数，
     卡片据此显示「¥xx 起」。
+
+    返回 `{list, total, page, pageSize}` —— 有分页就必须有总数，
+    否则前端只能"捞一把"。
     """
     tenant = await _resolve_tenant(db, slug)
-    bounded = max(1, min(limit, MAX_LIMIT))
+    bounded_page = max(1, page)
+    bounded_size = max(1, min(page_size, MAX_PAGE_SIZE))
+    category_ids = await _category_scope_ids(db, category_id)
+    filters = _product_filters(
+        tenant.id,
+        keyword=keyword,
+        category_ids=category_ids,
+        min_price_cents=min_price_cents,
+        max_price_cents=max_price_cents,
+    )
+
+    base = (
+        select(Product)
+        .join(Shop, Shop.id == Product.shop_id)
+        .join(Seller, Seller.id == Product.seller_id)
+        .join(User, User.id == Seller.owner_user_id, isouter=True)
+        # 价格子查询必须和过滤条件用**同一个 join**，否则 count 会退化成笛卡尔积（总数虚高）
+        .join(_price_min_sq, _price_min_sq.c.product_id == Product.id, isouter=True)
+        .where(*filters)
+    )
+    total = int(await db.scalar(select(func.count()).select_from(base.subquery())) or 0)
 
     rows = (
         await db.execute(
-            select(Product, Shop, Seller)
-            .join(Shop, Shop.id == Product.shop_id)
-            .join(Seller, Seller.id == Product.seller_id)
-            .where(
-                Product.tenant_id == tenant.id,
-                Product.status == "on_sale",
-                Seller.status == "active",
-            )
-            .order_by(Product.id.desc())
-            .limit(bounded)
+            base.join(_in_stock_sq, _in_stock_sq.c.product_id == Product.id, isouter=True)
+            .join(_sold_sq, _sold_sq.c.product_id == Product.id, isouter=True)
+            .join(_favorite_sq, _favorite_sq.c.product_id == Product.id, isouter=True)
+            .order_by(*_order_by(sort))
+            .offset((bounded_page - 1) * bounded_size)
+            .limit(bounded_size)
         )
     ).all()
 
-    if not rows:
-        return []
-
     product_ids = [row[0].id for row in rows]
-    all_skus = list(
-        (
-            await db.scalars(
-                select(ProductSku)
-                .where(
-                    ProductSku.tenant_id == tenant.id,
-                    ProductSku.product_id.in_(product_ids),
-                    ProductSku.status == "active",
+    shops = {}
+    sellers = {}
+    if product_ids:
+        for shop in (await db.scalars(select(Shop).where(Shop.id.in_({r[0].shop_id for r in rows})))).all():
+            shops[shop.id] = shop
+        for seller in (
+            await db.scalars(select(Seller).where(Seller.id.in_({r[0].seller_id for r in rows})))
+        ).all():
+            sellers[seller.id] = seller
+
+    all_skus = []
+    if product_ids:
+        all_skus = list(
+            (
+                await db.scalars(
+                    select(ProductSku)
+                    .where(
+                        ProductSku.tenant_id == tenant.id,
+                        ProductSku.product_id.in_(product_ids),
+                        ProductSku.status == "active",
+                    )
+                    .order_by(ProductSku.id)
                 )
-                .order_by(ProductSku.id)
-            )
-        ).all()
-    )
+            ).all()
+        )
     skus_by_product: dict[int, list[ProductSku]] = {}
     for sku in all_skus:
         skus_by_product.setdefault(sku.product_id, []).append(sku)
 
     result: list[dict] = []
-    for product, shop, seller in rows:
+    for (product,) in rows:
+        shop = shops.get(product.shop_id)
+        seller = sellers.get(product.seller_id)
+        if seller is None:
+            continue
         skus = skus_by_product.get(product.id, [])
         payload = _product_public_dict(product, shop, seller, skus[0] if skus else None)
         prices = [sku.price_cents for sku in skus]
@@ -128,16 +309,22 @@ async def list_public_products(
         result.append(payload)
 
     # 卡片上的「已售 N / ★4.8」：与运营端、卖家端同一份口径
-    stats = await catalog_stats.stats_map(
-        db, tenant_id=tenant.id, product_ids=[item["id"] for item in result]
-    )
-    for payload in result:
-        stat = stats.get(payload["id"])
+    stats = await catalog_stats.stats_map(db, tenant_id=tenant.id, product_ids=product_ids)
+    for payload, (product,) in zip(result, rows):
+        stat = stats.get(product.id)
         payload["sold_count"] = stat.sold_count if stat else 0
         payload["favorite_count"] = stat.favorite_count if stat else 0
         payload["rating_avg"] = stat.rating_avg if stat else None
         payload["review_count"] = stat.review_count if stat else 0
-    return result
+        # 卡片要展示浏览量（详情页才有的字段，列表也一并给）
+        payload["view_count"] = product.view_count or 0
+
+    return {
+        "list": result,
+        "total": total,
+        "page": bounded_page,
+        "pageSize": bounded_size,
+    }
 
 
 async def get_public_product(

@@ -393,6 +393,26 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 
 ## Buyer shopping (portal)
 
+### 商品列表筛选与排序（`/products`）
+
+筛选条件全部落在 URL 上（`?keyword=&category=&min=&max=&sort=&page=`）：刷新不丢、可分享、返回上一页还在。
+
+| 维度                 | 口径                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `keyword`            | 匹配 **商品名 / 副标题 / 店铺名 / 卖家名 / 卖家用户名**                                                             |
+| `category`           | 只支持**一级分类**（就是租户端「商品管理 → 商品分类」那套平台级分类）；后端按「该分类 + 其子类」取商品              |
+| `min` / `max`        | 单位**元**（前端换算成分），按**在售 SKU 的最低价**过滤，与卡片显示价格同口径                                       |
+| `sort`               | `default` 综合 / `sold_desc` 销量 / `newest` 最新发布 / `price_asc` `price_desc` 价格；**未知值不报 400，回落综合** |
+| `page` / `page_size` | 默认 1 / 20，上限 60                                                                                                |
+
+**综合排序**：`有货优先 → 销量降序 → 收藏降序 → 发布时间降序`。
+刻意不用加权打分 —— 权重一变结果就漂，既没法解释也没法验收。
+销量/收藏/在售价全部是 SQL 子查询一次算完，不在 Python 里循环。
+
+**商品卡片**（`src/pages/products/components/ProductCard.tsx`）：
+封面 **1:1**；不展示店铺/卖家；**没有「查看详情」按钮**（整卡就是入口，`role=link` + Enter/Space 可键盘打开）；
+展示**已售 / 浏览**；底部两枚按钮 `flex: 1 1 0` 均分容器，窄屏不溢出。
+
 Standalone pages (declared with `layout: false`, so they render their own header):
 
 | Route                             | Page                           | File                              |
@@ -739,12 +759,12 @@ Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 四端（租户运营 / 卖家 / 买家 / 平台）看到的是**同一份口径**，实现集中在
 `backend/app/services/catalog_stats.py`，任何页面都不允许自己写一份 SQL。
 
-| 指标 | 算法 | 注意 |
-|---|---|---|
-| 销量 `sold_count` | `SUM(order_items.quantity)`，且 `seller_orders.status ∈ {paid, shipped, completed}` | 取消/退款不计；不加字段，实时聚合 |
-| 浏览 `view_count` | `products.view_count`，公开详情接口命中一次 +1 | **PV，不是广告曝光**：刷新也累计；列头带 tooltip 说明；后台预览不调公开接口，不会自刷 |
-| 收藏 `favorite_count` | `product_favorites` 行数 | |
-| 评分 `rating_avg` / `review_count` | 只算 `status='visible'` 的评价 | 无评价时返回 `null`，界面显示 `—`，不显示 0 分 |
+| 指标                               | 算法                                                                                | 注意                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 销量 `sold_count`                  | `SUM(order_items.quantity)`，且 `seller_orders.status ∈ {paid, shipped, completed}` | 取消/退款不计；不加字段，实时聚合                                                     |
+| 浏览 `view_count`                  | `products.view_count`，公开详情接口命中一次 +1                                      | **PV，不是广告曝光**：刷新也累计；列头带 tooltip 说明；后台预览不调公开接口，不会自刷 |
+| 收藏 `favorite_count`              | `product_favorites` 行数                                                            |                                                                                       |
+| 评分 `rating_avg` / `review_count` | 只算 `status='visible'` 的评价                                                      | 无评价时返回 `null`，界面显示 `—`，不显示 0 分                                        |
 
 浏览数用 `UPDATE ... SET view_count = view_count + 1` 原子自增 —— 读-改-写在并发下会丢计数。
 
@@ -753,12 +773,12 @@ Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 表 `product_favorites`：`(user_id, product_id)` 唯一，**重复收藏幂等**（不报错、不插重复行），
 取消一个没收藏的也不报错 —— 前端连点两下不应该出现 500。
 
-| 端 | 入口 | 能看到什么 |
-|---|---|---|
-| 买家 | 商品详情「☆ 收藏」/ `/portal/favorites` | 自己的收藏 |
-| 租户运营 | `/commerce/products/favorites` | 本租户全部收藏（谁收藏了哪个商品） |
-| 卖家 | 卖家中心 →「商品收藏」 | **只看自己店铺商品**的收藏（归属校验，不用权限码） |
-| 平台 | `/catalog/favorites` | 跨租户全站收藏 |
+| 端       | 入口                                    | 能看到什么                                         |
+| -------- | --------------------------------------- | -------------------------------------------------- |
+| 买家     | 商品详情「☆ 收藏」/ `/portal/favorites` | 自己的收藏                                         |
+| 租户运营 | `/commerce/products/favorites`          | 本租户全部收藏（谁收藏了哪个商品）                 |
+| 卖家     | 卖家中心 →「商品收藏」                  | **只看自己店铺商品**的收藏（归属校验，不用权限码） |
+| 平台     | `/catalog/favorites`                    | 跨租户全站收藏                                     |
 
 人物标识一律 **用户ID（`usr_xxx`）+ 用户名**，不返回裸 `user_id`（全站硬规则）。
 
@@ -802,13 +822,13 @@ Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 
 ## 数据可见范围矩阵
 
-| 数据 | 买家 | 卖家 | 租户运营 | 平台 |
-|---|---|---|---|---|
-| 自己收藏 | ✅ | — | — | — |
-| 本租户收藏（含用户身份） | — | 仅自己商品 | ✅ | ✅ 跨租户 |
-| 评价内容 | ✅ 仅 visible | ✅ 自己商品 | ✅ 全部 | ✅ 跨租户 |
-| 匿名评价的真实用户 | ❌ | ✅ | ✅ | ✅ |
-| 隐藏 / 恢复评价 | ❌ | ❌ | ✅ | ✅ |
-| 回复评价 | ❌ | ✅ | ✅ | ✅ |
-| 商品统计（销量/浏览/收藏/评分） | 详情页部分 | 自己商品 | 本租户 | 跨租户 |
-| 编辑商品 | ❌ | 自己的 | ✅ | ❌ **平台只读** |
+| 数据                            | 买家          | 卖家        | 租户运营 | 平台           |
+| ------------------------------- | ------------- | ----------- | -------- | -------------- |
+| 自己收藏                        | ✅            | —           | —        | —              |
+| 本租户收藏（含用户身份）        | —             | 仅自己商品  | ✅       | ✅ 跨租户      |
+| 评价内容                        | ✅ 仅 visible | ✅ 自己商品 | ✅ 全部  | ✅ 跨租户      |
+| 匿名评价的真实用户              | ❌            | ✅          | ✅       | ✅             |
+| 隐藏 / 恢复评价                 | ❌            | ❌          | ✅       | ✅             |
+| 回复评价                        | ❌            | ✅          | ✅       | ✅             |
+| 商品统计（销量/浏览/收藏/评分） | 详情页部分    | 自己商品    | 本租户   | 跨租户         |
+| 编辑商品                        | ❌            | 自己的      | ✅       | ❌**平台只读** |

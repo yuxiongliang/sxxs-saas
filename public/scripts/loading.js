@@ -1,6 +1,12 @@
 /**
  * loading 占位
  * 解决首次加载时白屏的问题
+ *
+ * 另加两层保护（见文件末尾）：
+ * 1. **chunk 加载失败自愈**：发版或 dev server 重建后，浏览器可能拿着一份旧 chunk 名，
+ *    服务器把 `index.html` 当 JS 返回 → `SyntaxError: Unexpected token '<'` →
+ *    React 永远挂不上，用户只会看到下面这段占位。检测到这类错误时刷新一次。
+ * 2. **占位超时自救**：10 秒还没挂载就给出「重新加载」入口，不让用户无限转圈。
  */
 (() => {
   const _root = document.querySelector('#root');
@@ -199,4 +205,53 @@
       </div>
     `;
   }
+
+  // ---------------------------------------------------------------- 加载自愈
+  // 见文件头注释：chunk 过期 / 发版后旧页面，会让浏览器拿到 HTML 当 JS 解析，
+  // React 永远挂不上，用户只能看着上面的占位一直转。这里做两件事：
+  const RELOAD_KEY = 'app-chunk-reload-at';
+  const CHUNK_ERROR = /Loading chunk|ChunkLoadError|dynamically imported module|Unexpected token '<'|Loading CSS chunk|Importing a module script failed/i;
+
+  const tryReload = (message) => {
+    if (!CHUNK_ERROR.test(String(message || ''))) return;
+    let last = 0;
+    try {
+      last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+    } catch (error) {
+      last = 0;
+    }
+    // 一分钟内只自愈一次：防死循环，也给用户看到真实报错的机会
+    if (Date.now() - last < 60000) return;
+    try {
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    } catch (error) {
+      /* sessionStorage 不可用就算了，至少刷一次 */
+    }
+    window.location.reload();
+  };
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    tryReload(reason && (reason.message || reason));
+  });
+  // capture=true：<script>/<link> 资源加载失败不冒泡，必须捕获阶段才收得到
+  window.addEventListener(
+    'error',
+    (event) => {
+      tryReload(event.message || (event.target && event.target.src) || '');
+    },
+    true,
+  );
+
+  // 占位超时：10 秒还没挂载就给出路（网络慢或 chunk 已失效）
+  window.setTimeout(() => {
+    const root = document.querySelector('#root');
+    if (!root || !root.querySelector('.loading-title')) return;
+    const sub = root.querySelector('.loading-sub-title');
+    if (sub) {
+      sub.innerHTML =
+        '资源加载超时。通常是页面版本已更新或网络中断。' +
+        '<br/><a href="javascript:location.reload()" style="color:#1677ff">点此重新加载</a>';
+    }
+  }, 10000);
 })();

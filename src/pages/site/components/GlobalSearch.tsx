@@ -2,7 +2,7 @@ import { SearchOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Empty, Input, Modal } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import type { SearchEntry } from '../search';
+import type { SearchEntry, SearchGroup } from '../search';
 import { groupEntries, resolveSafeHref, searchEntries } from '../search';
 import useStyles from '../style';
 
@@ -23,7 +23,44 @@ export default function GlobalSearch({ entries }: { entries: SearchEntry[] }) {
     () => groupEntries(searchEntries(entries, query)),
     [entries, query],
   );
-  const flat = useMemo(() => grouped.flatMap(([, items]) => items), [grouped]);
+
+  /**
+   * 「在商品里搜索」这一条永远排最前。
+   *
+   * 全局搜索原本只索引导航项，用户搜「键盘」什么都搜不到 ——
+   * 真正想找的是商品。这里把它接到列表页的筛选上（`/products?keyword=`）。
+   */
+  const productSearchEntry = useMemo<SearchEntry | null>(() => {
+    const keyword = query.trim();
+    if (!keyword) return null;
+    return {
+      id: 'search-products',
+      group: 'nav',
+      title: `在商品中搜索「${keyword}」`,
+      desc: '按商品名 / 店铺 / 卖家搜索在售商品',
+      href: `/products?keyword=${encodeURIComponent(keyword)}`,
+    };
+  }, [query]);
+
+  const withProductSearch = useMemo<Array<[SearchGroup, SearchEntry[]]>>(() => {
+    if (!productSearchEntry) return grouped;
+    let found = false;
+    const next = grouped.map(([group, items]) => {
+      if (group !== 'nav')
+        return [group, items] as [SearchGroup, SearchEntry[]];
+      found = true;
+      return [group, [productSearchEntry, ...items]] as [
+        SearchGroup,
+        SearchEntry[],
+      ];
+    });
+    // 导航组一条都没命中时单独补一组，保证「在商品中搜索」总能看到
+    return found ? next : [['nav', [productSearchEntry]], ...grouped];
+  }, [grouped, productSearchEntry]);
+  const flat = useMemo(
+    () => withProductSearch.flatMap(([, items]) => items),
+    [withProductSearch],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -146,7 +183,7 @@ export default function GlobalSearch({ entries }: { entries: SearchEntry[] }) {
               })}
             />
           ) : (
-            grouped.map(([group, items]) => (
+            withProductSearch.map(([group, items]) => (
               <div key={group}>
                 <div
                   style={{

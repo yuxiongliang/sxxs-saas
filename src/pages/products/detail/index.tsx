@@ -174,10 +174,24 @@ export default function ProductDetailPage() {
             </Card>
           ) : isError || !data ? (
             <Empty
-              description={t({
-                id: 'product.detail.notFound',
-                defaultMessage: '商品不存在或已下架',
-              })}
+              description={
+                <div>
+                  <div>
+                    {t({
+                      id: 'product.detail.notFound',
+                      defaultMessage: '商品不存在或已下架',
+                    })}
+                  </div>
+                  {/* 死胡同页面必须给出路：直接返回可浏览的列表 */}
+                  <Button
+                    type="primary"
+                    style={{ marginTop: 12 }}
+                    onClick={() => navigate('/products')}
+                  >
+                    返回商品列表
+                  </Button>
+                </div>
+              }
             />
           ) : (
             <Row gutter={[24, 24]}>

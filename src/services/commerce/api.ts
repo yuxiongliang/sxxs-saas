@@ -543,9 +543,43 @@ export interface PublicProduct {
   is_favorited?: boolean;
 }
 
-export async function listPublicProducts(params?: { tenant?: string; limit?: number }) {
-  return unwrap<PublicProduct[]>(
+/**
+ * 商品列表（公开）的筛选参数。
+ *
+ * 排序值都是语义 code，不暴露字段名：`default` 综合 / `sold_desc` 销量 /
+ * `newest` 最新发布 / `price_asc` `price_desc` 价格。
+ */
+export interface PublicProductQuery {
+  tenant?: string;
+  /** 搜商品名 / 铺名 / 卖家名 / 卖家用户名 */
+  keyword?: string;
+  /** 只支持一级分类（平台级分类，全租户共用） */
+  category_id?: number;
+  /** 价格区间（分）：按在售 SKU 的最低价筛 */
+  min_price_cents?: number;
+  max_price_cents?: number;
+  sort?: 'default' | 'sold_desc' | 'newest' | 'price_asc' | 'price_desc';
+  page?: number;
+  page_size?: number;
+}
+
+export interface PublicProductPage {
+  list: PublicProduct[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function listPublicProducts(params?: PublicProductQuery) {
+  return unwrap<PublicProductPage>(
     request('/api/v1/public/products', { method: 'GET', params }),
+  );
+}
+
+/** 买家端筛选用的分类（平台级、只一级）。 */
+export async function listPublicCategories() {
+  return unwrap<Array<{ id: number; name: string; slug: string }>>(
+    request('/api/v1/public/categories', { method: 'GET' }),
   );
 }
 

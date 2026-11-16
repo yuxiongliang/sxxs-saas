@@ -13,10 +13,14 @@ function yuan(cents: number) {
 /**
  * 商品卡片：站点前台的统一展示单元。
  *
- * 三个动作的登录策略（需求：按钮可见 + 未登录引导登录）：
- *   - 查看详情：公开页，直接跳；
- *   - 加入购物车 / 立即购买：需要 cart:manage / order:create，
- *     未登录时跳登录并带 redirect 回到该商品，登录后自动续上。
+ * 版式约束（按需求）：
+ * * 封面**正方形（1:1）**，有图裁切填满，无图用渐变 + 图标占位，高度不随商品变；
+ * * **不展示店铺/卖家**那一行 —— 卡片只讲商品本身；
+ * * **没有「查看详情」按钮** —— 整张卡片就是入口（同时支持键盘 Enter/Space）；
+ * * 展示**销量 / 浏览**，让买家一眼看出热度；
+ * * 底部按钮 `flex: 1 1 0; min-width: 0`，两枚按钮均分容器，窄屏也不会溢出。
+ *
+ * 登录策略：加购 / 立即购买需要登录，未登录跳登录并带 redirect 回到本商品。
  */
 export default function ProductCard({ product }: { product: PublicProduct }) {
   const { message } = App.useApp();
@@ -38,10 +42,14 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
     return false;
   };
 
+  const openDetail = () => {
+    window.location.assign(detailPath);
+  };
+
   const handleAddCart = async () => {
     // 多规格不能从列表卡直接加购：买家没选规格就下单，语义不成立
     if (multiSpec) {
-      window.location.assign(detailPath);
+      openDetail();
       return;
     }
     const sku = product.sku;
@@ -63,18 +71,38 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
   return (
     <Card
       hoverable
-      styles={{ body: { padding: 16 } }}
+      data-testid={`product-card-${product.id}`}
+      styles={{ body: { padding: 12 } }}
+      onClick={openDetail}
+      onKeyDown={(event) => {
+        // 整卡可点也必须能用键盘打开，否则只剩鼠标通路
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openDetail();
+        }
+      }}
+      tabIndex={0}
+      role="link"
+      aria-label={`查看商品 ${product.name}`}
       cover={
         product.main_image ? (
           <img
             src={product.main_image}
             alt={product.name}
-            style={{ height: 160, width: '100%', objectFit: 'cover' }}
+            data-testid="product-card-cover"
+            style={{
+              width: '100%',
+              aspectRatio: '1 / 1',
+              objectFit: 'cover',
+              display: 'block',
+            }}
           />
         ) : (
           <div
+            data-testid="product-card-cover"
             style={{
-              height: 160,
+              width: '100%',
+              aspectRatio: '1 / 1',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -89,16 +117,33 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
         )
       }
     >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{product.name}</div>
-      <Text type="secondary" style={{ fontSize: 12 }}>
+      <div
+        data-testid="product-card-title"
+        style={{
+          fontWeight: 600,
+          marginBottom: 4,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {product.name}
+      </div>
+      <Text
+        type="secondary"
+        style={{ fontSize: 12, display: 'block', height: 20 }}
+        ellipsis
+      >
         {product.subtitle || '—'}
       </Text>
+
       <div
         style={{
-          marginTop: 10,
+          marginTop: 8,
           display: 'flex',
           alignItems: 'baseline',
           gap: 8,
+          flexWrap: 'wrap',
         }}
       >
         <span
@@ -122,27 +167,44 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
             : '已售罄'}
         </Tag>
       </div>
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>
-        {product.shop_name ? `${product.shop_name} · ` : ''}
-        {product.seller_name || ''}
+
+      {/* 热度：销量 + 浏览。浏览=详情页 PV，与后台列头口径一致 */}
+      <div
+        data-testid="product-card-stats"
+        style={{
+          marginTop: 6,
+          fontSize: 12,
+          opacity: 0.65,
+          display: 'flex',
+          gap: 12,
+        }}
+      >
+        <span>已售 {product.sold_count ?? 0}</span>
+        <span>浏览 {product.view_count ?? 0}</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <Button size="small" onClick={() => window.location.assign(detailPath)}>
-          查看详情
-        </Button>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginTop: 12,
+          // 关键：允许收缩，按钮不撑破卡片
+          minWidth: 0,
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
         <Button
-          size="small"
+          data-testid="card-add-cart"
           icon={<ShoppingCartOutlined />}
-          disabled={!inStock}
+          style={{ flex: '1 1 0', minWidth: 0 }}
           onClick={handleAddCart}
         >
-          {multiSpec ? '选规格' : '加入购物车'}
+          加入购物车
         </Button>
         <Button
-          size="small"
+          data-testid="card-buy-now"
           type="primary"
-          disabled={!inStock}
+          style={{ flex: '1 1 0', minWidth: 0 }}
           onClick={handleBuyNow}
         >
           立即购买

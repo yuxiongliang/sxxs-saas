@@ -24,11 +24,12 @@ export default function MallHomePage() {
   const { visible: typedTitle, blinking } = useTypewriter(title, reducedMotion);
 
   const productsQuery = useQuery({
-    queryKey: ['public-products'],
-    queryFn: () => listPublicProducts({ limit: 48 }),
+    queryKey: ['public-products', 'home'],
+    queryFn: () => listPublicProducts({ page_size: 48 }),
     staleTime: 60_000,
   });
-  const products = productsQuery.data ?? [];
+  // 列表接口现在返回分页结构（带 total），首页只要前几件做展示
+  const products = productsQuery.data?.list ?? [];
   const shopCount = new Set(products.map((item) => item.shop_id)).size;
 
   return (

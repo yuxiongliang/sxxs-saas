@@ -49,7 +49,7 @@ async def test_only_completed_orders_count_into_gmv(client, platform_token, cust
     category_id = await _make_category(client, platform_token, "completed-cat", 500)
     await _assign(client, platform_token, 1, category_id)
 
-    detail = (await client.get("/api/v1/public/products?limit=1")).json()["data"][0]
+    detail = (await client.get("/api/v1/public/products?page_size=1")).json()["data"]["list"][0]
     product = (await client.get(f"/api/v1/public/products/{detail['id']}")).json()["data"]
     sku = next((item for item in product["skus"] if item["stock"] > 0), product["skus"][0])
 

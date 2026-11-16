@@ -10,10 +10,10 @@ import { CUSTOMER, loginAs } from './helpers/auth';
 async function addAnyProductToCart(page: Page): Promise<string> {
   await page.goto('/products');
   await page
-    .getByRole('button', { name: '查看详情' })
+    .getByTestId('product-card-title')
     .first()
     .waitFor({ state: 'visible', timeout: 30_000 });
-  await page.getByRole('button', { name: '查看详情' }).first().click();
+  await page.getByTestId('product-card-title').first().click();
   await expect(page).toHaveURL(/\/products\/\d+/, { timeout: 30_000 });
 
   const title = ((await page.locator('h3').first().textContent()) ?? '').trim();
@@ -63,7 +63,7 @@ test.describe('portal: buyer journey', () => {
     await expect(page.locator('.ant-card').first()).toBeVisible({
       timeout: 30_000,
     });
-    const detailLink = page.getByRole('button', { name: '查看详情' }).first();
+    const detailLink = page.getByTestId('product-card-title').first();
     await expect(detailLink).toBeVisible({ timeout: 30_000 });
     await detailLink.click();
 
@@ -132,10 +132,10 @@ test.describe('portal: buyer journey', () => {
     await loginAs(page, CUSTOMER);
     await page.goto('/products');
     await page
-      .getByRole('button', { name: '查看详情' })
+      .getByTestId('product-card-title')
       .first()
       .waitFor({ state: 'visible', timeout: 30_000 });
-    await page.getByRole('button', { name: '查看详情' }).first().click();
+    await page.getByTestId('product-card-title').first().click();
 
     const productName = (
       (await page.locator('h3').first().textContent()) ?? ''
@@ -179,5 +179,36 @@ test.describe('portal: buyer journey', () => {
     await expect(page.getByText(unique).first()).toBeVisible({
       timeout: 30_000,
     });
+  });
+
+  test('searches and filters the product list', async ({ page }) => {
+    await page.goto('/products');
+    const cards = page.locator('[data-testid^="product-card-"]');
+    await expect(cards.first()).toBeVisible({ timeout: 30_000 });
+
+    // 搜一个不存在的关键词：应该给出空结果，而不是把列表原样留着
+    const search = page.getByPlaceholder('搜商品名 / 店铺 / 卖家');
+    await search.fill('zzz-绝不存在的商品-zzz');
+    await search.press('Enter');
+    await expect(page.getByText('暂时还没有在售商品').first()).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // 清空筛选应该回到全部商品
+    await page.getByRole('button', { name: /清空筛选/ }).click();
+    await expect(cards.first()).toBeVisible({ timeout: 20_000 });
+  });
+
+  test('sorts the product list and keeps it in the URL', async ({ page }) => {
+    await page.goto('/products');
+    await expect(
+      page.locator('[data-testid^="product-card-"]').first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    await page.getByTestId('product-sort').click();
+    await page.getByTitle('销量从高到低').click();
+
+    // 筛选条件写进 URL，刷新/分享不丢
+    await expect(page).toHaveURL(/sort=sold_desc/, { timeout: 20_000 });
   });
 });
