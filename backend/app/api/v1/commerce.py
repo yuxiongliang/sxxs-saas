@@ -21,7 +21,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.order import OrderCreateRequest
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
-from app.services import catalog_specs
+from app.services import catalog_specs, catalog_stats
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
@@ -382,15 +382,22 @@ async def admin_products(
         )
     rows = list((await db.execute(stmt.order_by(Product.id.desc()))).all())
     skus = await _product_skus(db, [row[0].id for row in rows])
+    # 销量/浏览/收藏/评分：一次批量查，和列表条目一起返回（口径见 services/catalog_stats）
+    stats = await catalog_stats.stats_map(
+        db, tenant_id=context.tenant.id, product_ids=[row[0].id for row in rows]
+    )
     return ok(
         [
-            _product_dict(
-                product,
-                skus=skus.get(product.id, []),
-                seller=seller,
-                shop=shop,
-                owner=owner,
-            )
+            {
+                **_product_dict(
+                    product,
+                    skus=skus.get(product.id, []),
+                    seller=seller,
+                    shop=shop,
+                    owner=owner,
+                ),
+                **stats.get(product.id, catalog_stats.ProductStats()).as_dict(),
+            }
             for product, seller, shop, owner in rows
         ]
     )
@@ -410,6 +417,9 @@ async def admin_product_detail(
     owner = await db.get(User, seller.owner_user_id) if seller else None
     payload = _product_dict(product, skus=skus, seller=seller, shop=shop, owner=owner)
     payload["spec_groups"] = await catalog_specs.load_spec_groups(db, product.id)
+    # 编辑弹窗顶部要显示「已售 / 浏览 / 收藏 / 评分」，与列表同一口径
+    stats = await catalog_stats.stats_for(db, tenant_id=context.tenant.id, product_id=product.id)
+    payload.update(stats.as_dict())
     return ok(payload)
 
 

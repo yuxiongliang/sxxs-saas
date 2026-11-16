@@ -52,6 +52,9 @@ class Product(Base, TimestampMixin):
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 商品视频（主图/多图之外的展示素材）
     video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 浏览数（PV）：买家侧打开详情页就 +1。运营后台预览不计，避免自己刷自己的数。
+    # 这是「浏览量」不是广告曝光：刷新会重复计数，界面列头要写清楚。
+    view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # 租户向卖家抽佣的商品级比例（万分比）；NULL = 继承分类默认值。
     # commission_locked = 已由运营调整过，卖家不能再改回去。
     commission_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -83,6 +83,15 @@ export interface ProductRecord {
   reject_reason?: string | null;
   /** 列表页展示的首个 SKU 价格 */
   price_cents?: number | null;
+  // ---- 统计（口径见 backend/app/services/catalog_stats.py，四端共用）----
+  /** 销量：已付款未退款的件数 */
+  sold_count?: number;
+  /** 浏览：买家侧详情页 PV（刷新也计） */
+  view_count?: number;
+  favorite_count?: number;
+  review_count?: number;
+  /** 平均分，无评价时为 null（界面显示「—」而不是 0 分） */
+  rating_avg?: number | null;
 }
 
 export interface OrderRecord {
@@ -154,6 +163,12 @@ export interface SellerProductRecord {
   stock: number;
   sku_id?: number | null;
   locked_stock?: number;
+  // ---- 统计（与租户运营端、平台端同一口径）----
+  sold_count?: number;
+  view_count?: number;
+  favorite_count?: number;
+  review_count?: number;
+  rating_avg?: number | null;
 }
 
 export interface SellerOrderRecord {
@@ -283,4 +298,70 @@ export interface SettlementBatchRecord {
   note: string;
   confirmed_at?: string | null;
   paid_at?: string | null;
+}
+
+/** 商品评价里的一条附件（图或视频）。存的是公开直链，不是附件表 id。 */
+export interface ReviewMedia {
+  type: 'image' | 'video';
+  url: string;
+}
+
+/**
+ * 收藏记录（四端共用同一形状）。
+ *
+ * 人物标识一律 `user_public_id` + `user_username`，不返回裸 user_id。
+ */
+export interface FavoriteRecord {
+  id: number;
+  tenant_id?: number;
+  product_id: number;
+  product_name: string;
+  product_image?: string | null;
+  product_status?: string;
+  seller_shop_name?: string | null;
+  seller_name?: string | null;
+  user_public_id?: string | null;
+  user_username?: string | null;
+  created_at?: string | null;
+}
+
+/**
+ * 管理侧评价（运营 / 卖家 / 平台共用）。
+ *
+ * 与买家侧的区别：**匿名评价在这里也带真实用户信息**（`is_anonymous` 只用于标注）。
+ */
+export interface ReviewRecord {
+  id: number;
+  tenant_id?: number;
+  product_id: number;
+  product_name: string;
+  product_image?: string | null;
+  sku_name?: string | null;
+  seller_shop_name?: string | null;
+  seller_name?: string | null;
+  rating: number;
+  content?: string | null;
+  media?: ReviewMedia[];
+  is_anonymous?: boolean;
+  user_public_id?: string | null;
+  user_username?: string | null;
+  status: string;
+  moderation_status?: string;
+  moderation_note?: string | null;
+  reply?: string | null;
+  replied_at?: string | null;
+  created_at?: string | null;
+}
+
+/** 买家侧公开评价（匿名的已脱敏，不含任何可识别信息）。 */
+export interface PublicReview {
+  id: number;
+  rating: number;
+  content?: string | null;
+  media?: ReviewMedia[];
+  is_anonymous?: boolean;
+  display_name: string;
+  reply?: string | null;
+  replied_at?: string | null;
+  created_at?: string | null;
 }

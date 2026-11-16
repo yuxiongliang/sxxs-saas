@@ -15,6 +15,7 @@ from app.schemas.commerce import (
 )
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
+from app.services import catalog_stats
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services.auth import AuthContext
@@ -58,6 +59,10 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
         ).all()
     )
     result = []
+    # 销量/浏览/收藏/评分：和租户运营端、平台端同一口径（services/catalog_stats.py）
+    stats = await catalog_stats.stats_map(
+        db, tenant_id=context.tenant.id, product_ids=[product.id for product in products]
+    )
     for product in products:
         sku = (
             await db.scalars(
@@ -85,6 +90,7 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
                 "stock": sku.stock if sku else 0,
                 "sku_id": sku.id if sku else None,
                 "locked_stock": sku.locked_stock if sku else 0,
+                **stats.get(product.id, catalog_stats.ProductStats()).as_dict(),
             }
         )
     return result

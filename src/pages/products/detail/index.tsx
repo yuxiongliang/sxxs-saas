@@ -1,5 +1,5 @@
-import { ShoppingOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { ShoppingOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntl, useNavigate, useParams } from '@umijs/max';
 import {
   App,
@@ -21,8 +21,14 @@ import {
   resolveMedia,
 } from '@/pages/commerce/products/components/specUtils';
 import useStyles from '@/pages/site/style';
-import { addCartItem, getPublicProductDetail } from '@/services/commerce/api';
+import {
+  addCartItem,
+  addFavorite,
+  getPublicProductDetail,
+  removeFavorite,
+} from '@/services/commerce/api';
 import MallShell from '../components/MallShell';
+import ReviewsPanel from './ReviewsPanel';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 
@@ -39,6 +45,7 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { styles } = useStyles();
   const { formatMessage: t } = useIntl();
+  const queryClient = useQueryClient();
 
   const [skuId, setSkuId] = useState<number>();
   const [quantity, setQuantity] = useState(1);
@@ -72,7 +79,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!activeSku) return;
     const max = Math.max(1, activeSku.stock);
-    setQuantity((prev) => (prev > max ? max : prev));
+    setQuantity((prev) => Math.min(prev, max));
   }, [activeSku]);
 
   const pickSpec = (groupName: string, value: string) => {
@@ -129,6 +136,33 @@ export default function ProductDetailPage() {
 
   const outOfStock = Boolean(activeSku) && (activeSku?.stock ?? 0) <= 0;
   const needPickSpec = hasSpecs && !activeSku;
+
+  // ---- 收藏 ----
+  // 状态来自详情接口的 `is_favorited`（带 token 时才有），本地只是乐观同步
+  const [favorited, setFavorited] = useState(false);
+  const [favoriting, setFavoriting] = useState(false);
+  useEffect(() => {
+    setFavorited(Boolean(data?.is_favorited));
+  }, [data?.is_favorited]);
+
+  const toggleFavorite = async () => {
+    if (!(await requireLogin())) return;
+    setFavoriting(true);
+    try {
+      const result = favorited
+        ? await removeFavorite(productId)
+        : await addFavorite(productId);
+      setFavorited(result.is_favorited);
+      message.success(result.is_favorited ? '已收藏' : '已取消收藏');
+      queryClient.invalidateQueries({
+        queryKey: ['public-product-detail', productId],
+      });
+    } catch (error) {
+      message.error((error as Error)?.message || '操作失败');
+    } finally {
+      setFavoriting(false);
+    }
+  };
 
   return (
     <MallShell activeKey="products">
@@ -228,6 +262,17 @@ export default function ProductDetailPage() {
                           { count: activeSku?.stock ?? 0 },
                         )}
                       </Tag>
+                      {/* 社会证明：已售 / 收藏 / 评分，与运营端同一口径 */}
+                      <Tag>
+                        已售 {data.sold_count ?? 0} 件 ·{' '}
+                        {data.favorite_count ?? 0} 人收藏
+                      </Tag>
+                      {data.rating_avg != null ? (
+                        <Tag color="orange">
+                          ★ {data.rating_avg.toFixed(1)}（
+                          {data.review_count ?? 0}）
+                        </Tag>
+                      ) : null}
                     </Space>
 
                     {hasSpecs ? (
@@ -347,6 +392,16 @@ export default function ProductDetailPage() {
                           defaultMessage: '加入购物车',
                         })}
                       </Button>
+                      {/* 收藏：未登录先引导登录（收藏必须落到人头上，不能只改本地状态） */}
+                      <Button
+                        size="large"
+                        data-testid="favorite-toggle"
+                        icon={favorited ? <StarFilled /> : <StarOutlined />}
+                        loading={favoriting}
+                        onClick={toggleFavorite}
+                      >
+                        {favorited ? '已收藏' : '收藏'}
+                      </Button>
                     </Space>
 
                     <Typography.Paragraph
@@ -363,6 +418,10 @@ export default function ProductDetailPage() {
               </Col>
             </Row>
           )}
+          {/* 评价区：只展示 visible；匿名的已脱敏（见 public_reviews） */}
+          {!isLoading && !isError ? (
+            <ReviewsPanel productId={productId} />
+          ) : null}
         </div>
       </section>
     </MallShell>

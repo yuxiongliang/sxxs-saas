@@ -99,11 +99,29 @@ export default [
     name: 'catalog',
     icon: 'TagsOutlined',
     routes: [
-      { path: '/catalog', redirect: '/catalog/categories' },
+      { path: '/catalog', redirect: '/catalog/products' },
+      {
+        // 全站商品总览：跨租户只读，带销量/浏览/收藏/评分
+        path: '/catalog/products',
+        name: 'platformProducts',
+        component: './catalog/products',
+      },
       {
         path: '/catalog/categories',
         name: 'productCategories',
         component: './catalog/categories',
+      },
+      {
+        // 全站收藏：谁收藏了哪个商品
+        path: '/catalog/favorites',
+        name: 'platformFavorites',
+        component: './catalog/favorites',
+      },
+      {
+        // 全站评价：抽查隐藏 / 回复
+        path: '/catalog/reviews',
+        name: 'platformReviews',
+        component: './catalog/reviews',
       },
     ],
   },

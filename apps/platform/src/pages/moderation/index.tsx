@@ -1,4 +1,4 @@
-import { ReloadOutlined, SafetyOutlined } from '@ant-design/icons';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,

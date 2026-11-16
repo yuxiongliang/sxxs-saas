@@ -89,6 +89,20 @@ describe('isSellable', () => {
       false,
     );
   });
+
+  // 防止重蹈覆辙：以前要求「所有组都选完」才返回 true，
+  // 导致多规格商品第一组的选项全部置灰，买家直接卡死。
+  it('只选了一组时，兼容的可售 SKU 存在就能点', () => {
+    expect(isSellable(skus, SIZE_COLOR, { 尺码: 'XL' })).toBe(true);
+  });
+
+  it('只选了一组时，没有兼容 SKU 就置灰', () => {
+    expect(isSellable(skus, SIZE_COLOR, { 尺码: 'L' })).toBe(false);
+  });
+
+  it('一个都没选时不应该把所有选项都置灰', () => {
+    expect(isSellable(skus, SIZE_COLOR, {})).toBe(true);
+  });
 });
 
 describe('isComboComplete', () => {

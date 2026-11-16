@@ -337,6 +337,22 @@ export default [
         access: 'canProductManage',
         component: './commerce/products/categories',
       },
+      {
+        // 谁收藏了哪个商品（买家行为侧）
+        path: '/commerce/products/favorites',
+        name: 'productFavorites',
+        icon: 'star',
+        access: 'canProductManage',
+        component: './commerce/products/favorites',
+      },
+      {
+        // 评价管理：隐藏/回复需要 product:moderate，页面进来看用 product:manage
+        path: '/commerce/products/reviews',
+        name: 'productReviews',
+        icon: 'message',
+        access: 'canProductManage',
+        component: './commerce/products/reviews',
+      },
     ],
   },
   {
@@ -491,6 +507,18 @@ export default [
     path: '/portal/addresses',
     layout: false,
     component: './portal/addresses',
+  },
+  {
+    // 我的收藏（买家）：与详情页的星标共用同一套接口
+    path: '/portal/favorites',
+    layout: false,
+    component: './portal/favorites',
+  },
+  {
+    // 我的评价（买家）：待评价 + 已评价
+    path: '/portal/reviews',
+    layout: false,
+    component: './portal/reviews',
   },
   {
     path: '/portal/payment-result',

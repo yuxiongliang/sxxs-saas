@@ -10,10 +10,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_optional_context
 from app.core.response import ok
 from app.services import public_catalog as public_catalog_service
 from app.services import tenant_domains
+from app.services.auth import AuthContext
 
 router = APIRouter(prefix="/public", tags=["公开接口"])
 
@@ -50,10 +51,18 @@ async def public_product_detail(
         description="租户 slug（仅 Host 解析不出来时的兜底）",
     ),
     db: AsyncSession = Depends(get_db),
+    viewer: AuthContext | None = Depends(get_optional_context),
 ):
-    """公开商品详情：匿名可浏览，含该商品的全部 SKU。"""
+    """公开商品详情：匿名可浏览，含该商品的全部 SKU。
+
+    带 token 访问时会多返回 `is_favorited`；顺便在这里给浏览数 +1（唯一计数入口）。
+    """
     slug = await _tenant_slug(request, tenant, db)
-    return ok(await public_catalog_service.get_public_product(db, product_id, slug))
+    return ok(
+        await public_catalog_service.get_public_product(
+            db, product_id, slug, viewer_id=viewer.user.id if viewer else None
+        )
+    )
 
 
 @router.get("/brand")

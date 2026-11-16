@@ -93,6 +93,16 @@ export default function PortalOrdersPage() {
               确认收货
             </Button>
           ) : null}
+          {/* 完成后才有评价资格：一个订单项只能评一次，具体待评项在「我的评价」里列 */}
+          {record.status === 'completed' ? (
+            <Button
+              size="small"
+              type="link"
+              onClick={() => navigate('/portal/reviews')}
+            >
+              去评价
+            </Button>
+          ) : null}
         </Space>
       ),
     },

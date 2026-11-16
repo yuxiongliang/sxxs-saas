@@ -13,13 +13,14 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import Product, ProductSku
+from app.models.interaction import ProductFavorite
 from app.models.seller import Seller, Shop
 from app.models.tenant import Tenant
-from app.services import catalog_specs
+from app.services import catalog_specs, catalog_stats
 
 DEFAULT_TENANT_SLUG = "demo"
 DEFAULT_LIMIT = 48
@@ -125,11 +126,25 @@ async def list_public_products(
         # 列表卡片用：是否还有可买的 SKU（多规格时引导去详情选）
         payload["in_stock"] = any(sku.stock > 0 for sku in skus)
         result.append(payload)
+
+    # 卡片上的「已售 N / ★4.8」：与运营端、卖家端同一份口径
+    stats = await catalog_stats.stats_map(
+        db, tenant_id=tenant.id, product_ids=[item["id"] for item in result]
+    )
+    for payload in result:
+        stat = stats.get(payload["id"])
+        payload["sold_count"] = stat.sold_count if stat else 0
+        payload["favorite_count"] = stat.favorite_count if stat else 0
+        payload["rating_avg"] = stat.rating_avg if stat else None
+        payload["review_count"] = stat.review_count if stat else 0
     return result
 
 
 async def get_public_product(
-    db: AsyncSession, product_id: int, slug: str = DEFAULT_TENANT_SLUG
+    db: AsyncSession,
+    product_id: int,
+    slug: str = DEFAULT_TENANT_SLUG,
+    viewer_id: int | None = None,
 ) -> dict:
     """公开商品详情。非在售 / 卖家非 active / 跨租户一律 404，不区分原因。"""
     tenant = await _resolve_tenant(db, slug)
@@ -182,4 +197,31 @@ async def get_public_product(
     prices = [sku.price_cents for sku in skus]
     payload["price_min_cents"] = min(prices) if prices else None
     payload["price_max_cents"] = max(prices) if prices else None
+
+    # —— 浏览计数：原子自增，计数交给数据库，不靠应用层读-改-写 ——
+    await db.execute(
+        update(Product)
+        .where(Product.id == product.id)
+        .values(view_count=Product.view_count + 1)
+    )
+    await db.commit()
+
+    stats = await catalog_stats.stats_for(
+        db, tenant_id=tenant.id, product_id=product.id
+    )
+    # 统计是提交之后读的，view_count 已经含本次访问，不再额外 +1
+    payload.update(stats.as_dict())
+
+    # 收藏态：匿名访问永远是 false；token 无效也当匿名（get_optional_context）
+    payload["is_favorited"] = False
+    if viewer_id:
+        payload["is_favorited"] = bool(
+            await db.scalar(
+                select(func.count(ProductFavorite.id)).where(
+                    ProductFavorite.tenant_id == tenant.id,
+                    ProductFavorite.user_id == viewer_id,
+                    ProductFavorite.product_id == product.id,
+                )
+            )
+        )
     return payload

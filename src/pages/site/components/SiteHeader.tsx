@@ -16,7 +16,7 @@ import {
   useModel,
 } from '@umijs/max';
 import { Button, Dropdown } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSiteBrand } from '@/hooks/useSiteBrand';
 import { logout as authLogout } from '@/services/auth/api';
 import type { ThemeMode } from '@/theme';

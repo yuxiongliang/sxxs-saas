@@ -5,6 +5,7 @@ import type {
   CategoryRecord,
   CartItemRecord,
   CartSummary,
+  FavoriteRecord,
   OrderDetail,
   OrderRecord,
   PortalOrder,
@@ -13,6 +14,9 @@ import type {
   PayoutRecord,
   ProductRecord,
   ProductSkuRecord,
+  PublicReview,
+  ReviewMedia,
+  ReviewRecord,
   SellerLedger,
   SellerOrderRecord,
   SellerProductRecord,
@@ -529,6 +533,14 @@ export interface PublicProduct {
       video_url?: string | null;
     }>;
   }>;
+  /** 列表卡片上的社会证明（与运营端、卖家端同一口径） */
+  sold_count?: number;
+  favorite_count?: number;
+  rating_avg?: number | null;
+  review_count?: number;
+  /** 详情接口才有：浏览数（每次打开 +1）与当前用户是否已收藏 */
+  view_count?: number;
+  is_favorited?: boolean;
 }
 
 export async function listPublicProducts(params?: { tenant?: string; limit?: number }) {
@@ -562,5 +574,161 @@ export interface PortalOrderDetail {
 export async function getPortalOrderDetail(id: number) {
   return unwrap<PortalOrderDetail>(
     request(`/api/v1/portal/orders/${id}`, { method: 'GET' }),
+  );
+}
+
+/* ==================== 商品收藏 ====================
+ * 四个视角走同一组函数命名：我 / 运营 / 卖家 / 平台。
+ * 人物标识一律 `user_public_id` + `user_username`（全站硬规则）。
+ */
+
+/** 收藏（幂等，重复点不会报错）。 */
+export async function addFavorite(productId: number) {
+  return unwrap<{ is_favorited: boolean }>(
+    request(`/api/v1/public/products/${productId}/favorite`, {
+      method: 'POST',
+    }),
+  );
+}
+
+/** 取消收藏。 */
+export async function removeFavorite(productId: number) {
+  return unwrap<{ is_favorited: boolean }>(
+    request(`/api/v1/public/products/${productId}/favorite`, {
+      method: 'DELETE',
+    }),
+  );
+}
+
+/** 买家「我的收藏」。 */
+export async function listMyFavorites() {
+  return unwrap<FavoriteRecord[]>(
+    request('/api/v1/portal/favorites', { method: 'GET' }),
+  );
+}
+
+/** 运营视角：本租户全部收藏。 */
+export async function listAdminFavorites(params?: {
+  keyword?: string;
+  product_id?: number;
+}) {
+  return unwrap<FavoriteRecord[]>(
+    request('/api/v1/admin/favorites', { method: 'GET', params }),
+  );
+}
+
+/** 卖家视角：自己店铺商品的收藏。 */
+export async function listSellerFavorites(params?: { keyword?: string }) {
+  return unwrap<FavoriteRecord[]>(
+    request('/api/v1/portal/seller/favorites', { method: 'GET', params }),
+  );
+}
+
+/* ==================== 商品评价 ====================
+ * 买家侧只读 public 接口（匿名评价已脱敏）；
+ * 运营/卖家侧读管理接口（匿名的也能看到真实 用户ID + 用户名）。
+ */
+
+/** 商品详情页的评价区（匿名可读）。 */
+export async function getProductReviews(
+  productId: number,
+  params?: { limit?: number; offset?: number },
+) {
+  return unwrap<{
+    list: PublicReview[];
+    total: number;
+    rating_avg: number | null;
+    limit: number;
+    offset: number;
+  }>(
+    request(`/api/v1/public/products/${productId}/reviews`, {
+      method: 'GET',
+      params,
+    }),
+  );
+}
+
+/** 提交评价（只能评自己已完成订单的订单项）。 */
+export async function createReview(data: {
+  order_item_id: number;
+  rating: number;
+  content?: string;
+  media?: ReviewMedia[];
+  is_anonymous?: boolean;
+}) {
+  return unwrap<{ id: number }>(
+    request('/api/v1/portal/reviews', { method: 'POST', data }),
+  );
+}
+
+/** 我写过的评价。 */
+export async function listMyReviews() {
+  return unwrap<ReviewRecord[]>(
+    request('/api/v1/portal/reviews', { method: 'GET' }),
+  );
+}
+
+/** 我还能评的订单项（已完成 + 未评过）。 */
+export async function listReviewableItems() {
+  return unwrap<
+    Array<{
+      order_item_id: number;
+      order_id: number;
+      product_id: number;
+      product_name: string;
+      sku_name: string;
+      image?: string | null;
+    }>
+  >(request('/api/v1/portal/reviews/reviewable', { method: 'GET' }));
+}
+
+/** 运营视角：本租户全部评价。 */
+export async function listAdminReviews(params?: {
+  keyword?: string;
+  status?: string;
+  moderation_status?: string;
+}) {
+  return unwrap<ReviewRecord[]>(
+    request('/api/v1/admin/reviews', { method: 'GET', params }),
+  );
+}
+
+/** 运营：隐藏 / 恢复评价（需要 product:moderate）。 */
+export async function setAdminReviewStatus(id: number, status: string) {
+  return unwrap<{ id: number; status: string }>(
+    request(`/api/v1/admin/reviews/${id}/status`, {
+      method: 'POST',
+      data: { status },
+    }),
+  );
+}
+
+/** 运营：回复评价。 */
+export async function replyAdminReview(id: number, reply: string) {
+  return unwrap<{ id: number; reply: string }>(
+    request(`/api/v1/admin/reviews/${id}/reply`, {
+      method: 'POST',
+      data: { reply },
+    }),
+  );
+}
+
+/** 卖家视角：自己商品收到的评价。 */
+export async function listSellerReviews(params?: {
+  keyword?: string;
+  status?: string;
+}) {
+  return unwrap<ReviewRecord[]>(
+    request('/api/v1/portal/seller/reviews', { method: 'GET', params }),
+  );
+}
+
+/** 卖家：只能回复，不能隐藏（隐藏只有运营/平台能做）。 */
+export async function replySellerReview(id: number, reply: string) {
+  return unwrap<{ id: number; reply: string }>(
+    request(`/api/v1/portal/seller/reviews/${id}/reply`, {
+      method: 'POST',
+      data: { reply },
+    }),
   );
 }

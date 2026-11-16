@@ -73,6 +73,11 @@ async def test_response_is_whitelisted(client):
         "price_max_cents",
         "sku_count",
         "in_stock",
+        # 卡片上的社会证明：已售件数 / 收藏数 / 评分与评价数
+        "sold_count",
+        "favorite_count",
+        "rating_avg",
+        "review_count",
     }
     assert set(item) == allowed
     assert set(item["sku"] or {}) <= {"id", "name", "price_cents", "stock"}

@@ -54,6 +54,8 @@ export default {
   'menu.product-management': 'Product Management',
   'menu.product-management.productList': 'Products',
   'menu.product-management.productCategories': 'Categories',
+  'menu.product-management.productFavorites': 'お気に入り',
+  'menu.product-management.productReviews': '商品レビュー',
   'menu.productList': 'Products',
   'menu.productCategories': 'Categories',
   'menu.order-management': 'Order Management',

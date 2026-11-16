@@ -17,6 +17,8 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import ProductFavoriteTable from '@/components/ProductFavoriteTable';
+import ProductReviewTable from '@/components/ProductReviewTable';
 import PortalShell from '@/pages/portal/components/PortalShell';
 import {
   applySeller,
@@ -24,13 +26,17 @@ import {
   createSellerProduct,
   getSellerApplication,
   getSellerProfile,
+  listSellerFavorites,
   listSellerOrders,
   listSellerProducts,
+  listSellerReviews,
+  replySellerReview,
   requestSellerPayout,
   shipMySellerOrder,
   updateSellerProduct,
 } from '@/services/commerce/api';
 import type {
+  ReviewRecord,
   SellerOrderRecord,
   SellerProductRecord,
 } from '@/services/commerce/types';
@@ -72,6 +78,11 @@ const SellerPage: React.FC = () => {
   };
   const [productForm] = Form.useForm();
   const [shipForm] = Form.useForm();
+  // 商品收藏 / 我的评价：卖家只能看自己店铺的，关键词搜索走服务端
+  const [favoriteKeyword, setFavoriteKeyword] = useState<string>();
+  const [reviewKeyword, setReviewKeyword] = useState<string>();
+  const [replyingReview, setReplyingReview] = useState<ReviewRecord>();
+  const [reviewReply, setReviewReply] = useState('');
 
   const { data: profile } = useQuery({
     queryKey: ['seller-profile'],
@@ -85,8 +96,18 @@ const SellerPage: React.FC = () => {
     queryKey: ['seller-orders'],
     queryFn: listSellerOrders,
   });
+  const sellerFavorites = useQuery({
+    queryKey: ['seller-favorites', favoriteKeyword],
+    queryFn: () => listSellerFavorites({ keyword: favoriteKeyword }),
+  });
+  const sellerReviews = useQuery({
+    queryKey: ['seller-reviews', reviewKeyword],
+    queryFn: () => listSellerReviews({ keyword: reviewKeyword }),
+  });
 
   const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['seller-favorites'] });
+    queryClient.invalidateQueries({ queryKey: ['seller-reviews'] });
     queryClient.invalidateQueries({ queryKey: ['seller-products'] });
     queryClient.invalidateQueries({ queryKey: ['seller-orders'] });
     queryClient.invalidateQueries({ queryKey: ['seller-profile'] });
@@ -210,6 +231,18 @@ const SellerPage: React.FC = () => {
       render: (v: number) => `¥${(v / 100).toFixed(2)}`,
     },
     { title: '库存', dataIndex: 'stock', width: 90 },
+    { title: '销量', dataIndex: 'sold_count', width: 80 },
+    { title: '浏览', dataIndex: 'view_count', width: 80 },
+    { title: '收藏', dataIndex: 'favorite_count', width: 80 },
+    {
+      title: '评分',
+      key: 'rating',
+      width: 110,
+      render: (_, record) =>
+        record.rating_avg == null
+          ? '—'
+          : `★ ${record.rating_avg.toFixed(1)}（${record.review_count ?? 0}）`,
+    },
     {
       title: '操作',
       width: 200,
@@ -393,9 +426,84 @@ const SellerPage: React.FC = () => {
                   />
                 ),
               },
+              {
+                key: 'favorites',
+                label: '商品收藏',
+                children: (
+                  <>
+                    <Input.Search
+                      allowClear
+                      placeholder="搜商品名 / 用户名 / 用户ID"
+                      style={{ width: 300, marginBottom: 16 }}
+                      onSearch={(value) =>
+                        setFavoriteKeyword(value.trim() || undefined)
+                      }
+                    />
+                    <ProductFavoriteTable
+                      data={sellerFavorites.data ?? []}
+                      loading={sellerFavorites.isLoading}
+                    />
+                  </>
+                ),
+              },
+              {
+                key: 'reviews',
+                label: '我的评价',
+                children: (
+                  <>
+                    <Input.Search
+                      allowClear
+                      placeholder="搜商品名 / 用户名 / 评价内容"
+                      style={{ width: 300, marginBottom: 16 }}
+                      onSearch={(value) =>
+                        setReviewKeyword(value.trim() || undefined)
+                      }
+                    />
+                    {/* 卖家只能回复，不能隐藏（canModerate 不传） */}
+                    <ProductReviewTable
+                      data={sellerReviews.data ?? []}
+                      loading={sellerReviews.isLoading}
+                      canReply
+                      onReply={(record) => {
+                        setReplyingReview(record);
+                        setReviewReply(record.reply ?? '');
+                      }}
+                    />
+                  </>
+                ),
+              },
             ]}
           />
         </Card>
+
+        {/* 回复评价：卖家只能回复，隐藏是运营/平台的权力 */}
+        <Modal
+          title="回复评价"
+          open={Boolean(replyingReview)}
+          onCancel={() => setReplyingReview(undefined)}
+          onOk={async () => {
+            if (!replyingReview) return;
+            if (!reviewReply.trim()) {
+              message.warning('回复内容不能为空');
+              return;
+            }
+            await replySellerReview(replyingReview.id, reviewReply.trim());
+            message.success('已回复');
+            setReplyingReview(undefined);
+            setReviewReply('');
+            queryClient.invalidateQueries({ queryKey: ['seller-reviews'] });
+          }}
+          okText="提交回复"
+        >
+          <Input.TextArea
+            rows={4}
+            maxLength={1000}
+            showCount
+            value={reviewReply}
+            onChange={(event) => setReviewReply(event.target.value)}
+            placeholder="例如：抱歉让您不满意，已私信您处理方案"
+          />
+        </Modal>
 
         <Modal
           title="新增商品"

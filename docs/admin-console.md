@@ -733,3 +733,82 @@ Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 - **跨域**：CORS 放行「平台主机 + 已生效的租户域名」，60 秒缓存，绑定/解绑时立即失效重建；库不可用时保持旧集合（不放行未知域名）。
 - **登录态按域名隔离。** refresh cookie 不设 `Domain`（host-only），且 `/auth/refresh` 校验 token 里的租户与请求 Host 一致，不一致返回 401 且 **不消耗** 该 token。
 - **`dns` 校验器需要 `dnspython`**；没装时 verify 返回 503 —— 故意不判成「验证失败」，免得把工程配置问题甩锅给客户。
+
+## 商品统计：销量 / 浏览 / 收藏 / 评分
+
+四端（租户运营 / 卖家 / 买家 / 平台）看到的是**同一份口径**，实现集中在
+`backend/app/services/catalog_stats.py`，任何页面都不允许自己写一份 SQL。
+
+| 指标 | 算法 | 注意 |
+|---|---|---|
+| 销量 `sold_count` | `SUM(order_items.quantity)`，且 `seller_orders.status ∈ {paid, shipped, completed}` | 取消/退款不计；不加字段，实时聚合 |
+| 浏览 `view_count` | `products.view_count`，公开详情接口命中一次 +1 | **PV，不是广告曝光**：刷新也累计；列头带 tooltip 说明；后台预览不调公开接口，不会自刷 |
+| 收藏 `favorite_count` | `product_favorites` 行数 | |
+| 评分 `rating_avg` / `review_count` | 只算 `status='visible'` 的评价 | 无评价时返回 `null`，界面显示 `—`，不显示 0 分 |
+
+浏览数用 `UPDATE ... SET view_count = view_count + 1` 原子自增 —— 读-改-写在并发下会丢计数。
+
+## 商品收藏
+
+表 `product_favorites`：`(user_id, product_id)` 唯一，**重复收藏幂等**（不报错、不插重复行），
+取消一个没收藏的也不报错 —— 前端连点两下不应该出现 500。
+
+| 端 | 入口 | 能看到什么 |
+|---|---|---|
+| 买家 | 商品详情「☆ 收藏」/ `/portal/favorites` | 自己的收藏 |
+| 租户运营 | `/commerce/products/favorites` | 本租户全部收藏（谁收藏了哪个商品） |
+| 卖家 | 卖家中心 →「商品收藏」 | **只看自己店铺商品**的收藏（归属校验，不用权限码） |
+| 平台 | `/catalog/favorites` | 跨租户全站收藏 |
+
+人物标识一律 **用户ID（`usr_xxx`）+ 用户名**，不返回裸 `user_id`（全站硬规则）。
+
+## 商品评价（先发后审）
+
+表 `product_reviews`，`order_item_id` 唯一 → **只有真买过的人能评，且一个订单项只能评一次**。
+
+### 可见性
+
+- **先发后审**：落库 `status='visible'`，提交后**立刻可见**。审核永远不阻塞发布。
+- **隐藏只有运营和平台能做**（`product:moderate` / `platform:tenant:manage`）。
+  **卖家只能回复，不能隐藏** —— 这是刻意的权限边界。
+- 隐藏后买家侧（商品详情、我的评价）立即不可见；「我的评价」里仍会看到自己那条标为「已隐藏」。
+
+### 匿名
+
+- `is_anonymous=true` 时，**只有买家侧**脱敏：显示「匿名买家」，`user_public_id`/
+  `user_username` 一律返回 `null`（连编号都不给，避免被反查）。
+- **运营 / 卖家 / 平台三端始终看得到真实 用户ID + 用户名**，只额外标一个「匿名发布」标签。
+  否则出纠纷时运营根本定位不到人。
+
+### 自动审核（预留接口，未接入模型）
+
+`backend/app/services/review_moderation.py` 提供 `evaluate_review()`，
+返回值写进 `product_reviews.moderation_status`（`skipped/pending/passed/flagged/blocked`）。
+
+> **当前实现是空转**，一律返回 `skipped`（`provider: stub`）。
+> 平台端「商品评价」页与 `/platform/review-moderation` 都如实标注「未接入」。
+> 刻意**不做**本地关键词黑名单 —— 那种假审核会让人误以为内容已被检查过。
+>
+> 接真模型时只改 `evaluate_review()` 的实现，调用方与前端筛选都不用动。
+
+`moderation_status=flagged` 的筛选框就是将来的人工优先抽查口；现在全部是 `skipped`，
+运营按时间倒序抽查即可。
+
+### 媒体
+
+评价支持**图片与视频**（`media: [{type: 'image'|'video', url}]`，最多 6 个）。
+媒体走附件中心上传接口，买家的限额由平台「上传限制」矩阵决定；
+存进 `media` 的是**公开直链**（`/api/v1/attachments/public/{id}`），否则买家自己都看不到图。
+
+## 数据可见范围矩阵
+
+| 数据 | 买家 | 卖家 | 租户运营 | 平台 |
+|---|---|---|---|---|
+| 自己收藏 | ✅ | — | — | — |
+| 本租户收藏（含用户身份） | — | 仅自己商品 | ✅ | ✅ 跨租户 |
+| 评价内容 | ✅ 仅 visible | ✅ 自己商品 | ✅ 全部 | ✅ 跨租户 |
+| 匿名评价的真实用户 | ❌ | ✅ | ✅ | ✅ |
+| 隐藏 / 恢复评价 | ❌ | ❌ | ✅ | ✅ |
+| 回复评价 | ❌ | ✅ | ✅ | ✅ |
+| 商品统计（销量/浏览/收藏/评分） | 详情页部分 | 自己商品 | 本租户 | 跨租户 |
+| 编辑商品 | ❌ | 自己的 | ✅ | ❌ **平台只读** |

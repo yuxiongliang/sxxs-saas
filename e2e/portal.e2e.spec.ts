@@ -16,10 +16,21 @@ async function addAnyProductToCart(page: Page): Promise<string> {
   await page.getByRole('button', { name: '查看详情' }).first().click();
   await expect(page).toHaveURL(/\/products\/\d+/, { timeout: 30_000 });
 
-  const title = (await page.locator('h3').first().innerText()).trim();
+  const title = ((await page.locator('h3').first().textContent()) ?? '').trim();
 
-  // 多规格：每组选第一个可用值；单规格没有规格组，循环自然跳过
+  // 多规格：每组选第一个可用值；单规格没有规格组，循环自然跳过。
+  //
+  // 必须**等规格区渲染完**再点：详情页首屏要等 SKU/规格接口回来，
+  // 早一步数 `spec-group` 会得到 0，循环直接跳过，
+  // 结果按钮一直置灰（多规格商品不选规格就是不能买）。
+  await expect(page.getByTestId('add-to-cart')).toBeVisible({
+    timeout: 30_000,
+  });
   const groups = page.locator('[data-testid="spec-group"]');
+  await groups
+    .first()
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .catch(() => undefined);
   const groupCount = await groups.count();
   for (let index = 0; index < groupCount; index += 1) {
     const options = groups.nth(index).locator('button:not([disabled])');
@@ -28,6 +39,10 @@ async function addAnyProductToCart(page: Page): Promise<string> {
     }
   }
 
+  // 选完规格后按钮必须可用；不可用说明商品真的买不了，让断言直接说话
+  await expect(page.getByTestId('add-to-cart')).toBeEnabled({
+    timeout: 15_000,
+  });
   await page.getByTestId('add-to-cart').click();
   await expect(page.getByText('已加入购物车').first()).toBeVisible({
     timeout: 20_000,
@@ -107,6 +122,38 @@ test.describe('portal: buyer journey', () => {
       });
     }
     await expect(page.getByText(/订单号/).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
+  test('favorites a product and sees it in the portal list', async ({
+    page,
+  }) => {
+    await loginAs(page, CUSTOMER);
+    await page.goto('/products');
+    await page
+      .getByRole('button', { name: '查看详情' })
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 });
+    await page.getByRole('button', { name: '查看详情' }).first().click();
+
+    const productName = (
+      (await page.locator('h3').first().textContent()) ?? ''
+    ).trim();
+    const toggle = page.getByTestId('favorite-toggle');
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+
+    // 幂等：上一轮跑过可能已经是「已收藏」，先取消再收藏，保证从干净态开始
+    if (((await toggle.textContent()) ?? '').includes('已收藏')) {
+      await toggle.click();
+      await expect(toggle).toContainText('收藏', { timeout: 20_000 });
+    }
+    await toggle.click();
+    await expect(toggle).toContainText('已收藏', { timeout: 20_000 });
+
+    // 「我的收藏」里应该能看到这个商品（同一套接口，不靠本地状态）
+    await page.goto('/portal/favorites');
+    await expect(page.getByText(productName).first()).toBeVisible({
       timeout: 30_000,
     });
   });

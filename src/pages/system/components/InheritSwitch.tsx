@@ -85,7 +85,7 @@ export default function InheritSwitch({
           showIcon
           title="已跟随平台统一配置"
           description={
-            maskedFields && maskedFields.length
+            maskedFields?.length
               ? `平台密钥（${maskedFields.join('、')}）不会下发给租户。`
               : undefined
           }

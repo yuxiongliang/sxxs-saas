@@ -628,3 +628,95 @@ export const updateProductCategory = (
 
 export const deleteProductCategory = (id: number) =>
   apiDelete<null>(`/platform/categories/${id}`);
+
+// ---------------------------------------------------------------------------
+// 全站商品数据（跨租户只读）：商品总览 / 收藏 / 评价
+// ---------------------------------------------------------------------------
+
+function query(params: Record<string, unknown>): string {
+  const parts = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+/** 商品总览：租户 / 卖家 / 商品 / 状态 / 销量·浏览·收藏·评分。 */
+export interface PlatformProductRow {
+  id: number;
+  tenant_id: number;
+  tenant_name: string | null;
+  seller_name: string | null;
+  shop_name: string | null;
+  name: string;
+  main_image?: string | null;
+  status: string;
+  sold_count: number;
+  view_count: number;
+  favorite_count: number;
+  review_count: number;
+  rating_avg: number | null;
+}
+
+export const listPlatformProducts = (params: {
+  keyword?: string;
+  status?: string;
+  tenant_id?: number;
+} = {}) => apiGet<PlatformProductRow[]>(`/platform/products${query(params)}`);
+
+/** 全站收藏（跨租户）。人物标识：用户ID + 用户名。 */
+export interface PlatformFavoriteRow {
+  id: number;
+  tenant_id?: number;
+  product_id: number;
+  product_name: string;
+  product_image?: string | null;
+  seller_shop_name?: string | null;
+  user_public_id?: string | null;
+  user_username?: string | null;
+  created_at?: string | null;
+}
+
+export const listPlatformFavorites = (params: {
+  keyword?: string;
+  tenant_id?: number;
+} = {}) => apiGet<PlatformFavoriteRow[]>(`/platform/favorites${query(params)}`);
+
+/** 评价里的媒体（图/视频）。 */
+export interface PlatformReviewMedia {
+  type: 'image' | 'video';
+  url: string;
+}
+
+/** 全站评价（跨租户）。匿名的在这里也带真实用户信息。 */
+export interface PlatformReviewRow {
+  id: number;
+  tenant_id?: number;
+  product_id: number;
+  product_name: string;
+  product_image?: string | null;
+  seller_shop_name?: string | null;
+  rating: number;
+  content?: string | null;
+  media?: PlatformReviewMedia[];
+  is_anonymous?: boolean;
+  user_public_id?: string | null;
+  user_username?: string | null;
+  status: string;
+  moderation_status?: string;
+  moderation_note?: string | null;
+  reply?: string | null;
+  created_at?: string | null;
+}
+
+export const listPlatformReviews = (params: {
+  keyword?: string;
+  status?: string;
+  moderation_status?: string;
+  tenant_id?: number;
+} = {}) => apiGet<PlatformReviewRow[]>(`/platform/reviews${query(params)}`);
+
+export const setPlatformReviewStatus = (id: number, status: string) =>
+  apiPost<{ id: number; status: string }>(`/platform/reviews/${id}/status`, { status });
+
+export const replyPlatformReview = (id: number, reply: string) =>
+  apiPost<{ id: number; reply: string }>(`/platform/reviews/${id}/reply`, { reply });

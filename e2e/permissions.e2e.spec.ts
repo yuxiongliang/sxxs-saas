@@ -70,9 +70,14 @@ test.describe('permissions: operator', () => {
     await gotoAndExpectForbidden(page, '/users/roles');
   });
 
-  test('department management URL is blocked', async ({ page }) => {
+  test('department management is gone and the old URL falls back to the user list', async ({
+    page,
+  }) => {
+    // 部门管理已从产品下线（路由 + 菜单 + 用户表单都删了）。
+    // 老书签不能 404，应该安静地回到用户列表。
     await loginAs(page, OPERATOR);
-    await gotoAndExpectForbidden(page, '/users/departments');
+    await page.goto('/users/departments');
+    await expect(page).toHaveURL(/\/users\/list/, { timeout: 30_000 });
   });
 
   test('payment settings URL is blocked', async ({ page }) => {

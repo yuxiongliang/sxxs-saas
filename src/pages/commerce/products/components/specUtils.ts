@@ -60,16 +60,25 @@ export function skuNameFor(combo: Combo): string {
 /**
  * 某个候选组合是否还能买到（买家端据此把不可能的组合置灰）。
  * 只有 `status === 'active'` 的 SKU 参与判定。
+ *
+ * **只比对已经选中的规格组**（部分匹配）。
+ * 以前这里要求 `groups.every(...)` —— 也就是必须**所有组都选完**才可能返回 true，
+ * 结果是两组规格的商品：第一组一个值都点不动（candidate 里第二组还是 undefined），
+ * 买家直接卡死在详情页。现在选中「尺码=xl」时，只要存在 `尺码=xl` 的可售 SKU
+ * 就允许点，选完第二组再缩小范围。
  */
 export function isSellable(
   skus: Array<{ specs?: Combo | null; status?: string }>,
   groups: SpecGroupLike[],
   candidate: Combo,
 ): boolean {
+  // 只拿「已经选了值」的组做比对；一个都没选时谈不上不可售
+  const decided = groups.filter((group) => candidate[group.name] !== undefined);
+  if (!decided.length) return true;
   return skus.some(
     (sku) =>
       (sku.status ?? 'active') === 'active' &&
-      groups.every(
+      decided.every(
         (group) => sku.specs?.[group.name] === candidate[group.name],
       ),
   );

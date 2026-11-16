@@ -19,7 +19,7 @@ import { listPlatformAudit } from '@/services/api';
 function summarise(value: Record<string, unknown> | null): string {
   if (!value) return '—';
   return Object.entries(value)
-    .map(([key, raw]) => key + '=' + JSON.stringify(raw))
+    .map(([key, raw]) => `${key}=${JSON.stringify(raw)}`)
     .join(' · ');
 }
 

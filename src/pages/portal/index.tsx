@@ -1,8 +1,10 @@
 import {
+  CommentOutlined,
   EnvironmentOutlined,
   ProfileOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
+  StarOutlined,
 } from '@ant-design/icons';
 import { Card, Col, Row, Typography } from 'antd';
 import PortalShell from './components/PortalShell';
@@ -36,6 +38,20 @@ const ENTRIES = [
     desc: '管理常用收货地址',
     href: '/portal/addresses',
     icon: <EnvironmentOutlined />,
+  },
+  {
+    key: 'favorites',
+    title: '我的收藏',
+    desc: '收藏过的商品，随时回头看',
+    href: '/portal/favorites',
+    icon: <StarOutlined />,
+  },
+  {
+    key: 'reviews',
+    title: '我的评价',
+    desc: '评价买过的商品，查看卖家回复',
+    href: '/portal/reviews',
+    icon: <CommentOutlined />,
   },
   {
     key: 'seller',

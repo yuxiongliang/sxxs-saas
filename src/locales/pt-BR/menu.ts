@@ -56,6 +56,8 @@ export default {
   'menu.product-management': 'Product Management',
   'menu.product-management.productList': 'Products',
   'menu.product-management.productCategories': 'Categories',
+  'menu.product-management.productFavorites': 'Favoritos',
+  'menu.product-management.productReviews': 'Avaliações',
   'menu.productList': 'Products',
   'menu.productCategories': 'Categories',
   'menu.order-management': 'Order Management',

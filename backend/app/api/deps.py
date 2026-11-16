@@ -31,6 +31,25 @@ async def get_current_context(
     return await context_from_payload(db, payload)
 
 
+async def get_optional_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> AuthContext | None:
+    """公开接口用的「能登就登」。
+
+    公开商品/评价等接口对匿名访客开放，但戴着有效 token 访问时要能返回
+    **与本人相关** 的字段（如 `is_favorited`）。token 无效或缺失一律当匿名，
+    不报 401 —— 否则收藏态这种装饰性字段会把整个页面拖成登录页。
+    """
+    if credentials is None:
+        return None
+    try:
+        payload = decode_access_token(credentials.credentials, audience="admin")
+        return await context_from_payload(db, payload)
+    except (PyJWTError, HTTPException):
+        return None
+
+
 async def get_platform_context(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),

@@ -18,6 +18,8 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
+  Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
@@ -243,6 +245,54 @@ const ProductManagementPage: React.FC = () => {
       render: (value: string) => (
         <Tag color={statusColor(value)}>{labelOf(PRODUCT_STATUS, value)}</Tag>
       ),
+    },
+    {
+      // 销量口径：已付款、未取消/退款的件数（services/catalog_stats.py）
+      title: '销量',
+      dataIndex: 'sold_count',
+      width: 90,
+      align: 'right',
+      render: (value: number | undefined) => (
+        <Typography.Text strong={Boolean(value)}>{value ?? 0}</Typography.Text>
+      ),
+    },
+    {
+      // 浏览 = 买家侧商品详情被打开的次数（刷新也会累计），
+      // 不是广告曝光；列头必须写清楚，否则会被当成投放数据看。
+      title: (
+        <Tooltip title="买家打开商品详情页的次数（PV，刷新也会累计）。运营后台预览不计。">
+          浏览
+        </Tooltip>
+      ),
+      dataIndex: 'view_count',
+      width: 90,
+      align: 'right',
+      render: (value: number | undefined) => value ?? 0,
+    },
+    {
+      title: '收藏',
+      dataIndex: 'favorite_count',
+      width: 90,
+      align: 'right',
+      render: (value: number | undefined) => value ?? 0,
+    },
+    {
+      title: '评分',
+      key: 'rating',
+      width: 120,
+      render: (_, record) =>
+        record.rating_avg == null ? (
+          <Typography.Text type="secondary">—</Typography.Text>
+        ) : (
+          <Tooltip
+            title={`${record.rating_avg.toFixed(2)} 分 · ${record.review_count ?? 0} 条评价`}
+          >
+            <Typography.Text>★ {record.rating_avg.toFixed(1)}</Typography.Text>
+            <Typography.Text type="secondary" style={{ marginLeft: 6 }}>
+              ({record.review_count ?? 0})
+            </Typography.Text>
+          </Tooltip>
+        ),
     },
     {
       title: '更新时间',

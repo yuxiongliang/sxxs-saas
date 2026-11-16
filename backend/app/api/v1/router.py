@@ -9,6 +9,7 @@ from app.api.v1 import (
     commerce,
     dashboard,
     departments,
+    favorites,
     finance_admin,
     im,
     media,
@@ -16,6 +17,7 @@ from app.api.v1 import (
     platform,
     platform_audit,
     platform_auth,
+    platform_catalog,
     platform_categories,
     platform_domains,
     platform_moderation,
@@ -26,6 +28,7 @@ from app.api.v1 import (
     platform_users,
     portal_shopping,
     public,
+    reviews,
     roles,
     seller,
     settings,
@@ -44,6 +47,8 @@ api_router.include_router(billing.router)
 api_router.include_router(billing.tenant_router)
 api_router.include_router(audit.router)
 api_router.include_router(portal_shopping.router)
+api_router.include_router(favorites.router)
+api_router.include_router(reviews.router)
 api_router.include_router(im.router)
 api_router.include_router(seller.router)
 api_router.include_router(platform_audit.router)
@@ -55,6 +60,7 @@ api_router.include_router(platform_overview.router)
 api_router.include_router(platform_domains.router)
 api_router.include_router(platform_service_categories.router)
 api_router.include_router(platform_categories.router)
+api_router.include_router(platform_catalog.router)
 api_router.include_router(platform_users.router)
 api_router.include_router(platform_notification_templates.router)
 api_router.include_router(media.router)
