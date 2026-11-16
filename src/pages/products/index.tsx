@@ -104,25 +104,13 @@ export default function ProductsPage() {
     <MallShell activeKey="products">
       <section className={styles.section}>
         <div className={styles.container}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>
-              {t({ id: 'mall.products.title', defaultMessage: '商品' })}
-            </h2>
-            <p className={styles.sectionSubtitle}>
-              {t(
-                {
-                  id: 'mall.products.subtitle',
-                  defaultMessage: '卖家发布的在售商品，共 {count} 件',
-                },
-                { count: total },
-              )}
-            </p>
-          </div>
-
+          {/* 标题区块已按要求删除；件数移进筛选栏右侧，不丢信息也不占一整块 */}
           <FilterBar
             filters={filters}
             onChange={patchFilters}
             onReset={resetFilters}
+            total={total}
+            loading={productsQuery.isLoading}
           />
 
           {productsQuery.isLoading ? (

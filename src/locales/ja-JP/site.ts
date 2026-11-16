@@ -98,9 +98,8 @@ export default {
   'mall.hero.ctaConsole': 'コンソールを開く',
   'mall.stats.products': '販売中の商品',
   'mall.stats.shops': '出品者ショップ',
-  'mall.products.title': '商品',
-  'mall.products.subtitle': '出品者が公開中の商品、全 {count} 件',
   'mall.products.empty': '販売中の商品はまだありません',
+  'mall.products.count': '全 {count} 件',
   'mall.products.error':
     '商品の読み込みに失敗しました。後でもう一度お試しください',
   'mall.product.stock': '在庫 {count}',

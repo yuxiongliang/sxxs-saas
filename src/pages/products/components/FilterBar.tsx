@@ -1,5 +1,6 @@
 import { ClearOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
+import { useIntl } from '@umijs/max';
 import { Button, Input, InputNumber, Select, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import type { PublicProductQuery } from '@/services/commerce/api';
@@ -36,16 +37,23 @@ export default function FilterBar({
   filters,
   onChange,
   onReset,
+  total,
+  loading = false,
 }: {
   filters: ProductFilters;
   onChange: (patch: Partial<ProductFilters>) => void;
   onReset: () => void;
+  /** 结果总数：原来在页头「共 N 件」，页头删了以后在筛选栏右侧回显 */
+  total?: number;
+  loading?: boolean;
 }) {
   // 搜索框用本地 state：打字过程不需要同步到 URL（否则每敲一下都进历史记录）
   const [keyword, setKeyword] = useState(filters.keyword ?? '');
   useEffect(() => {
     setKeyword(filters.keyword ?? '');
   }, [filters.keyword]);
+
+  const { formatMessage: t } = useIntl();
 
   const categories = useQuery({
     queryKey: ['public-categories'],
@@ -94,8 +102,14 @@ export default function FilterBar({
         onSearch={(value) => onChange({ keyword: value.trim() || undefined })}
       />
 
+      {/*
+        分类可搜索：分类是平台统一维护的，数量会持续增长，
+        让运营/买家在长列表里滚不现实。`optionFilterProp="label"` 按中文名匹配。
+      */}
       <Select
         allowClear
+        showSearch
+        optionFilterProp="label"
         placeholder="全部分类"
         style={{ width: 150 }}
         value={filters.categoryId}
@@ -104,6 +118,7 @@ export default function FilterBar({
           value: item.id,
           label: item.name,
         }))}
+        notFoundContent={categories.isLoading ? '加载中…' : '没有匹配的分类'}
       />
 
       <Space size={4} align="center">
@@ -150,6 +165,18 @@ export default function FilterBar({
           最低价不能高于最高价
         </Typography.Text>
       ) : null}
+
+      {/* 结果数：页头区块删掉后，避免用户不知道筛出来多少东西 */}
+      <div style={{ marginLeft: 'auto' }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {loading
+            ? '…'
+            : t(
+                { id: 'mall.products.count', defaultMessage: '共 {count} 件' },
+                { count: total ?? 0 },
+              )}
+        </Typography.Text>
+      </div>
     </div>
   );
 }

@@ -388,6 +388,8 @@ const ProductManagementPage: React.FC = () => {
               />
               <Select
                 allowClear
+                showSearch
+                optionFilterProp="label"
                 placeholder="分类"
                 style={{ width: 160 }}
                 value={categoryId}
