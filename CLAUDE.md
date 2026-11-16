@@ -24,6 +24,8 @@ Other: `npm run openapi` (regenerate `src/services/`), `npm run simple` (**irrev
   数据库不存冗余名字，查询时 join `users`（现成写法：`services/audit.actor_directory()`）。
   新增接口字段命名：`owner_public_id`/`owner_username`、`buyer_public_id`/`buyer_username`、
   `actor_public_id`/`actor_username`。详见 `docs/admin-console.md` →「人物标识口径」。
+- **不要自作主张 `git push`** — 默认只本地 `git commit`。只有用户**明确说「推送到 GitHub」**的那一次才 push，
+  之后的每次改动都不要顺带推。上一次授权不构成长期授权。
 
 ## Architecture Essentials
 
