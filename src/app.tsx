@@ -21,6 +21,7 @@ import {
 } from '@/components';
 import { type AuthTenant, me as queryMe } from '@/services/auth/api';
 import {
+  applyBrandDescription,
   applyBrandFavicon,
   getPublicBrand,
   type PublicBrand,
@@ -182,6 +183,7 @@ export async function getInitialState(): Promise<{
   }> => {
     const brand = await getPublicBrand();
     applyBrandFavicon(brand?.favicon_url);
+    applyBrandDescription(brand?.site_description);
     return {
       brand,
       settings: {

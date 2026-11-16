@@ -333,7 +333,13 @@ PLATFORM_ADMIN_EMAIL = "root@saixiao.local"
 async def seed_auth_data(db: AsyncSession) -> None:
     tenant = (await db.scalars(select(Tenant).where(Tenant.slug == DEMO_TENANT_SLUG))).first()
     if tenant is None:
-        tenant = Tenant(name="Demo C2C Marketplace", slug=DEMO_TENANT_SLUG, status="active")
+        tenant = Tenant(
+            name="Demo C2C Marketplace",
+            slug=DEMO_TENANT_SLUG,
+            status="active",
+            # 演示租户给一句站点介绍，否则登录页副标题 / 页脚会空着不好看
+            site_description="同城闲置交易平台：二手好物、当面验货、放心买",
+        )
         db.add(tenant)
         await db.flush()
 

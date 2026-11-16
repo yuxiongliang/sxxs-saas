@@ -25,6 +25,7 @@ def _serialize(record: Tenant) -> TenantBrandOut:
         slug=record.slug,
         name=record.name,
         display_name=record.display_name or record.name,
+        site_description=record.site_description,
         logo_url=record.logo_url,
         favicon_url=record.favicon_url,
         icp_number=record.icp_number,
@@ -55,6 +56,9 @@ async def save_brand(
         raise HTTPException(status_code=404, detail="租户不存在")
     if payload.display_name is not None:
         record.display_name = payload.display_name or None
+    if payload.site_description is not None:
+        # 全空白当作"没填"，不要存一串空格让前端以为有内容
+        record.site_description = (payload.site_description or "").strip() or None
     if payload.logo_url is not None:
         record.logo_url = payload.logo_url or None
         await attachment_service.publish_by_public_url(db, context.tenant.id, record.logo_url)

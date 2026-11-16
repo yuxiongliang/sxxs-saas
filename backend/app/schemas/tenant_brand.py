@@ -6,6 +6,8 @@ class TenantBrandOut(BaseModel):
     slug: str
     name: str
     display_name: str
+    # 一句话站点介绍（多行文本）；空表示租户没填，前端不显示
+    site_description: str | None = None
     logo_url: str | None = None
     favicon_url: str | None = None
     # 页脚备案信息：ICP 备案号（如 京ICP备12345678号）与 ICP 许可证号（如 京ICP证…）
@@ -21,6 +23,8 @@ class TenantBrandUpdate(BaseModel):
     """
 
     display_name: str | None = Field(default=None, max_length=64)
+    # 多行文本；上限 300 字（库里是 Text，不设硬截断，长度只在接口层卡）
+    site_description: str | None = Field(default=None, max_length=300)
     logo_url: str | None = Field(default=None, max_length=512)
     favicon_url: str | None = Field(default=None, max_length=512)
     icp_number: str | None = Field(default=None, max_length=64)

@@ -4,21 +4,21 @@ This repository contains the admin console of 赛霄玄思, a multi-tenant C2C m
 
 ## Frontend routes
 
-| Route | Page |
-|---|---|
-| `/users` | 用户管理（重定向到 `/users/list`） |
-| `/users/list` | 用户列表 |
-| `/users/departments` | 部门管理 |
-| `/users/roles` | 角色管理 |
-| `/system/settings/payment` | 支付设置（支付宝 / 微信支付） |
-| `/system/settings/sms` | 短信设置（阿里云短信） |
-| `/system/settings/email` | 邮件系统（QQ / 163 / 企业邮箱 / 自定义 SMTP） |
-| `/system/settings/storage` | 存储设置（本地 / 阿里云 OSS） |
-| `/attachments` | 全局附件管理 |
-| `/notifications` | 触达通知（短信 / 邮件 / 站内信） |
-| `/commerce/products` | 商品管理（审核 / 上下架 / 改价改库存） |
-| `/system/brand` | 站点品牌（名称 / Logo / Favicon / ICP 备案） |
-| `/account/settings` | 个人设置（基本设置 / 安全设置 / 账号绑定 / 新消息通知） |
+| Route                      | Page                                                    |
+| -------------------------- | ------------------------------------------------------- |
+| `/users`                   | 用户管理（重定向到 `/users/list`）                      |
+| `/users/list`              | 用户列表                                                |
+| `/users/departments`       | 部门管理                                                |
+| `/users/roles`             | 角色管理                                                |
+| `/system/settings/payment` | 支付设置（支付宝 / 微信支付）                           |
+| `/system/settings/sms`     | 短信设置（阿里云短信）                                  |
+| `/system/settings/email`   | 邮件系统（QQ / 163 / 企业邮箱 / 自定义 SMTP）           |
+| `/system/settings/storage` | 存储设置（本地 / 阿里云 OSS）                           |
+| `/attachments`             | 全局附件管理                                            |
+| `/notifications`           | 触达通知（短信 / 邮件 / 站内信）                        |
+| `/commerce/products`       | 商品管理（审核 / 上下架 / 改价改库存）                  |
+| `/system/brand`            | 站点品牌（名称 / 描述 / Logo / Favicon / ICP 备案）     |
+| `/account/settings`        | 个人设置（基本设置 / 安全设置 / 账号绑定 / 新消息通知） |
 
 ## Page tabs
 
@@ -103,11 +103,11 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 **界面上只允许出现「用户ID + 用户名」，不允许出现裸自增 ID。**
 
-| 要显示的 | 用哪个字段 | 例子 |
-|---|---|---|
-| 用户ID | `users.public_id`（20 位、全站唯一、可复制） | `usr_254cfe101573b0fbe9ff` |
-| 用户名 | `users.username`（登录名，不可改） | `admin`、`lisi` |
-| 店铺名/卖家名 | `sellers.display_name` —— **只能做副行**，不能单独当身份 | `李思的二手好物` |
+| 要显示的      | 用哪个字段                                               | 例子                       |
+| ------------- | -------------------------------------------------------- | -------------------------- |
+| 用户ID        | `users.public_id`（20 位、全站唯一、可复制）             | `usr_254cfe101573b0fbe9ff` |
+| 用户名        | `users.username`（登录名，不可改）                       | `admin`、`lisi`            |
+| 店铺名/卖家名 | `sellers.display_name` —— **只能做副行**，不能单独当身份 | `李思的二手好物`           |
 
 为什么不用 `users.id`：它是自增主键，对外暴露既不方便人读也泄漏数据规模；
 为什么不用昵称：昵称是管理员维护的展示名，改了就变，无法对账。
@@ -122,13 +122,13 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 已经落地的页面（改新页面时照抄这些）：
 
-| 页面 | 形态 |
-|---|---|
-| `/system/audit` | 用户ID（可复制）+ 用户名 |
-| `/sellers` | 用户ID / 用户名 / 卖家名 / 类型 |
-| `/commerce/products` | 卖家列 = 用户名 + 副行卖家名；店铺单独一列 |
-| `/platform/users`、`/platform/audit` | 同口径 |
-| `/finance`、`/orders`、`/messages` | 本轮对齐（见下） |
+| 页面                                 | 形态                                       |
+| ------------------------------------ | ------------------------------------------ |
+| `/system/audit`                      | 用户ID（可复制）+ 用户名                   |
+| `/sellers`                           | 用户ID / 用户名 / 卖家名 / 类型            |
+| `/commerce/products`                 | 卖家列 = 用户名 + 副行卖家名；店铺单独一列 |
+| `/platform/users`、`/platform/audit` | 同口径                                     |
+| `/finance`、`/orders`、`/messages`   | 本轮对齐（见下）                           |
 
 排查口径：搜 `dataIndex: '\w*_id'`、`{record.seller_id}`、`买家 {buyer_id}` 这类渲染就是漏网；
 改的时候连带同步**列表列 / 详情抽屉 / 筛选条件 / 导出 / e2e 断言**。
@@ -139,12 +139,12 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 四个 Tab 都是**真接口**，没有一项是模板假数据：
 
-| Tab | 做什么 | 接口 |
-|---|---|---|
-| 基本设置 | 只读展示 用户ID / 用户名 / 邮箱 / 手机号 / 最近登录；可改 **性别 / 生日** | `GET /auth/me`、`PATCH /auth/me` |
-| 安全设置 | 改密码（验当前密码，成功后强制重新登录）；展示绑定状态与上次登录时间 | `POST /auth/me/password` |
-| 账号绑定 | 换手机号 / 换邮箱（需当前密码确认） | `PUT /auth/me/contact` |
-| 新消息通知 | 分类 × 短信/邮件 开关，**群发时真实生效** | `GET/PUT /auth/me/notification-prefs` |
+| Tab        | 做什么                                                                    | 接口                                  |
+| ---------- | ------------------------------------------------------------------------- | ------------------------------------- |
+| 基本设置   | 只读展示 用户ID / 用户名 / 邮箱 / 手机号 / 最近登录；可改 **性别 / 生日** | `GET /auth/me`、`PATCH /auth/me`      |
+| 安全设置   | 改密码（验当前密码，成功后强制重新登录）；展示绑定状态与上次登录时间      | `POST /auth/me/password`              |
+| 账号绑定   | 换手机号 / 换邮箱（需当前密码确认）                                       | `PUT /auth/me/contact`                |
+| 新消息通知 | 分类 × 短信/邮件 开关，**群发时真实生效**                                 | `GET/PUT /auth/me/notification-prefs` |
 
 几个刻意的取舍：
 
@@ -196,12 +196,11 @@ off_sale     → on_sale
 
 ### 改资料 / 改价改库存
 
-| 动作 | 接口 | 权限 |
-|---|---|---|
+| 动作                    | 接口                                            | 权限             |
+| ----------------------- | ----------------------------------------------- | ---------------- |
 | 改名称/副标题/描述/主图 | `PUT /admin/products/{id}`（**不接受 status**） | `product:manage` |
-| 改价 / 改库存 | `PUT /admin/products/{id}/skus/{sku_id}` | `product:manage` |
-| 商品详情（含全部 SKU） | `GET /admin/products/{id}` | `product:read` |
-
+| 改价 / 改库存           | `PUT /admin/products/{id}/skus/{sku_id}`        | `product:manage` |
+| 商品详情（含全部 SKU）  | `GET /admin/products/{id}`                      | `product:read`   |
 - 改库存会写 `inventory_logs`（`reason=manual_adjust`），且**不能低于 `locked_stock`**；
   直接覆盖 `stock` 会和已下单占用对不上，所以走流水。
 - 商品主图选附件时，后端会把该附件 `visibility` 标成 `public`（同站点 Logo），否则前台破图。
@@ -211,13 +210,12 @@ off_sale     → on_sale
 
 卖家能管自己商品，归属靠 `current_seller()`（`SellerMember` + `Seller.status`），**不靠权限码**。
 
-| 动作 | 接口 | 规则 |
-|---|---|---|
-| 新建 | `POST /portal/seller/products` | 强制 `pending_review`，自动建 1 个 SKU |
-| 改资料 / 改价改库存 | `PUT /portal/seller/products/{id}` | 在售商品改内容或改价 → **自动打回 `pending_review`**（`bounced_to_review=true`） |
-| 自己下架 | `POST /portal/seller/products/{id}/status` `{status:off_sale}` | 仅 `on_sale` 可 |
-| 重新提交 | 同上 `{status:pending_review}` | 仅 `rejected / draft / off_sale` 可；清空驳回原因 |
-
+| 动作                | 接口                                                           | 规则                                                                             |
+| ------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 新建                | `POST /portal/seller/products`                                 | 强制 `pending_review`，自动建 1 个 SKU                                           |
+| 改资料 / 改价改库存 | `PUT /portal/seller/products/{id}`                             | 在售商品改内容或改价 → **自动打回 `pending_review`**（`bounced_to_review=true`） |
+| 自己下架            | `POST /portal/seller/products/{id}/status` `{status:off_sale}` | 仅 `on_sale` 可                                                                  |
+| 重新提交            | 同上 `{status:pending_review}`                                 | 仅 `rejected / draft / off_sale` 可；清空驳回原因                                |
 - 卖家**不能自己上架**：schema 只允许 `off_sale` / `pending_review`，想上架必须走租户运营审核。
 - 为什么在售改动要打回：否则可以「先提交合规商品过审 → 再把标题/主图换成违规内容」，审核形同虚设。
 - 改别人店铺的商品返回 **404**（不是 403，不泄露存在性）。
@@ -248,16 +246,21 @@ All module uploads should use `src/components/AttachmentUpload` and the `/api/v1
 
 租户维护自己的站点名称 / Logo / Favicon，落在 `tenants` 表（不落 settings —— 登录页与通知模板在配置未加载时就要用）。
 
-| 字段 | 怎么填 | 生效位置 |
-|---|---|---|
-| 全站名称 `display_name` | 文本 | 页脚版权、登录页标题、买家中心头部、`<title>`、通知模板 `{{tenant_name}}` |
-| 站点 Logo `logo_url` | **点缩略图 / 「从附件中心选择」挑图** | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心 |
-| Favicon `favicon_url` | 同样从附件中心选图 | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`） |
-| ICP 备案号 `icp_number` | 文本，如 `京ICP备12345678号` | 页脚，自动链到 `beian.miit.gov.cn` |
-| ICP 许可证号 `icp_license` | 文本，如 `京ICP证030173号` | 页脚 |
+| 字段                        | 怎么填                                                       | 生效位置                                                                                                |
+| --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 全站名称 `display_name`     | 文本                                                         | 页脚版权、登录页标题、买家中心头部、`<title>`、通知模板 `{{tenant_name}}`                               |
+| 站点描述 `site_description` | **多行文本，上限 300 字**（库里是 `TEXT`，长度只在接口层卡） | 登录页副标题、控制台页脚、买家商城页脚（替代写死的 tagline）、买家中心头部、`<meta name="description">` |
+| 站点 Logo `logo_url`        | **点缩略图 / 「从附件中心选择」挑图**                        | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心                                 |
+| Favicon `favicon_url`       | 同样从附件中心选图                                           | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`）                                         |
+| ICP 备案号 `icp_number`     | 文本，如 `京ICP备12345678号`                                 | 页脚，自动链到 `beian.miit.gov.cn`                                                                      |
+| ICP 许可证号 `icp_license`  | 文本，如 `京ICP证030173号`                                   | 页脚                                                                                                    |
 
 几个必须知道的口径：
 
+- **站点描述留空就不显示那一行**，不回落到任何默认文案；全空白保存时后端存 `null`（不存一串空格，否则页脚会多出一行空白）。
+- **商城页脚的站名也跟品牌走**（`site/components/SiteFooter.tsx` 通过 `hooks/useSiteBrand` 取）。
+  以前这里写死「赛霄玄思 / 多租户 C2C 商城管理后台」，改了品牌页脚不变，很割裂。
+  同一个 hook 在 `SiteHeader` / `SiteFooter` 间共享模块级缓存，一次页面访问只请求一次 `/public/brand`。
 - **设了 logo 后控制台头部只显 logo**：`app.tsx` 的 `layout()` 里 `title` 传空串，让 logo 占住原来标题的位置；没设 logo 才回落成站名文字。
 - **页脚只留两行**：`站点名 © 年份` + 备案信息。原来的 `ver / Umi / Utoo / GitHub` 脚手架行已删掉 —— 对访客没意义，还会把内部版本号与仓库地址暴露出去。
 
@@ -319,15 +322,15 @@ uv pip install --python .venv/bin/python "pytest>=8" "pytest-asyncio>=0.24" "htt
   order independent.
 - Lint/type gates: `uvx ruff check app tests` and `uvx pyright app`.
 
-| Module | Covers |
-|---|---|
-| `test_system_auth.py` | health, login/refresh/logout, register, 401/403, disabled accounts |
-| `test_rbac_permissions.py` | operator/admin matrix, customer lockdown, token audience |
-| `test_users_management.py` | user CRUD, membership + role sync, department CRUD, permission version |
-| `test_tenant_isolation.py` | cross-tenant isolation, settings isolation, forged tenant token, restart regression |
+| Module                        | Covers                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `test_system_auth.py`         | health, login/refresh/logout, register, 401/403, disabled accounts                    |
+| `test_rbac_permissions.py`    | operator/admin matrix, customer lockdown, token audience                              |
+| `test_users_management.py`    | user CRUD, membership + role sync, department CRUD, permission version                |
+| `test_tenant_isolation.py`    | cross-tenant isolation, settings isolation, forged tenant token, restart regression   |
 | `test_commerce_order_flow.py` | server-side pricing, stock reserve/release, seller split, buyer isolation, fulfilment |
-| `test_im_conversations.py` | conversation isolation, seq ordering, `client_msg_id` idempotency, unread counts |
-| `test_seller_finance.py` | seller centre scoping, pending_review products, ledger, payment replay, payout |
+| `test_im_conversations.py`    | conversation isolation, seq ordering, `client_msg_id` idempotency, unread counts      |
+| `test_seller_finance.py`      | seller centre scoping, pending_review products, ledger, payment replay, payout        |
 
 ## Database migrations (Alembic)
 
@@ -363,12 +366,11 @@ cd backend
 A Redis fixed-window limiter sits in front of every route
 (`app/core/rate_limit.py`, registered as middleware).
 
-| Scope | Default | Env |
-|---|---|---|
-| global (`rl:global:{ip}`) | 600 req / 60 s | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` |
-| auth (`rl:auth:{ip}`) — login/register/refresh | 20 req / 60 s | `RATE_LIMIT_AUTH_REQUESTS`, `RATE_LIMIT_AUTH_WINDOW_SECONDS` |
-| kill switch | on | `RATE_LIMIT_ENABLED=false` |
-
+| Scope                                          | Default        | Env                                                          |
+| ---------------------------------------------- | -------------- | ------------------------------------------------------------ |
+| global (`rl:global:{ip}`)                      | 600 req / 60 s | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS`           |
+| auth (`rl:auth:{ip}`) — login/register/refresh | 20 req / 60 s  | `RATE_LIMIT_AUTH_REQUESTS`, `RATE_LIMIT_AUTH_WINDOW_SECONDS` |
+| kill switch                                    | on             | `RATE_LIMIT_ENABLED=false`                                   |
 - Over budget → `429` with `Retry-After` and `{"code":429,"data":{scope,limit,window_seconds}}`.
 - Successful responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`.
 - `/health`, `/docs`, `/redoc`, `/openapi.json`, `/uploads/*` are never limited.
@@ -393,13 +395,13 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 
 Standalone pages (declared with `layout: false`, so they render their own header):
 
-| Route | Page | File |
-|---|---|---|
-| `/portal` | 商城首页 / 我的订单 | `src/pages/portal/index.tsx` |
-| `/portal/products/:id` | 商品详情（多 SKU、库存、店铺） | `src/pages/portal/product-detail` |
-| `/portal/cart` | 购物车（勾选、改数量、结算） | `src/pages/portal/cart` |
-| `/portal/addresses` | 收货地址簿 | `src/pages/portal/addresses` |
-| `/portal/payment-result?orderId=` | 支付结果 + 模拟支付 | `src/pages/portal/payment-result` |
+| Route                             | Page                           | File                              |
+| --------------------------------- | ------------------------------ | --------------------------------- |
+| `/portal`                         | 商城首页 / 我的订单            | `src/pages/portal/index.tsx`      |
+| `/portal/products/:id`            | 商品详情（多 SKU、库存、店铺） | `src/pages/portal/product-detail` |
+| `/portal/cart`                    | 购物车（勾选、改数量、结算）   | `src/pages/portal/cart`           |
+| `/portal/addresses`               | 收货地址簿                     | `src/pages/portal/addresses`      |
+| `/portal/payment-result?orderId=` | 支付结果 + 模拟支付            | `src/pages/portal/payment-result` |
 
 Backend (`app/api/v1/portal_shopping.py`, prefix `/portal`):
 
@@ -520,11 +522,11 @@ POST   /admin/commission-rules/preview   {seller_id?, category_id?, subtotal_cen
 `tenants.settlement_hold_days` (default 7). A seller's ledger reports three
 reconciling numbers:
 
-| Field | Meaning |
-|---|---|
+| Field             | Meaning                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------ |
 | `available_cents` | withdrawable now: order completed **and** hold elapsed, minus money already paid out |
-| `pending_cents` | earned but still inside the hold window |
-| `balance_cents` | `available_cents + pending_cents` (always) |
+| `pending_cents`   | earned but still inside the hold window                                              |
+| `balance_cents`   | `available_cents + pending_cents` (always)                                           |
 
 Money already paid out is deducted from the most settleable bucket first, so the
 three numbers reconcile even after partial payouts
@@ -578,11 +580,11 @@ block the seeded demo data.
 
 ### Enforcement
 
-| Layer | Where | Effect |
-|---|---|---|
-| Tenant status | `context_from_payload` | `suspended` tenant → every API returns `403 租户不可用` |
-| Quota | `billing.check_quota` at product & member creation | `403 已超出套餐配额：<metric> 上限 N` |
-| Feature flags | `plan.features` returned by `/tenant/subscription` | UI can hide unsupported modules |
+| Layer         | Where                                              | Effect                                                  |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------- |
+| Tenant status | `context_from_payload`                             | `suspended` tenant → every API returns `403 租户不可用` |
+| Quota         | `billing.check_quota` at product & member creation | `403 已超出套餐配额：<metric> 上限 N`                   |
+| Feature flags | `plan.features` returned by `/tenant/subscription` | UI can hide unsupported modules                         |
 
 `quotas` semantics: a **missing key** or `null` means unlimited; `0` blocks the resource.
 
@@ -665,18 +667,18 @@ npm run e2e:regression          # 17 tests, ~1 min
 
 `playwright.e2e.config.ts`:
 
-| Setting | Value | Why |
-|---|---|---|
-| baseURL | `http://localhost:8000` (`E2E_PORT` override) | reuses the dev server; `mock/` defines no `/api/v1/*` handler, so calls hit FastAPI |
-| testMatch | `*.e2e.spec.ts` | keeps the legacy mock spec separate |
-| workers | 1 | one dev server, deterministic ordering |
-| locale | `zh-CN` | matches the shipped menus |
+| Setting   | Value                                         | Why                                                                                 |
+| --------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| baseURL   | `http://localhost:8000` (`E2E_PORT` override) | reuses the dev server; `mock/` defines no `/api/v1/*` handler, so calls hit FastAPI |
+| testMatch | `*.e2e.spec.ts`                               | keeps the legacy mock spec separate                                                 |
+| workers   | 1                                             | one dev server, deterministic ordering                                              |
+| locale    | `zh-CN`                                       | matches the shipped menus                                                           |
 
-| Spec | Covers |
-|---|---|
+| Spec                      | Covers                                                                                                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `permissions.e2e.spec.ts` | admin opens every guarded page; operator lacks audit/tenant menu entries and gets **403** on `/users/roles`, `/users/departments`, `/system/settings/payment`, `/system/audit`; customer blocked from the back office; anonymous redirected to login |
-| `portal.e2e.spec.ts` | browse → detail → cart → checkout → mock payment, plus the address book |
-| `seller.e2e.spec.ts` | shop owner sees the seller centre; a C-end buyer's seller API calls return 403; admin opens seller management |
+| `portal.e2e.spec.ts`      | browse → detail → cart → checkout → mock payment, plus the address book                                                                                                                                                                              |
+| `seller.e2e.spec.ts`      | shop owner sees the seller centre; a C-end buyer's seller API calls return 403; admin opens seller management                                                                                                                                        |
 
 Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 
@@ -706,23 +708,23 @@ Two Playwright gotchas encoded in `e2e/helpers/auth.ts`:
 
 ### 状态含义
 
-| 状态 | 含义 | 会解析到租户吗 |
-|---|---|---|
-| `pending` | 已绑定、未验证 | 否 |
-| `active` | 验证通过（或自有子域） | 是 |
-| `failed` | 最近一次验证没查到 TXT | 否 |
-| `disabled` | 手动停用 | 否 |
+| 状态       | 含义                   | 会解析到租户吗 |
+| ---------- | ---------------------- | -------------- |
+| `pending`  | 已绑定、未验证         | 否             |
+| `active`   | 验证通过（或自有子域） | 是             |
+| `failed`   | 最近一次验证没查到 TXT | 否             |
+| `disabled` | 手动停用               | 否             |
 
 租户本身不是 `active` 时，它的域名即使 `active` 也不解析 —— 所以「先停租户、再解绑域名」是安全的。
 
 ### 环境变量
 
-| 变量 | 说明 |
-|---|---|
-| `TENANT_BASE_DOMAIN` | 租户子域后缀；留空 = 不自动建子域 |
-| `PLATFORM_HOST` | 平台控制台自己的域名，命中时不做租户解析 |
+| 变量                     | 说明                                                                       |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `TENANT_BASE_DOMAIN`     | 租户子域后缀；留空 = 不自动建子域                                          |
+| `PLATFORM_HOST`          | 平台控制台自己的域名，命中时不做租户解析                                   |
 | `DOMAIN_VERIFY_PROVIDER` | `none`（默认，verify 直接 503）/ `dns`（需 dnspython）/ `static`（仅测试） |
-| `TENANT_HOST_FALLBACK` | **线上必须 `false`**；本地开发 `true` 时未知 Host 兜底到 demo |
+| `TENANT_HOST_FALLBACK`   | **线上必须 `false`**；本地开发 `true` 时未知 Host 兜底到 demo              |
 
 ### 运维注意
 

@@ -295,6 +295,8 @@ export interface TenantBrandRecord {
   slug: string;
   name: string;
   display_name: string;
+  /** 一句话站点介绍（可多行）：登录页副标题 / 页脚 / 商城顶部都用它 */
+  site_description?: string | null;
   logo_url?: string | null;
   favicon_url?: string | null;
   icp_number?: string | null;
@@ -309,6 +311,7 @@ export async function getTenantBrand() {
 
 export async function saveTenantBrand(data: {
   display_name?: string;
+  site_description?: string;
   logo_url?: string;
   favicon_url?: string;
   icp_number?: string;

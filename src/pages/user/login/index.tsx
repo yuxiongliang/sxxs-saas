@@ -211,9 +211,13 @@ const Login: React.FC = () => {
           }}
           logo={<img alt="logo" src={brand?.logo_url || '/logo.svg'} />}
           title={siteTitle}
-          subTitle={intl.formatMessage({
-            id: 'pages.layouts.userLayout.title',
-          })}
+          // 副标题优先用租户自己写的站点描述；没填才回落到模板默认文案
+          subTitle={
+            brand?.site_description ||
+            intl.formatMessage({
+              id: 'pages.layouts.userLayout.title',
+            })
+          }
           initialValues={{
             autoLogin: true,
           }}

@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Col, Row } from 'antd';
+import { useSiteBrand } from '@/hooks/useSiteBrand';
 import useStyles from '../style';
 
 export default function SiteFooter({
@@ -10,6 +11,18 @@ export default function SiteFooter({
 }) {
   const { styles } = useStyles();
   const { formatMessage } = useIntl();
+  // 站名与一句话介绍以租户品牌为准（在「站点品牌」里填），
+  // 没填才回落到默认文案 —— 以前这里写死了模板站名，改品牌后页脚不变很割裂。
+  const brand = useSiteBrand();
+  const siteName =
+    brand?.display_name ||
+    formatMessage({ id: 'site.hero.title', defaultMessage: '赛霄玄思' });
+  const tagline =
+    brand?.site_description ||
+    formatMessage({
+      id: 'site.footer.tagline',
+      defaultMessage: '多租户 C2C 商城管理后台',
+    });
 
   const columns = [
     {
@@ -43,16 +56,12 @@ export default function SiteFooter({
         <Row gutter={[32, 24]}>
           <Col xs={24} md={10}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
-              {formatMessage({
-                id: 'site.hero.title',
-                defaultMessage: '赛霄玄思',
-              })}
+              {siteName}
             </div>
-            <div style={{ opacity: 0.65, fontSize: 13 }}>
-              {formatMessage({
-                id: 'site.footer.tagline',
-                defaultMessage: '多租户 C2C 商城管理后台',
-              })}
+            <div
+              style={{ opacity: 0.65, fontSize: 13, whiteSpace: 'pre-line' }}
+            >
+              {tagline}
             </div>
           </Col>
           {showLinks &&

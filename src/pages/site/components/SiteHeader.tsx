@@ -17,6 +17,7 @@ import {
 } from '@umijs/max';
 import { Button, Dropdown } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import { useSiteBrand } from '@/hooks/useSiteBrand';
 import { logout as authLogout } from '@/services/auth/api';
 import type { ThemeMode } from '@/theme';
 import { useAppTheme } from '@/theme';
@@ -207,34 +208,27 @@ export default function SiteHeader({
     window.location.assign(item.href);
   };
 
-  // 站点品牌：匿名公开接口。
+  // 站点品牌：匿名公开接口（模块级缓存，页脚复用同一份，一次访问只请求一次）
   // 租户由后端按请求 Host 解析（B6），前端不再传 tenant 参数 ——
   // 本地开发时 Host 解析不出租户，后端会兜底到 demo（TENANT_HOST_FALLBACK）。
-  const [brand, setBrand] = useState<{
-    display_name: string;
-    logo_url?: string | null;
-  }>();
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/v1/public/brand')
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (!cancelled && body?.data) setBrand(body.data);
-      })
-      .catch(() => {
-        /* 品牌取不到就用默认文案，不能影响站点可用性 */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const brand = useSiteBrand();
 
   useEffect(() => {
     if (brand?.display_name) {
       document.title = brand.display_name;
     }
-  }, [brand?.display_name]);
+    if (brand?.site_description) {
+      let meta = document.querySelector<HTMLMetaElement>(
+        "meta[name='description']",
+      );
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'description';
+        document.head.appendChild(meta);
+      }
+      meta.content = brand.site_description;
+    }
+  }, [brand?.display_name, brand?.site_description]);
 
   return (
     <header className={styles.header}>

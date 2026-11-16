@@ -14,6 +14,13 @@ const useStyles = createStyles(({ token, css }) => ({
   copyright: css`
     margin-bottom: 6px;
   `,
+  // 站点描述是多行文本，要保留用户敲的换行
+  description: css`
+    margin-bottom: 6px;
+    white-space: pre-line;
+    max-width: 720px;
+    margin-inline: auto;
+  `,
   legal: css`
     display: flex;
     align-items: center;
@@ -47,11 +54,15 @@ const Footer: React.FC = () => {
   const year = new Date().getFullYear();
   const brand = initialState?.brand;
   const siteName = brand?.display_name || 'Ant Design Pro';
+  const description = brand?.site_description;
   const icpNumber = brand?.icp_number;
   const icpLicense = brand?.icp_license;
 
   return (
     <div className={styles.footer}>
+      {description ? (
+        <div className={styles.description}>{description}</div>
+      ) : null}
       <div className={styles.copyright}>
         {siteName} &copy; {year}
       </div>

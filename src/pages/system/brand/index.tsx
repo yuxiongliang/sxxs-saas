@@ -17,12 +17,16 @@ import {
 import React, { useState } from 'react';
 import AttachmentPicker from '@/components/AttachmentPicker';
 import SettingPage from '@/pages/system/components/SettingPage';
-import { applyBrandFavicon } from '@/services/publicBrand';
+import {
+  applyBrandDescription,
+  applyBrandFavicon,
+} from '@/services/publicBrand';
 import { getTenantBrand, saveTenantBrand } from '@/services/system/api';
 import type { AttachmentRecord } from '@/services/system/types';
 
 interface FormValues {
   display_name: string;
+  site_description: string;
   logo_url: string;
   favicon_url: string;
   icp_number: string;
@@ -151,6 +155,7 @@ export default function TenantBrandPage() {
           slug: saved.slug,
           name: saved.name,
           display_name: saved.display_name,
+          site_description: saved.site_description ?? null,
           logo_url: saved.logo_url,
           favicon_url: saved.favicon_url,
           icp_number: saved.icp_number,
@@ -158,6 +163,8 @@ export default function TenantBrandPage() {
         },
       }));
       applyBrandFavicon(values.favicon_url);
+      // meta description 也要跟着改，不然保存后分享卡片还是旧介绍
+      applyBrandDescription(saved.site_description);
     },
     onError: (error: Error) => message.error(error.message),
   });
@@ -179,6 +186,7 @@ export default function TenantBrandPage() {
           style={{ maxWidth: 640 }}
           initialValues={{
             display_name: current.display_name,
+            site_description: current.site_description ?? '',
             logo_url: current.logo_url ?? '',
             favicon_url: current.favicon_url ?? '',
             icp_number: current.icp_number ?? '',
@@ -192,6 +200,20 @@ export default function TenantBrandPage() {
             extra="为空时回落到租户名称，不会显示空白"
           >
             <Input placeholder="例如 李思的二手好物" allowClear />
+          </Form.Item>
+
+          <Form.Item
+            name="site_description"
+            label="站点描述"
+            extra="一句话介绍这个站点。会用在登录页副标题、页脚和买家商城顶部，也写进页面 meta description（搜索引擎/分享卡片）。留空则不显示"
+          >
+            <Input.TextArea
+              rows={3}
+              maxLength={300}
+              showCount
+              allowClear
+              placeholder="例如 同城闲置交易平台：二手好物、当面验货、放心买"
+            />
           </Form.Item>
 
           <Form.Item

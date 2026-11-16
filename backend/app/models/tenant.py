@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -17,6 +17,8 @@ class Tenant(Base, TimestampMixin):
     # ---- 站点品牌（对外展示；通知模板的 {{tenant_name}} 也取这里）----
     # display_name 为空时回落到 name，避免存量租户没填就显示空白
     display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 一句话站点介绍：登录页副标题 / 页脚 / 商城顶部都用它；空则不显示
+    site_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     favicon_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 备案信息：每个租户的号不同，不能写死在代码里；大陆站点必须在页脚展示。

@@ -58,28 +58,44 @@ const PortalShell: React.FC<PortalShellProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Link
-            to="/products"
-            style={{
-              color: '#fff',
-              fontSize: 24,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            {brand?.logo_url ? (
-              <img
-                src={brand.logo_url}
-                alt={brand.display_name}
-                style={{ height: 28, objectFit: 'contain' }}
-              />
-            ) : (
-              <ShopOutlined />
-            )}
-            {brand?.display_name || 'C2C 商城'}
-          </Link>
+          {/* 站名 + 站点描述：描述是品牌页填的一句话，没填就不占位 */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <Link
+              to="/products"
+              style={{
+                color: '#fff',
+                fontSize: 24,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              {brand?.logo_url ? (
+                <img
+                  src={brand.logo_url}
+                  alt={brand.display_name}
+                  style={{ height: 28, objectFit: 'contain' }}
+                />
+              ) : (
+                <ShopOutlined />
+              )}
+              {brand?.display_name || 'C2C 商城'}
+            </Link>
+            {brand?.site_description ? (
+              <span
+                style={{
+                  color: 'rgba(255,255,255,0.75)',
+                  fontSize: 12,
+                  marginTop: 4,
+                  whiteSpace: 'pre-line',
+                  maxWidth: 520,
+                }}
+              >
+                {brand.site_description}
+              </span>
+            ) : null}
+          </div>
           {title ? <span style={{ opacity: 0.85 }}>/ {title}</span> : null}
         </div>
         <Space size={20}>

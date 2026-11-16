@@ -26,17 +26,40 @@ async def test_tenant_can_update_own_brand_and_public_endpoint_reflects_it(clien
         headers=bearer(admin_token),
         json={
             "display_name": "我的租赁站",
+            "site_description": "社区闲置交易，同城可自提",
             "logo_url": "/api/v1/attachments/public/1",
         },
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["display_name"] == "我的租赁站"
+    assert saved.json()["data"]["site_description"] == "社区闲置交易，同城可自提"
 
     public = await client.get("/api/v1/public/brand?tenant=demo")
     assert public.json()["data"]["display_name"] == "我的租赁站"
+    assert public.json()["data"]["site_description"] == "社区闲置交易，同城可自提"
     assert public.json()["data"]["logo_url"] == "/api/v1/attachments/public/1"
     # 主题色已从产品上移除：接口不应该再把它回吐给前端
     assert "theme_color" not in public.json()["data"]
+
+
+async def test_site_description_blank_is_stored_as_null(client, admin_token):
+    """全空白当「没填」，别存一串空格让前端以为有内容、在页脚渲染出一行空白。"""
+    await client.put(
+        "/api/v1/tenant/brand",
+        headers=bearer(admin_token),
+        json={"site_description": "   "},
+    )
+    brand = await client.get("/api/v1/tenant/brand", headers=bearer(admin_token))
+    assert brand.json()["data"]["site_description"] is None
+
+
+async def test_site_description_length_is_capped(client, admin_token):
+    response = await client.put(
+        "/api/v1/tenant/brand",
+        headers=bearer(admin_token),
+        json={"site_description": "很" * 301},
+    )
+    assert response.status_code == 422
 
 
 async def test_buyer_cannot_update_brand(client, customer_token):

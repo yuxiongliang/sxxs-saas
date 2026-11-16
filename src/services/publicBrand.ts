@@ -9,6 +9,8 @@ export interface PublicBrand {
   slug: string;
   name: string;
   display_name: string;
+  /** 一句话站点介绍（可多行） */
+  site_description?: string | null;
   logo_url?: string | null;
   favicon_url?: string | null;
   /** ICP 备案号（如 京ICP备12345678号），页脚展示 */
@@ -28,6 +30,18 @@ export async function getPublicBrand(): Promise<PublicBrand | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/** 把站点描述写进 `<meta name="description">`，搜索引擎与分享卡片会用。 */
+export function applyBrandDescription(description?: string | null) {
+  if (!description) return;
+  let meta = document.querySelector<HTMLMetaElement>("meta[name='description']");
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'description';
+    document.head.appendChild(meta);
+  }
+  meta.content = description;
 }
 
 /** 把浏览器标签页图标换成租户自己的，取不到就保持原样。 */
