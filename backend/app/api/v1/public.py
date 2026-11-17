@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_optional_context
 from app.core.response import ok
 from app.services import public_catalog as public_catalog_service
+from app.services import public_related as public_related_service
 from app.services import tenant_domains
 from app.services.auth import AuthContext
 
@@ -58,6 +59,31 @@ async def public_products(
             sort=sort,
             page=page,
             page_size=page_size,
+        )
+    )
+
+
+@router.get("/products/{product_id}/related")
+async def public_related_products(
+    product_id: int,
+    request: Request,
+    tenant: str | None = Query(
+        default=None,
+        max_length=64,
+        description="租户 slug（仅 Host 解析不出来时的兜底）",
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=12, ge=1, le=24),
+    db: AsyncSession = Depends(get_db),
+):
+    """详情页「猜你喜欢」：相似商品分页流（同分类 → 同卖家 → 全站兵底）。
+
+    分页而不是一次给完：前端无限加载，用 `page * pageSize >= total` 判到底。
+    """
+    slug = await _tenant_slug(request, tenant, db)
+    return ok(
+        await public_related_service.related_products(
+            db, product_id, slug, page=page, page_size=page_size
         )
     )
 

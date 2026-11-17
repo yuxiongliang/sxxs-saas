@@ -457,6 +457,41 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
   超体积 400 / 老纯文本不被破坏）
 - e2e：`e2e/product-editor.e2e.spec.ts` 覆盖“第 3 步写富文本 → 保存 → 请求体带 `description_doc`”
 
+### 商品列表的瀑布流（`/products`）
+
+用 **JS 分列 + 每列独立 flex 纵向堆叠**，不用 antd `Row/Col`（24 栅格切不出 5 等分，而且栅格是等高对齐的），
+也不用 CSS `columns`（它是**竖向填充**，会把第 1 名排在左列、第 2 名在其下方，打乱综合排序的阅读顺序）。
+
+- 纯逻辑在 `pages/products/components/masonry.ts`：`splitIntoColumns`（`index % n` **横向优先**）+ `columnsForWidth`
+- 列数断点：**≥1440 → 5 · ≥1200 → 4 · ≥768 → 3 · <768 → 2**
+- 列表页**仍保留分页器**（20/页），无限加载只用在详情页推荐位——两者语义不同
+
+**卡片封面按图片原始比例**（`height:auto`，`max-height:420px` 兜底），这是瀑布流能「错开」的前提；
+上一轮给列表卡片加的 1:1 已在瀑布流场景退役（**后台表格缩略图仍是 1:1**）。
+
+> 实测提醒：演示数据里两个商品用的同一张正方形图，所以卡片看起来仍然齐高——
+> 上传不同比例（如 4:3 / 9:16）的图才能看到明显错开。
+
+### 详情页：选项卡 + 猜你喜欢
+
+- 「商品详情」卡片头改成 **Tabs**：`商品详情 | 评价（N）`，评价总数由 `ReviewsPanel` 回传给 tab 标签；
+  `?tab=reviews` 可深链直达评价。`ReviewsPanel` 已拆掉 Card 外壳，现在是纯内容组件。
+- 左侧 **「猜你喜欢」**（`detail/RelatedProducts.tsx`）：
+  - 桌面（≥lg）**sticky + 区块内独立滚动条**；窄屏取消 sticky，跟随页面滚动
+  - 无限加载：`useInfiniteQuery` + `IntersectionObserver`，**`root` 必须绑定到区块的滚动容器**
+    （绑定视口的话，在 `overflow:auto` 容器里哨兵永远不会进入视口）
+  - 两列小卡（`variant="compact"`，不带按钮），分列规则与列表页共用 `splitIntoColumns`
+
+后端 `GET /public/products/{id}/related?page&page_size`：**一条 SQL 分层排序**
+（同分类含子类 → 同卖家 → 全站兜底），末尾用 `Product.id DESC` 做稳定 tiebreaker，
+保证 offset 分页不重不漏。
+
+### 富文本编辑器的受控回灌坑
+
+`RichTextEditor` 里 `onUpdate` 必须把**自己刚产生的 html** 写回 `lastExternal`，
+否则上层 `onChange → setValue → useEffect` 会误判为外部变化并 `setContent`，
+表现为「打一个字就被重置」，doc 会被切成好几段（e2e 就是这发现的）。
+
 ## 买家 shopping (portal)
 
 ### 商品列表筛选与排序（`/products`）

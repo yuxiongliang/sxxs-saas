@@ -583,6 +583,19 @@ export async function listPublicProducts(params?: PublicProductQuery) {
   );
 }
 
+/** 详情页「猜你喜欢」：相似商品分页流（同分类 → 同卖家 → 全站兜底）。 */
+export async function listRelatedProducts(
+  productId: number,
+  params?: { page?: number; page_size?: number },
+) {
+  return unwrap<PublicProductPage>(
+    request(`/api/v1/public/products/${productId}/related`, {
+      method: 'GET',
+      params,
+    }),
+  );
+}
+
 /** 买家端筛选用的分类（平台级、只一级）。 */
 export async function listPublicCategories() {
   return unwrap<Array<{ id: number; name: string; slug: string }>>(

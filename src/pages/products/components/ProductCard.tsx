@@ -11,16 +11,22 @@ function yuan(cents: number) {
 /**
  * 商品卡片：站点前台的统一展示单元。
  *
- * 版式约束（按需求）：
- * * 封面**正方形（1:1）**，有图裁切填满，无图用渐变 + 图标占位，高度不随商品变；
- * * **不展示店铺/卖家**那一行 —— 卡片只讲商品本身；
- * * **没有「查看详情」按钮** —— 整张卡片就是入口（同时支持键盘 Enter/Space）；
- * * 展示**销量 / 浏览**，让买家一眼看出热度；
- * * 底部按钮 `flex: 1 1 0; min-width: 0`，两枚按钮均分容器，窄屏也不会溢出。
+ * 三种版式（`variant`）：
+ * * `default` —— **封面 1:1** + 两个按钮，用于栅格场景（首页精选等）
+ * * `masonry` —— **封面按图片原始比例**，卡片高度天然不等，瀑布流才有「错开」效果
+ *   （`max-height` 兜底，防一张超长图把整列拉爆），标题允许 2 行
+ * * `compact` —— 瀑布流 + 去掉按钮（详情页「猜你喜欢」的窄列放不下两个按钮）
  *
- * 登录策略：加购 / 立即购买需要登录，未登录跳登录并带 redirect 回到本商品。
+ * 不变的三条：不展示店铺/卖家；没有「查看详情」按钮（整卡可点 + 键盘 Enter/Space）；
+ * 展示已售 / 浏览。
  */
-export default function ProductCard({ product }: { product: PublicProduct }) {
+export default function ProductCard({
+  product,
+  variant = 'default',
+}: {
+  product: PublicProduct;
+  variant?: 'default' | 'masonry' | 'compact';
+}) {
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const signedIn = Boolean(initialState?.currentUser);
@@ -30,6 +36,8 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
   const inStock = product.in_stock ?? (product.sku?.stock ?? 0) > 0;
   const priceMin = product.price_min_cents ?? product.sku?.price_cents ?? 0;
   const priceMax = product.price_max_cents ?? priceMin;
+  const isMasonry = variant !== 'default';
+  const showActions = variant !== 'compact';
 
   /** 未登录就带去登录页，登录后回到该商品详情 */
   const ensureSignedIn = () => {
@@ -90,8 +98,14 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
             data-testid="product-card-cover"
             style={{
               width: '100%',
-              aspectRatio: '1 / 1',
-              objectFit: 'cover',
+              // 瀑布流：按图片原始比例（+ maxHeight 兜底），卡片高度才会错开
+              ...(isMasonry
+                ? {
+                    height: 'auto' as const,
+                    maxHeight: 420,
+                    objectFit: 'cover' as const,
+                  }
+                : { aspectRatio: '1 / 1', objectFit: 'cover' as const }),
               display: 'block',
             }}
           />
@@ -100,7 +114,7 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
             data-testid="product-card-cover"
             style={{
               width: '100%',
-              aspectRatio: '1 / 1',
+              ...(isMasonry ? { height: 180 } : { aspectRatio: '1 / 1' }),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -122,7 +136,14 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
           marginBottom: 4,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          ...(isMasonry
+            ? {
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical' as const,
+                minHeight: 44,
+              }
+            : { whiteSpace: 'nowrap' as const }),
         }}
       >
         {product.name}
@@ -174,33 +195,35 @@ export default function ProductCard({ product }: { product: PublicProduct }) {
         <span>浏览 {product.view_count ?? 0}</span>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          marginTop: 12,
-          // 关键：允许收缩，按钮不撑破卡片
-          minWidth: 0,
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <Button
-          data-testid="card-add-cart"
-          icon={<ShoppingCartOutlined />}
-          style={{ flex: '1 1 0', minWidth: 0 }}
-          onClick={handleAddCart}
+      {showActions ? (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginTop: 12,
+            // 关键：允许收缩，按钮不撑破卡片
+            minWidth: 0,
+          }}
+          onClick={(event) => event.stopPropagation()}
         >
-          加入购物车
-        </Button>
-        <Button
-          data-testid="card-buy-now"
-          type="primary"
-          style={{ flex: '1 1 0', minWidth: 0 }}
-          onClick={handleBuyNow}
-        >
-          立即购买
-        </Button>
-      </div>
+          <Button
+            data-testid="card-add-cart"
+            icon={<ShoppingCartOutlined />}
+            style={{ flex: '1 1 0', minWidth: 0 }}
+            onClick={handleAddCart}
+          >
+            加入购物车
+          </Button>
+          <Button
+            data-testid="card-buy-now"
+            type="primary"
+            style={{ flex: '1 1 0', minWidth: 0 }}
+            onClick={handleBuyNow}
+          >
+            立即购买
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

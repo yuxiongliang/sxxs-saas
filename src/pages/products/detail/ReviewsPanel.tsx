@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  Card,
   Empty,
   Image,
   List,
@@ -11,7 +10,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getProductReviews } from '@/services/commerce/api';
 
 const PAGE_SIZE = 5;
@@ -22,7 +21,14 @@ const PAGE_SIZE = 5;
  * 数据来自公开接口 `/public/products/{id}/reviews`：只返回 `visible` 的评价，
  * **匿名评价在这里已经脱敏**（连用户ID都不返回，只给「匿名买家」）。
  */
-export default function ReviewsPanel({ productId }: { productId: number }) {
+export default function ReviewsPanel({
+  productId,
+  onTotalChange,
+}: {
+  productId: number;
+  /** 把评价总数回传给外层（tab 标签上要显示「评价 (12)」） */
+  onTotalChange?: (total: number) => void;
+}) {
   const [page, setPage] = useState(1);
   const reviews = useQuery({
     queryKey: ['product-reviews', productId, page],
@@ -37,27 +43,28 @@ export default function ReviewsPanel({ productId }: { productId: number }) {
   const data = reviews.data;
   const total = data?.total ?? 0;
 
+  // 把总数交给外层：Tabs 的标签要显示「评价 (N)」
+  useEffect(() => {
+    onTotalChange?.(total);
+  }, [onTotalChange, total]);
+
   return (
-    <Card
-      style={{ marginTop: 16 }}
-      title={
-        <Space size={8}>
-          <span>商品评价</span>
-          {data?.rating_avg != null ? (
-            <>
-              <Rate
-                disabled
-                allowHalf
-                value={data.rating_avg}
-                style={{ fontSize: 14 }}
-              />
-              <Typography.Text>{data.rating_avg.toFixed(2)} 分</Typography.Text>
-            </>
-          ) : null}
-          <Typography.Text type="secondary">共 {total} 条</Typography.Text>
-        </Space>
-      }
-    >
+    <div>
+      {/* 标题已迁到 Tabs 上，这里只留评分摘要与条数 */}
+      <Space size={8} style={{ marginBottom: 12 }}>
+        {data?.rating_avg != null ? (
+          <>
+            <Rate
+              disabled
+              allowHalf
+              value={data.rating_avg}
+              style={{ fontSize: 14 }}
+            />
+            <Typography.Text>{data.rating_avg.toFixed(2)} 分</Typography.Text>
+          </>
+        ) : null}
+        <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+      </Space>
       {reviews.isLoading ? (
         <div style={{ padding: 32, textAlign: 'center' }}>
           <Spin />
@@ -150,6 +157,6 @@ export default function ReviewsPanel({ productId }: { productId: number }) {
           ) : null}
         </>
       )}
-    </Card>
+    </div>
   );
 }

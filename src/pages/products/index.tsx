@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useIntl, useSearchParams } from '@umijs/max';
-import { Col, Empty, Pagination, Row, Spin } from 'antd';
+import { Empty, Pagination, Spin } from 'antd';
 import { useCallback, useMemo } from 'react';
 import useStyles from '@/pages/site/style';
 import { listPublicProducts } from '@/services/commerce/api';
 import type { ProductFilters } from './components/FilterBar';
 import FilterBar from './components/FilterBar';
 import MallShell from './components/MallShell';
-import ProductCard from './components/ProductCard';
+import ProductMasonry from './components/ProductMasonry';
 
 const PAGE_SIZE = 20;
 
@@ -133,13 +133,8 @@ export default function ProductsPage() {
             />
           ) : (
             <>
-              <Row gutter={[16, 16]}>
-                {products.map((item) => (
-                  <Col xs={24} sm={12} lg={8} xl={6} key={item.id}>
-                    <ProductCard product={item} />
-                  </Col>
-                ))}
-              </Row>
+              {/* 瀑布流：JS 分列 + 每列独立纵向堆叠（一排 5/4/3/2 列，见 masonry.ts） */}
+              <ProductMasonry products={products} />
               {total > PAGE_SIZE ? (
                 <Pagination
                   style={{ marginTop: 24, textAlign: 'center' }}

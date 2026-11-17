@@ -219,4 +219,45 @@ test.describe('portal: buyer journey', () => {
     // 筛选条件写进 URL，刷新/分享不丢
     await expect(page).toHaveURL(/sort=sold_desc/, { timeout: 20_000 });
   });
+
+  test('renders the product list as a masonry with responsive columns', async ({
+    page,
+  }) => {
+    await page.goto('/products');
+    const masonry = page.getByTestId('product-masonry').first();
+    await expect(masonry).toBeVisible({ timeout: 30_000 });
+
+    // 列的断点：≥1440 → 5 列（默认桌面视口够宽就是 5）
+    const columns = Number(await masonry.getAttribute('data-columns'));
+    expect(columns).toBeGreaterThanOrEqual(2);
+    expect(columns).toBeLessThanOrEqual(5);
+
+    // 瀑布流卡片封面**不再是 1:1**（按图片原始比例，这才有错开效果）
+    const cover = masonry.locator('[data-testid="product-card-cover"]').first();
+    const aspect = await cover.evaluate(
+      (el) => (el as HTMLElement).style.aspectRatio || '',
+    );
+    expect(aspect).toBe('');
+  });
+
+  test('detail page has tabs and a related-products rail', async ({ page }) => {
+    await loginAs(page, CUSTOMER);
+    await page.goto('/products');
+    await page.getByTestId('product-card-title').first().click();
+    await expect(page).toHaveURL(/\/products\/\d+/, { timeout: 30_000 });
+
+    // 选项卡：商品详情 / 评价
+    const tabs = page.locator('.ant-tabs-tab');
+    await expect(tabs.first()).toBeVisible({ timeout: 30_000 });
+    expect(await tabs.count()).toBe(2);
+
+    // 左侧「猜你喜欢」存在
+    await expect(page.getByTestId('related-products')).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // 切到评价：?tab=reviews 写进 URL（可深链）
+    await tabs.nth(1).click();
+    await expect(page).toHaveURL(/tab=reviews/, { timeout: 20_000 });
+  });
 });

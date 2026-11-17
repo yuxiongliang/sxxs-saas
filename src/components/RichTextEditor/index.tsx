@@ -82,9 +82,14 @@ export default function RichTextEditor({
     extensions,
     content: value?.doc ?? EMPTY_DOC,
     onUpdate: ({ editor: instance }) => {
+      const html = instance.getHTML();
+      // ★ 关键：把「自己刚产生的内容」记到 lastExternal，
+      //   否则上层 onChange 更新 value → 下面的 useEffect 误判为外部变化 →
+      //   `setContent` 把光标/结构打散（表现为打一个字就被重置，doc 被切成好几段）。
+      lastExternal.current = html;
       onChange?.({
         doc: instance.getJSON() as Record<string, unknown>,
-        html: instance.getHTML(),
+        html,
       });
     },
     editorProps: {

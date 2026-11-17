@@ -1,6 +1,6 @@
 import { ShoppingOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useIntl, useNavigate, useParams } from '@umijs/max';
+import { useIntl, useNavigate, useParams, useSearchParams } from '@umijs/max';
 import {
   App,
   Button,
@@ -11,6 +11,7 @@ import {
   Row,
   Skeleton,
   Space,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -29,6 +30,7 @@ import {
   removeFavorite,
 } from '@/services/commerce/api';
 import MallShell from '../components/MallShell';
+import RelatedProducts from './RelatedProducts';
 import ReviewsPanel from './ReviewsPanel';
 import ShopCard from './ShopCard';
 
@@ -48,6 +50,13 @@ export default function ProductDetailPage() {
   const { styles } = useStyles();
   const { formatMessage: t } = useIntl();
   const queryClient = useQueryClient();
+  // 选项卡：默认「商品详情」；?tab=reviews 可直接深链到评价
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get('tab') === 'reviews' ? 'reviews' : 'detail',
+  );
+  // 评价总数由 ReviewsPanel 回传，用于 tab 标签显示「评价（12）」
+  const [reviewTotal, setReviewTotal] = useState(0);
 
   const [skuId, setSkuId] = useState<number>();
   const [quantity, setQuantity] = useState(1);
@@ -419,47 +428,84 @@ export default function ProductDetailPage() {
               </Col>
             </Row>
           )}
-          {/* 商品详情（富文本）：全宽卡片。表格/图片很多，挤在信息列里根本展不开 */}
+          {/* 两列：左「猜你喜欢」（区块内滚动无限加载）/ 右 Tabs（详情 + 评价）。
+              窄屏（<lg）时左列整行下移，取消 sticky 与内滚，避免手机上双滚动条打架。 */}
           {!isLoading && !isError && data ? (
-            <Card
-              title={t({
-                id: 'product.detail.descriptionTitle',
-                defaultMessage: '商品详情',
-              })}
-              style={{ marginTop: 16 }}
-            >
-              {data.description_format === 'doc' && data.description_html ? (
-                <RichTextViewer
-                  html={data.description_html}
-                  fallback={
-                    <Typography.Text type="secondary">
-                      {t({
-                        id: 'product.detail.noDescription',
-                        defaultMessage: '卖家暂未填写商品描述。',
-                      })}
-                    </Typography.Text>
-                  }
-                />
-              ) : data.description ? (
-                // 老商品仍是纯文本：保留换行，不要挤成一团
-                <Typography.Paragraph
-                  style={{ whiteSpace: 'pre-line', marginBottom: 0 }}
-                >
-                  {data.description}
-                </Typography.Paragraph>
-              ) : (
-                <Typography.Text type="secondary">
-                  {t({
-                    id: 'product.detail.noDescription',
-                    defaultMessage: '卖家暂未填写商品描述。',
-                  })}
-                </Typography.Text>
-              )}
-            </Card>
-          ) : null}
-          {/* 评价区：只展示 visible；匿名的已脱敏（见 public_reviews） */}
-          {!isLoading && !isError ? (
-            <ReviewsPanel productId={productId} />
+            <Row gutter={[24, 24]} style={{ marginTop: 16 }}>
+              <Col xs={24} lg={6}>
+                <RelatedProducts productId={productId} enabled={!isError} />
+              </Col>
+              <Col xs={24} lg={18}>
+                <Card>
+                  <Tabs
+                    activeKey={activeTab}
+                    onChange={(key) => {
+                      setActiveTab(key);
+                      const next = new URLSearchParams(searchParams);
+                      if (key === 'reviews') next.set('tab', 'reviews');
+                      else next.delete('tab');
+                      setSearchParams(next, { replace: true });
+                    }}
+                    items={[
+                      {
+                        key: 'detail',
+                        label: t({
+                          id: 'product.detail.descriptionTitle',
+                          defaultMessage: '商品详情',
+                        }),
+                        children:
+                          data.description_format === 'doc' &&
+                          data.description_html ? (
+                            <RichTextViewer
+                              html={data.description_html}
+                              fallback={
+                                <Typography.Text type="secondary">
+                                  {t({
+                                    id: 'product.detail.noDescription',
+                                    defaultMessage: '卖家暂未填写商品描述。',
+                                  })}
+                                </Typography.Text>
+                              }
+                            />
+                          ) : data.description ? (
+                            // 老商品仍是纯文本：保留换行，不要挤成一团
+                            <Typography.Paragraph
+                              style={{
+                                whiteSpace: 'pre-line',
+                                marginBottom: 0,
+                              }}
+                            >
+                              {data.description}
+                            </Typography.Paragraph>
+                          ) : (
+                            <Typography.Text type="secondary">
+                              {t({
+                                id: 'product.detail.noDescription',
+                                defaultMessage: '卖家暂未填写商品描述。',
+                              })}
+                            </Typography.Text>
+                          ),
+                      },
+                      {
+                        key: 'reviews',
+                        label: reviewTotal
+                          ? `${t({ id: 'product.detail.reviewsTab', defaultMessage: '评价' })}（${reviewTotal}）`
+                          : t({
+                              id: 'product.detail.reviewsTab',
+                              defaultMessage: '评价',
+                            }),
+                        children: (
+                          <ReviewsPanel
+                            productId={productId}
+                            onTotalChange={setReviewTotal}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                </Card>
+              </Col>
+            </Row>
           ) : null}
         </div>
       </section>
