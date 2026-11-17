@@ -32,6 +32,7 @@ export default function PortalLayout({
   children,
   menu,
   title,
+  wide = false,
   cartCount = 0,
   sectionLabel,
   switchLink,
@@ -39,6 +40,8 @@ export default function PortalLayout({
   children: ReactNode;
   menu: PortalMenuItem[];
   title?: string;
+  /** 宽页面（订单列表这种列很多的）：放宽内容区，收窄外边距 */
+  wide?: boolean;
   cartCount?: number;
   /** 侧栏分组标题，如「买家中心」「卖家中心」 */
   sectionLabel: string;
@@ -189,9 +192,20 @@ export default function PortalLayout({
         </Sider>
 
         <Content
-          style={{ padding: 20, background: 'var(--ant-color-bg-layout)' }}
+          style={{
+            // 宽页面收窄外边距：列多的表格被 1080 卡住会疯狂横向滚动
+            padding: wide ? 12 : 20,
+            background: 'var(--ant-color-bg-layout)',
+          }}
         >
-          <div style={{ maxWidth: 1080, margin: '0 auto' }}>{children}</div>
+          <div
+            style={{
+              maxWidth: wide ? 1600 : 1080,
+              margin: '0 auto',
+            }}
+          >
+            {children}
+          </div>
         </Content>
       </Layout>
 

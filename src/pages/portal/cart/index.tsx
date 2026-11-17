@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useMemo, useState } from 'react';
+import RegionCascader from '@/components/RegionCascader';
 import {
   checkoutCart,
   clearPortalCart,
@@ -39,6 +40,8 @@ const CartPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   // 一个订单可拆多个卖家单，交付方式按卖家各选一个（默认快递）
+  // 手动填地址时的省市区前缀（选了已保存地址就不用它）
+  const [manualRegion, setManualRegion] = useState('');
   const [deliveryBySeller, setDeliveryBySeller] = useState<
     Record<number, 'express' | 'pickup'>
   >({});
@@ -149,7 +152,11 @@ const CartPage: React.FC = () => {
               district: address.district,
               detail: address.detail,
             }
-          : { detail: values.receiver_address },
+          : {
+              detail: [manualRegion, values.receiver_address]
+                .filter(Boolean)
+                .join(' '),
+            },
         address_id: values.address_id,
         remark: values.remark,
       });
@@ -362,8 +369,20 @@ const CartPage: React.FC = () => {
               <Form.Item label="联系电话" name="receiver_phone">
                 <Input placeholder="手机号" />
               </Form.Item>
+              <Form.Item label="省 / 市 / 区">
+                <RegionCascader
+                  onChange={(picked) => {
+                    // 手动填地址时把省市区拼在 detail 前面（后端 receiver_address 只存 detail）
+                    setManualRegion(
+                      [picked.province, picked.city, picked.district]
+                        .filter(Boolean)
+                        .join(' '),
+                    );
+                  }}
+                />
+              </Form.Item>
               <Form.Item label="详细地址" name="receiver_address">
-                <Input placeholder="未选择已保存地址时填写" />
+                <Input placeholder="街道、门牌号（未选择已保存地址时填写）" />
               </Form.Item>
             </>
           ) : (

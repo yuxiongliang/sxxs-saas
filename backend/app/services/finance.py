@@ -137,7 +137,7 @@ async def record_refund_ledger(
     return commission_slice
 
 
-async def _hold_days(db: AsyncSession, tenant_id: int) -> int:
+async def hold_days(db: AsyncSession, tenant_id: int) -> int:
     tenant = await db.get(Tenant, tenant_id)
     return tenant.settlement_hold_days if tenant is not None else 7
 
@@ -147,8 +147,8 @@ async def seller_ledger(db: AsyncSession, context: AuthContext, seller_id: int) 
     if seller is None or seller.tenant_id != context.tenant.id:
         raise HTTPException(status_code=404, detail="卖家不存在")
 
-    hold_days = await _hold_days(db, context.tenant.id)
-    cutoff = datetime.now(UTC) - timedelta(days=hold_days)
+    hold = await hold_days(db, context.tenant.id)
+    cutoff = datetime.now(UTC) - timedelta(days=hold)
 
     entries = list(
         (
@@ -210,7 +210,7 @@ async def seller_ledger(db: AsyncSession, context: AuthContext, seller_id: int) 
         "balance_cents": balance,
         "available_cents": available,
         "pending_cents": pending,
-        "hold_days": hold_days,
+        "hold_days": hold,
         "entries": annotated,
     }
 

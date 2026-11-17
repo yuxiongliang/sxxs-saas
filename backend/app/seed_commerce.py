@@ -10,6 +10,40 @@ from app.models.tenant import Tenant, TenantMember
 from app.models.user import User
 
 
+async def seed_wallet_balance(
+    db: AsyncSession, user_id: int, tenant_id: int, amount: int
+) -> None:
+    """演示用初始余额：没有余额，"余额支付"在 e2e 里根本走不了。"""
+    from app.models.wallet import WalletAccount, WalletTransaction
+
+    existing = (
+        await db.scalars(
+            select(WalletAccount).where(
+                WalletAccount.tenant_id == tenant_id,
+                WalletAccount.user_id == user_id,
+            )
+        )
+    ).first()
+    if existing is not None:
+        return
+    account = WalletAccount(tenant_id=tenant_id, user_id=user_id, balance_cents=amount)
+    db.add(account)
+    await db.flush()
+    db.add(
+        WalletTransaction(
+            tenant_id=tenant_id,
+            account_id=account.id,
+            type="recharge",
+            amount_cents=amount,
+            balance_after=amount,
+            ref_type="seed",
+            ref_id=user_id,
+            remark="演示初始余额",
+            idempotency_key=f"seed:{tenant_id}:{user_id}",
+        )
+    )
+
+
 async def seed_commerce_data(db: AsyncSession) -> None:
     tenant = (await db.scalars(select(Tenant).where(Tenant.slug == "demo"))).first()
     if tenant is None:
@@ -160,6 +194,10 @@ async def seed_commerce_data(db: AsyncSession) -> None:
             )
         )
     ).first()
+    if buyer is not None:
+        # 给演示买家预置 1000 元：余额支付与提现都能直接试
+        await seed_wallet_balance(db, buyer.id, tenant.id, 100000)
+
     order = (
         await db.scalars(
             select(Order).where(Order.tenant_id == tenant.id, Order.buyer_id == buyer.id)

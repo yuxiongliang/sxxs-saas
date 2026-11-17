@@ -23,6 +23,7 @@ export const BUYER_MENU: PortalMenuItem[] = [
   { key: 'overview', label: '概览', href: '/portal', exact: true },
   // 「消息」紧跟在概览下面：它是买家最高频的入口之一，放最后一项要滑到底
   { key: 'messages', label: '消息', href: '/portal/messages' },
+  { key: 'wallet', label: '我的钱包', href: '/portal/wallet' },
   { key: 'orders', label: '我的订单', href: '/portal/orders' },
   { key: 'cart', label: '购物车', href: '/portal/cart' },
   { key: 'favorites', label: '我的收藏', href: '/portal/favorites' },

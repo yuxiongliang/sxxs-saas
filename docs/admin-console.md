@@ -212,6 +212,42 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 买家 completed → 无入口，后端也 400「已完成订单不再受理」
 ```
 
+## 钱包（按租户隔离的统一钱包）
+
+一套账户服务所有角色：买家充值/余额支付/退款入账，卖家货款到期自动结算。
+
+```
+wallet_accounts      (tenant_id, user_id) UNIQUE  balance_cents  frozen_cents
+wallet_transactions  type / amount / balance_after / ref / idempotency_key
+wallet_withdrawals   金额、收款方式+账号+姓名、状态、审核人
+```
+
+### 三条硬不变量（测试锁死）
+
+1. **钱只有一份**：货款划入钱包时同时写一条负数 seller ledger（`wallet_transfer`），
+   因此 `Payout 可提现 + 钱包余额 == 货款总额` —— 同一笔钱不可能提两次
+2. **余额只能由流水驱动**：任何入账/出账都走 `wallet._apply()`，账本与缓存值同事务
+3. **幂等**：`wallet_transactions` 上唯一约束（`type+ref_type+ref_id` / `idempotency_key`）——
+   支付重试、任务重跑、退款补记都不会记两次
+
+### 资金流
+
+| 流 | 说明 |
+| --- | --- |
+| 充值 | 模拟；`client_txn_id` 做幂等 |
+| 余额支付 | 行锁 + 可用余额校验；与微信/支付宝共用 `mark_order_paid()` 同一段状态机 |
+| 微信 / 支付宝 | **模拟渠道**（真实接入需要商户资质，接口形状已按真实预留） |
+| 退款 | **一律退回钱包余额**（原渠道只记在 `refunds.provider` 留痕） |
+| 货款结算 | 账期到期由定时任务 `settle_earnings` 自动划入钱包 |
+| 提现 | 申请即冻结 → 租户运营审核 → 打款扣减 / 驳回解冻 |
+
+### 页面
+
+- 买家/卖家中心「我的钱包」：余额 / 可用 / 冻结、流水、充值、提现
+- 支付结果页：**余额支付 / 微信支付 / 支付宝** 三选一
+- 卖家概览：钱包余额（已结算）+ 待结算货款（未到期），两个口径分开说
+- 租户控制台「**资金审核**」：钱包提现审核（用户ID + 用户名）
+
 ## 定时任务（`scheduled_jobs` + 常驻 worker）
 
 系统以前只有「HTTP 请求进来 → 干活」这一种执行方式，没有任何定时/延时能力。
@@ -238,7 +274,11 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 ## 订单管理（`/orders`）与三端订单列表
 
 **一行 = 一个商品行**，不是一个订单。订单级字段（用户ID / 买家 / 订单号 / 订单金额 /
-支付状态 / 订单状态 / 下单时间）用 `rowSpan` 合并，只在首行渲染。
+支付状态 / 订单状态 / 收货信息 / 物流单号 / 下单时间 / 备注）用 `rowSpan` 合并，只在首行渲染。
+
+> 买家侧（`/portal/orders`）的**详情页已下线**：收货人、电话、地址、物流单号、备注全部进列，
+> 内容区放宽到 1600px（`PortalShell wide`），旧链接 `/portal/orders/:id` 重定向回列表。
+> 接口 `GET /portal/orders/{id}` 仍保留（客服与其它调用需要）。
 
 **状态拆两列**（支付状态 + 订单状态）+ **交付方式列**；筛选也是两个下拉。
 时间列按**浏览器本地时区**渲染 —— 以前 `value.replace('T',' ').slice(0,16)` 是 UTC 截断，

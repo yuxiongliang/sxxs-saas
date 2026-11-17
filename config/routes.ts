@@ -356,6 +356,11 @@ export default [
     ],
   },
   {
+    // 资金审核：卖家结算申请 + 用户钱包提现，运营在一处审钱
+    path: '/commerce/finance/withdrawals',
+    component: './commerce/finance/withdrawals',
+  },
+  {
     path: '/orders',
     name: 'order-management',
     icon: 'profile',
@@ -494,9 +499,10 @@ export default [
     component: './portal/orders',
   },
   {
+    // 买家订单详情页已下线：收货/物流/备注都直接展示在列表里，旧链接回列表
     path: '/portal/orders/:id',
     layout: false,
-    component: './portal/orders/detail',
+    redirect: '/portal/orders',
   },
   {
     path: '/portal/cart',
@@ -513,6 +519,12 @@ export default [
     path: '/portal/favorites',
     layout: false,
     component: './portal/favorites',
+  },
+  {
+    // 我的钱包（买家/卖家同一个钱包；按租户隔离）
+    path: '/portal/wallet',
+    layout: false,
+    component: './portal/wallet',
   },
   {
     // 消息（买家）：与卖家即时沟通

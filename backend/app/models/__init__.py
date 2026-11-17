@@ -29,6 +29,7 @@ from app.models.service_category import ServiceCategory
 from app.models.setting import SystemSetting
 from app.models.tenant import Tenant, TenantDomain, TenantMember
 from app.models.user import User
+from app.models.wallet import WalletAccount, WalletTransaction, WalletWithdrawal
 
 __all__ = [
     "Address",
@@ -82,5 +83,8 @@ __all__ = [
     "TenantSubscription",
     "User",
     "UserNotificationPref",
+    "WalletAccount",
+    "WalletTransaction",
+    "WalletWithdrawal",
     "WorkerHeartbeat",
 ]

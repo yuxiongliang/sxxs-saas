@@ -7,7 +7,10 @@ Host 解析不出来时才走 ?tenant= 兜底，且兜底可用 settings.tenant_
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+import json
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_optional_context
@@ -88,6 +91,29 @@ async def public_related_products(
             db, product_id, slug, page=page, page_size=page_size
         )
     )
+
+
+#: 行政区划数据随仓库走（`app/data/regions.json`），不依赖第三方服务：
+#: 高德只提供地理编码，没有区划树；运营侧也不想因为外部 API 挂了就选不了地址。
+_REGIONS_PATH = Path(__file__).resolve().parents[2] / "data" / "regions.json"
+_regions_cache: list[dict] | None = None
+
+
+def _load_regions() -> list[dict]:
+    global _regions_cache
+    if _regions_cache is None:
+        _regions_cache = json.loads(_REGIONS_PATH.read_text(encoding="utf-8"))
+    return _regions_cache
+
+
+@router.get("/regions")
+async def public_regions(response: Response):
+    """省-市-区三级行政区划（匿名可读，长缓存）。
+
+    买家新增收货地址、购物车手动地址都用它做级联选择。
+    """
+    response.headers["Cache-Control"] = "public, max-age=604800"
+    return ok(_load_regions())
 
 
 @router.get("/categories")

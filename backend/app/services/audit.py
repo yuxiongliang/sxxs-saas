@@ -72,6 +72,12 @@ ACTION_SUBSCRIPTION_PAST_DUE = "subscription.past_due"
 ACTION_SUBSCRIPTION_CANCELLED = "subscription.cancelled"
 ACTION_SUBSCRIPTION_DOWNGRADED = "subscription.downgraded"
 ACTION_PLATFORM_SETTING_UPDATED = "platform.setting.update"
+# ---- 钱包：钱的动作必须每一笔都能追 ----
+ACTION_WALLET_RECHARGE = "wallet.recharge"
+ACTION_WALLET_PAY = "wallet.pay"
+ACTION_WALLET_TRANSFER = "wallet.transfer"
+ACTION_WALLET_WITHDRAW_REQUEST = "wallet.withdraw_request"
+ACTION_WALLET_WITHDRAW_REVIEW = "wallet.withdraw_review"
 
 # 动作 code 是给机器看的（稳定、可 grep、可筛选），界面上直接显示 `product.updated`
 # 对运营没可读性。中文名就放在**定义这些常量的地方**，租户端和平台端都用同一份，
@@ -117,6 +123,11 @@ ACTION_LABELS: dict[str, str] = {
     ACTION_SUBSCRIPTION_CANCELLED: "订阅取消",
     ACTION_SUBSCRIPTION_DOWNGRADED: "订阅降级",
     ACTION_PLATFORM_SETTING_UPDATED: "修改平台配置",
+    ACTION_WALLET_RECHARGE: "钱包充值",
+    ACTION_WALLET_PAY: "余额支付",
+    ACTION_WALLET_TRANSFER: "货款转入钱包",
+    ACTION_WALLET_WITHDRAW_REQUEST: "申请提现",
+    ACTION_WALLET_WITHDRAW_REVIEW: "审核提现",
 }
 
 
@@ -199,6 +210,8 @@ TARGET_TYPE_LABELS: dict[str, str] = {
     "platform_setting": "平台配置",
     "im_message": "站内信",
     "scheduled_job": "定时任务",
+    "wallet": "钱包",
+    "wallet_withdrawal": "提现申请",
 }
 
 target_type_label = TARGET_TYPE_LABELS.get

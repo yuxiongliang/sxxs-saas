@@ -237,6 +237,19 @@ export interface PortalOrder {
   created_at?: string;
   /** 买家也要在列表里直接看到买的是什么 */
   items?: OrderItemRecord[];
+  /** 收货信息 / 备注 / 支付时间：详情页下线后直接在列表展示 */
+  receiver_name?: string | null;
+  receiver_phone?: string | null;
+  receiver_address?: Record<string, string> | null;
+  remark?: string | null;
+  paid_at?: string | null;
+  /** 物流单号（多卖家单会有多条） */
+  shipments?: Array<{
+    seller_order_id: number;
+    carrier: string;
+    tracking_no: string;
+    shipped_at?: string | null;
+  }>;
 }
 
 export interface SellerLedgerEntry {

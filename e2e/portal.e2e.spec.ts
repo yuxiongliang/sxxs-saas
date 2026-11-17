@@ -127,7 +127,8 @@ test.describe('portal: buyer journey', () => {
       timeout: 40_000,
     });
 
-    const payButton = page.getByRole('button', { name: '立即支付（模拟）' });
+    // 支付方式三选一：这里走微信支付（模拟渠道），不依赖钱包余额
+    const payButton = page.getByTestId('pay-wechat');
     if (await payButton.isVisible().catch(() => false)) {
       await payButton.click();
       await expect(page.getByText('支付成功').first()).toBeVisible({
@@ -183,9 +184,19 @@ test.describe('portal: buyer journey', () => {
     await page.getByRole('button', { name: '新增地址' }).first().click();
     await page.getByLabel('收货人').fill('地址测试');
     await page.getByLabel('联系电话').fill('13800002222');
-    await page.getByLabel('省').fill('广东省');
-    await page.getByLabel('市').fill('深圳市');
-    await page.getByLabel('区').fill('南山区');
+    // 省市区已改成级联点选（内置行政区划），不能再 fill
+    await page.locator('.ant-modal .ant-cascader').click();
+    await page.waitForTimeout(900);
+    await page
+      .locator('.ant-cascader-menu')
+      .first()
+      .getByText('广东省')
+      .click();
+    await page.waitForTimeout(300);
+    await page.locator('.ant-cascader-menu').nth(1).getByText('深圳市').click();
+    await page.waitForTimeout(300);
+    await page.locator('.ant-cascader-menu').nth(2).getByText('南山区').click();
+    await page.waitForTimeout(300);
     await page.getByLabel('详细地址').fill(unique);
     await page.getByRole('button', { name: /保\s*存/ }).click();
 

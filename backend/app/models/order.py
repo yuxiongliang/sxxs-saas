@@ -128,6 +128,9 @@ class Refund(Base):
     seller_order_id: Mapped[int] = mapped_column(ForeignKey("seller_orders.id"), index=True)
     amount_cents: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(255), default="")
+    # 这笔钱原本走什么渠道（余额/微信/支付宝）。本期退款统一退回钱包余额，
+    # 但渠道要留痕，否则对账说不清"退的是哪条渠道的钱"。
+    provider: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="refunded")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

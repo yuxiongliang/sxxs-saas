@@ -20,6 +20,7 @@ from app.services import audit as audit_service
 from app.services import finance as finance_service
 from app.services import jobs as jobs_service
 from app.services import order_state as st
+from app.services import wallet as wallet_service
 from app.services.auth import AuthContext
 
 EXPRESS = "express"
@@ -200,6 +201,23 @@ async def mock_pay(db: AsyncSession, context: AuthContext, order_id: int) -> Ord
     order = await db.get(Order, order_id)
     if order is None or order.tenant_id != context.tenant.id:
         raise HTTPException(status_code=404, detail="订单不存在")
+    return await mark_order_paid(db, context, order, provider="mock")
+
+
+async def mark_order_paid(
+    db: AsyncSession,
+    context: AuthContext,
+    order: Order,
+    *,
+    provider: str = "mock",
+    commit: bool = True,
+) -> Order:
+    """把订单置为已支付。
+
+    **所有支付渠道共用这一段**（余额 / 微信 / 支付宝 / 运营模拟）——
+    各写一份的话，库存解锁、台账记账、状态派生迟早有一处漏掉。
+    `commit=False` 让调用方（余额支付）把扣款与订单置位放进同一个事务。
+    """
     if order.payment_status == st.PAY_PAID:
         return order
     if order.payment_status != st.PAY_UNPAID:
@@ -231,8 +249,8 @@ async def mock_pay(db: AsyncSession, context: AuthContext, order_id: int) -> Ord
         Payment(
             tenant_id=context.tenant.id,
             order_id=order.id,
-            provider="mock",
-            provider_trade_no=f"MOCK-{order.order_no}",
+            provider=provider,
+            provider_trade_no=f"{provider.upper()}-{order.order_no}",
             amount_cents=order.payable_amount_cents,
             status="success",
             paid_at=order.paid_at,
@@ -251,11 +269,12 @@ async def mock_pay(db: AsyncSession, context: AuthContext, order_id: int) -> Ord
             "fulfillment_status": order.fulfillment_status,
             "order_no": order.order_no,
             "amount_cents": order.payable_amount_cents,
-            "provider": "mock",
+            "provider": provider,
         },
     )
-    await db.commit()
-    await db.refresh(order)
+    if commit:
+        await db.commit()
+        await db.refresh(order)
     return order
 
 
@@ -400,6 +419,19 @@ async def _complete(db: AsyncSession, order: Order, seller_orders: list[SellerOr
         )
     order.completed_at = now
     _sync(order, seller_orders)
+    # 账期到期自动把货款划进卖家钱包（复用定时任务；退款/取消会撤销）
+    hold_days = await finance_service.hold_days(db, order.tenant_id)
+    for seller_order in seller_orders:
+        if seller_order.fulfillment_status != st.FULFILL_COMPLETED:
+            continue
+        await jobs_service.schedule(
+            db,
+            tenant_id=seller_order.tenant_id,
+            kind=jobs_service.KIND_SETTLE_EARNINGS,
+            ref_type="seller_order",
+            ref_id=seller_order.id,
+            run_at=now + timedelta(days=hold_days),
+        )
     return done
 
 
@@ -553,6 +585,16 @@ async def refund_seller_order(
     if amount_cents > seller_order.goods_amount_cents:
         raise HTTPException(status_code=400, detail="退款金额超过订单金额")
 
+    # 这笔钱原来走什么渠道：留痕，否则对账说不清"退的是哪条渠道的钱"
+    paid_payment = (
+        await db.scalars(
+            select(Payment)
+            .where(Payment.order_id == seller_order.order_id, Payment.status == "success")
+            .order_by(Payment.id)
+        )
+    ).first()
+    provider = paid_payment.provider if paid_payment else None
+
     refund = await _pending_refund(db, seller_order.id)
     if refund is None:
         refund = Refund(
@@ -561,12 +603,14 @@ async def refund_seller_order(
             seller_order_id=seller_order.id,
             amount_cents=amount_cents,
             reason=reason,
+            provider=provider,
             status="refunded",
         )
         db.add(refund)
     else:
         refund.amount_cents = amount_cents
         refund.reason = reason or refund.reason
+        refund.provider = provider
         refund.status = "refunded"
 
     previous_status = seller_order.payment_status
@@ -589,6 +633,24 @@ async def refund_seller_order(
         ref_id=seller_order.id,
         reason="已退款，撤销自动收货任务",
     )
+    await jobs_service.cancel(
+        db,
+        kind=jobs_service.KIND_SETTLE_EARNINGS,
+        ref_type="seller_order",
+        ref_id=seller_order.id,
+        reason="已退款，撤销货款划转任务",
+    )
+    # 退款退回买家钱包余额（产品口径）：与订单退款同一事务，要么都成要么都不成
+    order_for_refund = await db.get(Order, seller_order.order_id)
+    if order_for_refund is not None:
+        await wallet_service.credit_refund(
+            db,
+            tenant_id=context.tenant.id,
+            buyer_id=order_for_refund.buyer_id,
+            refund_id=refund.id,
+            amount_cents=amount_cents,
+            provider=provider,
+        )
     await audit_service.record(
         db,
         action=audit_service.ACTION_SELLER_ORDER_REFUNDED,

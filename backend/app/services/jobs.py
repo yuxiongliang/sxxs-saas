@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.job import ScheduledJob
 
 KIND_AUTO_COMPLETE = "auto_complete"
+#: 账期到期，把卖家货款划进钱包
+KIND_SETTLE_EARNINGS = "settle_earnings"
 
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"

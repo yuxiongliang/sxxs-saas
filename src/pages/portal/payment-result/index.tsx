@@ -76,11 +76,11 @@ const PaymentResultPage: React.FC = () => {
     order?.payment_status === 'paid' ? 'paid' : 'pending_payment',
   );
 
-  const pay = async () => {
+  const pay = async (method: 'wallet' | 'wechat' | 'alipay') => {
     if (!order) return;
     setPaying(true);
     try {
-      await mockPayPortalOrder(order.id);
+      await mockPayPortalOrder(order.id, method);
       message.success('支付成功');
       await refetch();
     } catch (error) {
@@ -113,11 +113,44 @@ const PaymentResultPage: React.FC = () => {
                 title={meta.title}
                 subTitle={order ? `订单号 ${order.order_no}` : '正在加载订单…'}
                 extra={
-                  <Space>
+                  <Space orientation="vertical" style={{ width: '100%' }}>
                     {order?.payment_status === 'unpaid' ? (
-                      <Button type="primary" loading={paying} onClick={pay}>
-                        立即支付（模拟）
-                      </Button>
+                      <>
+                        {/* 三种支付方式：余额即时扣款；微信/支付宝本期是**模拟渠道**，
+                            流程与真实一致，以后换成真实支付只改后端一层 */}
+                        <Space>
+                          <Button
+                            type="primary"
+                            loading={paying}
+                            data-testid="pay-wallet"
+                            onClick={() => pay('wallet')}
+                          >
+                            余额支付
+                          </Button>
+                          <Button
+                            loading={paying}
+                            data-testid="pay-wechat"
+                            onClick={() => pay('wechat')}
+                          >
+                            微信支付
+                          </Button>
+                          <Button
+                            loading={paying}
+                            data-testid="pay-alipay"
+                            onClick={() => pay('alipay')}
+                          >
+                            支付宝
+                          </Button>
+                        </Space>
+                        <div style={{ marginTop: 8 }}>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ fontSize: 12 }}
+                          >
+                            余额支付会即时扣减钱包余额；微信/支付宝为模拟渠道，点击即视为支付成功。
+                          </Typography.Text>
+                        </div>
+                      </>
                     ) : null}
                     <Button onClick={() => navigate('/portal')}>
                       继续购物

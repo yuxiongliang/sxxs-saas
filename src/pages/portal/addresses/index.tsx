@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
+import RegionCascader from '@/components/RegionCascader';
 import {
   createAddress,
   deleteAddress,
@@ -194,17 +195,34 @@ const AddressesPage: React.FC = () => {
           >
             <Input placeholder="手机号" />
           </Form.Item>
-          <Space size={8} style={{ display: 'flex' }}>
-            <Form.Item label="省" name="province" style={{ flex: 1 }}>
-              <Input placeholder="广东省" />
-            </Form.Item>
-            <Form.Item label="市" name="city" style={{ flex: 1 }}>
-              <Input placeholder="深圳市" />
-            </Form.Item>
-            <Form.Item label="区" name="district" style={{ flex: 1 }}>
-              <Input placeholder="南山区" />
-            </Form.Item>
-          </Space>
+          {/* 省市区必须从内置行政区划里选：手填会出现"广东/广东省""深圳/深圳市"
+              这类脏数据，后面按地区统计和配送都受影响 */}
+          <Form.Item
+            label="省 / 市 / 区"
+            required
+            shouldUpdate={(prev, next) =>
+              prev.province !== next.province ||
+              prev.city !== next.city ||
+              prev.district !== next.district
+            }
+          >
+            {() => (
+              <RegionCascader
+                value={{
+                  province: form.getFieldValue('province'),
+                  city: form.getFieldValue('city'),
+                  district: form.getFieldValue('district'),
+                }}
+                onChange={(picked) => {
+                  form.setFieldsValue({
+                    province: picked.province ?? '',
+                    city: picked.city ?? '',
+                    district: picked.district ?? '',
+                  });
+                }}
+              />
+            )}
+          </Form.Item>
           <Form.Item
             label="详细地址"
             name="detail"

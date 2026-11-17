@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -153,6 +155,30 @@ class SellerShipRequest(BaseModel):
 
     carrier: str = Field(default="", max_length=64)
     tracking_no: str = Field(default="", max_length=128)
+
+
+class WalletPayRequest(BaseModel):
+    """买家支付方式。本期微信/支付宝是模拟渠道，接口形状与真实一致。"""
+
+    method: Literal["wallet", "wechat", "alipay"] = "wallet"
+
+
+class WalletRechargeRequest(BaseModel):
+    amount_cents: int = Field(gt=0, le=10_000_000)
+    # 客户端幂等键：重试不会充两次
+    client_txn_id: str = Field(min_length=1, max_length=64)
+
+
+class WalletWithdrawRequest(BaseModel):
+    amount_cents: int = Field(gt=0)
+    method: Literal["alipay", "wechat", "bank"]
+    account_name: str = Field(min_length=1, max_length=64)
+    account_no: str = Field(min_length=1, max_length=128)
+
+
+class WalletWithdrawReviewRequest(BaseModel):
+    approve: bool
+    note: str = Field(default="", max_length=255)
 
 
 class ShopProfileUpdate(BaseModel):

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.job import ScheduledJob
 from app.services import jobs as jobs_service
 from app.services import order as order_service
+from app.services import wallet as wallet_service
 
 
 async def auto_complete(db: AsyncSession, job: ScheduledJob) -> str:
@@ -27,6 +28,15 @@ async def auto_complete(db: AsyncSession, job: ScheduledJob) -> str:
     return "completed" if done else "skipped:state_changed"
 
 
+async def settle_earnings(db: AsyncSession, job: ScheduledJob) -> str:
+    """账期到期：货款划进卖家钱包，并写负数 skill ledger 防止重复提现。"""
+    done = await wallet_service.transfer_seller_earnings(
+        db, job.tenant_id or 0, job.ref_id
+    )
+    return "transferred" if done else "skipped:not_settleable"
+
+
 HANDLERS: dict[str, Callable[[AsyncSession, ScheduledJob], Awaitable[str]]] = {
     jobs_service.KIND_AUTO_COMPLETE: auto_complete,
+    jobs_service.KIND_SETTLE_EARNINGS: settle_earnings,
 }

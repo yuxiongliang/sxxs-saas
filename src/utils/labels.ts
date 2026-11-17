@@ -42,7 +42,8 @@ export const PAYMENT_STATUS: Record<string, string> = {
   refunding: '退款中',
   partially_refunded: '部分退款',
   refunded: '已退款',
-  cancelled: '已取消',
+  // 与履行状态同一口径：取消 = 关闭（两列说法必须一致，否则同一单自相矛盾）
+  cancelled: '已关闭',
 };
 
 export const PAYMENT_STATUS_COLOR: Record<string, string> = {
@@ -60,7 +61,8 @@ export const FULFILLMENT_STATUS: Record<string, string> = {
   to_ship: '待发货',
   shipped: '已发货',
   completed: '已完成',
-  cancelled: '已取消',
+  // 产品口径：取消/全额退款都叫「已关闭」
+  cancelled: '已关闭',
 };
 
 export const FULFILLMENT_STATUS_COLOR: Record<string, string> = {

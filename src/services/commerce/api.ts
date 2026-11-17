@@ -226,9 +226,20 @@ export async function createPortalOrder(data: {
   );
 }
 
-export async function mockPayPortalOrder(id: number) {
-  return unwrap<{ id: number; status: string }>(
-    request(`/api/v1/portal/orders/${id}/mock-pay`, { method: 'POST' }),
+export async function mockPayPortalOrder(
+  id: number,
+  method: 'wallet' | 'wechat' | 'alipay' = 'wallet',
+) {
+  return unwrap<{
+    id: number;
+    payment_status: string;
+    fulfillment_status: string;
+    provider: string;
+  }>(
+    request(`/api/v1/portal/orders/${id}/mock-pay`, {
+      method: 'POST',
+      data: { method },
+    }),
   );
 }
 
@@ -712,6 +723,13 @@ export async function listRelatedProducts(
 }
 
 /** 买家端筛选用的分类（平台级、只一级）。 */
+/** 省市区级联数据（内置行政区划，随仓库走，不依赖第三方服务）。 */
+export async function getRegions() {
+  return unwrap<Array<{ name: string; children?: Array<{ name: string; children?: Array<{ name: string }> }> }>>(
+    request('/api/v1/public/regions', { method: 'GET' }),
+  );
+}
+
 export async function listPublicCategories() {
   return unwrap<Array<{ id: number; name: string; slug: string }>>(
     request('/api/v1/public/categories', { method: 'GET' }),

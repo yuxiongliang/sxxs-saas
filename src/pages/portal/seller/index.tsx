@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import {
+  getSellerLedger,
   getSellerProfile,
   listSellerOrders,
   listSellerProducts,
@@ -24,6 +25,7 @@ import {
   updateSellerShop,
 } from '@/services/commerce/api';
 import type { SellerOrderRecord } from '@/services/commerce/types';
+import { getWallet } from '@/services/wallet/api';
 import SellerShell from './components/SellerShell';
 
 /**
@@ -68,6 +70,14 @@ export default function SellerOverviewPage() {
       pickup_note: profile.data.shop.pickup_note ?? '',
     });
   }, [profile.data, shopForm]);
+
+  const wallet = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
+  // 待结算货款来自卖家台账（还没到账期的钱），与钱包余额是两个口径
+  const ledger = useQuery({
+    queryKey: ['seller-ledger', profile.data?.id],
+    queryFn: () => getSellerLedger(profile.data?.id as number),
+    enabled: Boolean(profile.data?.id),
+  });
 
   const products = useQuery({
     queryKey: ['seller-products'],
@@ -171,6 +181,32 @@ export default function SellerOverviewPage() {
           </Form.Item>
         </Form>
       </Card>
+
+      {/* 两个口径必须并排说清：钱包里是**已结算**的钱，待结算是还没到账期的钱 */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={12} md={6}>
+          <Card data-testid="seller-wallet-balance">
+            <Statistic
+              title="钱包余额（已结算）"
+              value={`¥${((wallet.data?.balance_cents ?? 0) / 100).toFixed(2)}`}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              账期到期后货款自动转入，可在此提现
+            </Typography.Text>
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="待结算货款"
+              value={`¥${((ledger.data?.pending_cents ?? 0) / 100).toFixed(2)}`}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              未完成的订单 + 还在账期内的货款，到期后自动进钱包
+            </Typography.Text>
+          </Card>
+        </Col>
+      </Row>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>

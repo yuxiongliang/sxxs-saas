@@ -33,6 +33,15 @@ import PortalShell from '../components/PortalShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 
+/** 后端存 UTC，必须按浏览器本地时区渲染（截字符串会少 8 小时）。 */
+const formatTime = (value?: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
 // 状态配色已统一到 utils/labels（PAYMENT_STATUS_COLOR / FULFILLMENT_STATUS_COLOR）
 
 /** 我的订单（从原 /portal 的 Tab 迁出为独立页面） */
@@ -83,9 +92,7 @@ export default function PortalOrdersPage() {
       width: 190,
       onCell: merge,
       render: (_, record) => (
-        <a onClick={() => navigate(`/portal/orders/${record.order.id}`)}>
-          {record.order.order_no}
-        </a>
+        <span style={{ fontWeight: 600 }}>{record.order.order_no}</span>
       ),
     },
     {
@@ -201,19 +208,69 @@ export default function PortalOrdersPage() {
       ),
     },
     {
+      title: '收货信息',
+      width: 200,
+      onCell: merge,
+      render: (_, record) => {
+        const address = record.order.receiver_address as
+          | Record<string, string>
+          | null
+          | undefined;
+        const area = address
+          ? [address.province, address.city, address.district, address.detail]
+              .filter(Boolean)
+              .join(' ')
+          : '';
+        return (
+          <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 600 }}>
+              {record.order.receiver_name ?? '—'}
+            </div>
+            <div>{record.order.receiver_phone ?? '—'}</div>
+            <div style={{ color: 'var(--ant-color-text-secondary)' }}>
+              {area || '—'}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      title: '物流单号',
+      width: 180,
+      onCell: merge,
+      render: (_, record) => {
+        const shipments = record.order.shipments ?? [];
+        if (shipments.length === 0) return '—';
+        return (
+          <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+            {shipments.map((item) => (
+              <div key={`${item.seller_order_id}-${item.tracking_no}`}>
+                {item.carrier} {item.tracking_no}
+              </div>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      title: '下单时间',
+      width: 150,
+      onCell: merge,
+      render: (_, record) => formatTime(record.order.created_at),
+    },
+    {
+      title: '备注',
+      width: 160,
+      onCell: merge,
+      ellipsis: true,
+      render: (_, record) => record.order.remark || '—',
+    },
+    {
       title: '操作',
-      width: 220,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
         <Space>
-          {record.first ? (
-            <Button
-              size="small"
-              onClick={() => navigate(`/portal/orders/${record.order.id}`)}
-            >
-              详情
-            </Button>
-          ) : null}
           {record.first && record.order.payment_status === 'unpaid' ? (
             <Button
               size="small"
@@ -282,14 +339,14 @@ export default function PortalOrdersPage() {
   ];
 
   return (
-    <PortalShell title="我的订单">
+    <PortalShell title="我的订单" wide>
       <Card>
         <Table<Row>
           rowKey="key"
           columns={columns}
           dataSource={rows}
           loading={isLoading}
-          scroll={{ x: 1500 }}
+          scroll={{ x: 2100 }}
           pagination={{ defaultPageSize: 20, showSizeChanger: true }}
           locale={{ emptyText: <Empty description="还没有订单" /> }}
         />

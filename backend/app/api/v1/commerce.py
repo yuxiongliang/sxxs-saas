@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
 from app.core.response import ok
 from app.models.catalog import InventoryLog, Product, ProductSku
-from app.models.order import Order, OrderItem, SellerOrder
+from app.models.order import Order, OrderItem, SellerOrder, Shipment
 from app.models.seller import Seller, Shop
 from app.models.user import User
 from app.schemas.commerce import (
     ProductSkuUpdate,
+    WalletPayRequest,
     RefundRejectRequest,
     ProductSpecsUpdate,
     ProductStatusRequest,
@@ -27,6 +28,7 @@ from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
 from app.services import seller_center as seller_center_service
+from app.services import wallet as wallet_service
 from app.services.auth import AuthContext
 
 router = APIRouter(tags=["C2C 商城"])
@@ -72,6 +74,25 @@ def _item_dict(item: OrderItem) -> dict:
         "quantity": item.quantity,
         "subtotal_cents": item.subtotal_cents,
     }
+
+
+async def _shipments_map(
+    db: AsyncSession, seller_order_ids: list[int]
+) -> dict[int, list[Shipment]]:
+    """按卖家单批量取运单（列表要直接显示物流单号，不能只有详情页有）。"""
+    if not seller_order_ids:
+        return {}
+    rows = list(
+        (
+            await db.scalars(
+                select(Shipment).where(Shipment.seller_order_id.in_(seller_order_ids))
+            )
+        ).all()
+    )
+    grouped: dict[int, list[Shipment]] = {}
+    for row in rows:
+        grouped.setdefault(row.seller_order_id, []).append(row)
+    return grouped
 
 
 async def _order_items_map(
@@ -960,18 +981,38 @@ async def confirm_order(
 @router.post("/portal/orders/{order_id}/mock-pay")
 async def mock_pay_portal_order(
     order_id: int,
+    payload: dict | None = Body(default=None),
     context: AuthContext = Depends(require_permission("order:read:self")),
     db: AsyncSession = Depends(get_db),
 ):
+    """买家支付。
+
+    `method` 三选一：**余额 / 微信 / 支付宝**。微信与支付宝本期是**模拟渠道**
+    （不传 method 时沿用原来的模拟支付），但订单、支付记录、状态机完全一致 ——
+    以后接真实渠道只换这一层的实现。
+    """
     order = await db.get(Order, order_id)
     if order is None or order.tenant_id != context.tenant.id or order.buyer_id != context.user.id:
         raise HTTPException(status_code=404, detail="订单不存在")
-    order = await order_service.mock_pay(db, context, order_id)
+    # 不传 payload = 老行为（运营/测试用的模拟支付），保持兼容。
+    # 用裸 dict 接收：Pydantic 模型即便字段都有默认值，空 body 也会被解析成实例，
+    # 就分不清"没传"和"传了默认值"了。
+    method = (payload or {}).get("method", "mock")
+    if method not in {"wallet", "wechat", "alipay", "mock"}:
+        raise HTTPException(status_code=400, detail="不支持的支付方式")
+    if method == "wallet":
+        order = await wallet_service.pay_order_with_wallet(db, context, order_id)
+    else:
+        # 模拟渠道：直接标记成功（真实接入时改成创建支付单 + 回调入账）
+        order = await order_service.mark_order_paid(
+            db, context, order, provider=method
+        )
     return ok(
         {
             "id": order.id,
             "payment_status": order.payment_status,
             "fulfillment_status": order.fulfillment_status,
+            "provider": method,
         },
         "支付成功",
     )
@@ -1048,6 +1089,21 @@ async def portal_orders(
         ).all()
     )
     items_map = await _order_items_map(db, [order.id for order in orders])
+    seller_order_rows = list(
+        (
+            await db.scalars(
+                select(SellerOrder).where(
+                    SellerOrder.order_id.in_([order.id for order in orders])
+                )
+            )
+        ).all()
+    )
+    shipments_map = await _shipments_map(
+        db, [row.id for row in seller_order_rows]
+    )
+    seller_order_ids_by_order: dict[int, list[int]] = {}
+    for row in seller_order_rows:
+        seller_order_ids_by_order.setdefault(row.order_id, []).append(row.id)
     return ok(
         [
             {
@@ -1056,6 +1112,24 @@ async def portal_orders(
                 "payment_status": item.payment_status,
                 "fulfillment_status": item.fulfillment_status,
                 "payable_amount_cents": item.payable_amount_cents,
+                # 删掉详情页后这些必须在列表里：收货人 / 备注 / 支付时间 / 运单
+                "receiver_name": item.receiver_name,
+                "receiver_phone": item.receiver_phone,
+                "receiver_address": item.receiver_address,
+                "remark": item.remark,
+                "paid_at": item.paid_at.isoformat() if item.paid_at else None,
+                "shipments": [
+                    {
+                        "seller_order_id": shipment.seller_order_id,
+                        "carrier": shipment.carrier,
+                        "tracking_no": shipment.tracking_no,
+                        "shipped_at": shipment.shipped_at.isoformat()
+                        if shipment.shipped_at
+                        else None,
+                    }
+                    for seller_order_id in seller_order_ids_by_order.get(item.id, [])
+                    for shipment in shipments_map.get(seller_order_id, [])
+                ],
                 "created_at": item.created_at,
                 # 买家也要在列表里直接看到买的是什么，不用点进详情
                 "items": [_item_dict(row) for row in items_map.get(item.id, [])],

@@ -74,6 +74,10 @@ def sync_order(order: Order, seller_orders: list[SellerOrder]) -> None:
 
     if all(status == PAY_REFUNDED for status in payments):
         order.payment_status = PAY_REFUNDED
+        # 钱全退了，这单就结束了：履行状态一律「已关闭」（产品口径）
+        # 部分退款不走这条 —— 还剩了货款没退，订单仍在履约中
+        order.fulfillment_status = FULFILL_CANCELLED
+        return
     elif any(status == PAY_REFUNDING for status in payments):
         order.payment_status = PAY_REFUNDING
     elif any(

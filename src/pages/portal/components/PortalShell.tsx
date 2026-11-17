@@ -17,12 +17,14 @@ const PortalShell: React.FC<{
   children: React.ReactNode;
   title?: string;
   cartCount?: number;
-  maxWidth?: number;
-}> = ({ children, title, cartCount = 0 }) => (
+  /** 宽页面（订单列表）：内容区放宽到 1600，外边距收窄 */
+  wide?: boolean;
+}> = ({ children, title, cartCount = 0, wide = false }) => (
   <PortalLayout
     menu={BUYER_MENU}
     sectionLabel="买家中心"
     title={title}
+    wide={wide}
     cartCount={cartCount}
     switchLink={{ label: '卖家中心', href: '/portal/seller' }}
   >
