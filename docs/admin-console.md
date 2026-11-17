@@ -2,6 +2,9 @@
 
 This repository contains the admin console of 赛霄玄思, a multi-tenant C2C marketplace platform.
 
+> 先看实况地图与硬规则：`docs/PROJECT-STATE.md`（目录、不变量、已知坑、推送状态）。
+> 本篇是功能口径与实现细节的详细档案。
+
 ## Frontend routes
 
 | Route                      | Page                                                    |

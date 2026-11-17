@@ -2,7 +2,13 @@
 
 ## Project
 
-Ant Design Pro — React enterprise boilerplate on Umi Max v4, antd v6, ProComponents v3.
+多租户 C2C 商城 SaaS（不是纯模板了）：买家商城 + 租户控制台 + 买家/卖家中心 + 平台控制台 +
+FastAPI 后端 + 延时任务 worker。
+
+> **开工前先读 `docs/PROJECT-STATE.md`** —— 那里有目录地图、硬规则、关键不变量、已知坑与推送状态。
+> 功能口径看 `docs/admin-console.md`。
+
+原模板部分：Ant Design Pro — React enterprise boilerplate on Umi Max v4, antd v6, ProComponents v3.
 
 ## Commands
 
@@ -29,6 +35,16 @@ Other: `npm run openapi` (regenerate `src/services/`), `npm run simple` (**irrev
   `actor_public_id`/`actor_username`。详见 `docs/admin-console.md` →「人物标识口径」。
 - **不要自作主张 `git push`** — 默认只本地 `git commit`。只有用户**明确说「推送到 GitHub」**的那一次才 push，
   之后的每次改动都不要顺带推。上一次授权不构成长期授权。
+- **全局全站点不要反复写零散的组件**：有原生组件（antd / ProComponents / 已有业务组件）的就**复用原生组件**；
+  如果没有组件、一定要自己写的情况下，**写好的组件也要打包成组件，保证后续可复用**。
+  落地要求（不照做就不算完成）：
+  1. 写新组件前先查 `src/components/` 与 `src/components/index.ts` —— 已经有同类就别再造一个；
+  2. 自写组件放 `src/components/<Name>/index.tsx`，并从 `src/components/index.ts` **导出**，
+     让页面 `import { X } from '@/components'`，而不是各处按路径 import；
+  3. 只服务单页但有可能被第二次使用的，抽到该页 `components/` 下，并在 PR/commit 说明里标注「可提升」；
+  4. 同一类 UI 出现第三处就必须收敛（例：`IdentityText` 人物标识、`ListToolbar` 列表搜索栏、
+     `MediaField` 媒体选择、`RegionCascader` 省市区、`PageShell` 页面外壳、`SettingPage` 设置页外壳）。
+  详见 `docs/PROJECT-STATE.md` →「组件复用」。
 
 ## Architecture Essentials
 
