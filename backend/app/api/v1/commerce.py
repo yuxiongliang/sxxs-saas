@@ -3,6 +3,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
+from app.core.config import settings
 from app.core.response import ok
 from app.models.catalog import InventoryLog, Product, ProductSku
 from app.models.order import Order, OrderItem, SellerOrder, Shipment
@@ -985,28 +986,40 @@ async def mock_pay_portal_order(
     context: AuthContext = Depends(require_permission("order:read:self")),
     db: AsyncSession = Depends(get_db),
 ):
-    """买家支付。
+    """余额支付 / 运营模拟支付。
 
-    `method` 三选一：**余额 / 微信 / 支付宝**。微信与支付宝本期是**模拟渠道**
-    （不传 method 时沿用原来的模拟支付），但订单、支付记录、状态机完全一致 ——
-    以后接真实渠道只换这一层的实现。
+    **微信与支付宝不走这里**：真实渠道必须「创建支付单 → 渠道回调 → 验签后置已支付」，
+    在这里"点一下就成功"等于绕开渠道，订单与资金会对不上。
+    买家侧真实支付用 `POST /portal/orders/{id}/payments`。
     """
     order = await db.get(Order, order_id)
     if order is None or order.tenant_id != context.tenant.id or order.buyer_id != context.user.id:
         raise HTTPException(status_code=404, detail="订单不存在")
-    # 不传 payload = 老行为（运营/测试用的模拟支付），保持兼容。
+    # 不传 payload = 运营/测试用的模拟支付（需 order:manage）。
     # 用裸 dict 接收：Pydantic 模型即便字段都有默认值，空 body 也会被解析成实例，
     # 就分不清"没传"和"传了默认值"了。
     method = (payload or {}).get("method", "mock")
-    if method not in {"wallet", "wechat", "alipay", "mock"}:
-        raise HTTPException(status_code=400, detail="不支持的支付方式")
+    if method not in {"wallet", "mock"}:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "微信/支付宝请通过「发起支付」接口（payments）完成，"
+                "支付结果以渠道回调为准"
+            ),
+        )
     if method == "wallet":
         order = await wallet_service.pay_order_with_wallet(db, context, order_id)
     else:
-        # 模拟渠道：直接标记成功（真实接入时改成创建支付单 + 回调入账）
-        order = await order_service.mark_order_paid(
-            db, context, order, provider=method
-        )
+        # 模拟支付 = 不经过任何渠道就把订单置为已支付。
+        # 生产环境**只有运营**能用；开发/测试环境放行买家，方便本地把下单流程跑通
+        # （真实支付需要商户号，本地不可能凑齐）。
+        is_dev = settings.environment != "production"
+        if "order:manage" not in context.permissions and not is_dev:
+            raise HTTPException(
+                status_code=403,
+                detail="模拟支付仅限运营/测试环境；线上请走「发起支付」",
+            )
+        order = await order_service.mark_order_paid(db, context, order, provider="mock")
     return ok(
         {
             "id": order.id,

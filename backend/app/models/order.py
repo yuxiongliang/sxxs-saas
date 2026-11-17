@@ -96,6 +96,15 @@ class Payment(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
     provider: Mapped[str] = mapped_column(String(16))
     provider_trade_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 商户订单号：**带租户前缀**（T{tenant_id}-{order_no}）。回调用它反查租户 →
+    # 取该租户的商户配置 → 验签。一个回调地址服务所有租户，靠这个前缀分流。
+    out_trade_no: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    # sandbox / production：支付宝沙箱与生产网关不同，排查时必须一眼看出走的哪套
+    environment: Mapped[str] = mapped_column(
+        String(16), default="production", server_default="production"
+    )
     amount_cents: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     raw_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)

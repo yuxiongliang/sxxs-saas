@@ -127,8 +127,8 @@ test.describe('portal: buyer journey', () => {
       timeout: 40_000,
     });
 
-    // 支付方式三选一：这里走微信支付（模拟渠道），不依赖钱包余额
-    const payButton = page.getByTestId('pay-wechat');
+    // 真实支付需要商户号配置；e2e 用**余额支付**（种子里给 e2e 买家预置了余额）
+    const payButton = page.getByTestId('pay-wallet');
     if (await payButton.isVisible().catch(() => false)) {
       await payButton.click();
       await expect(page.getByText('支付成功').first()).toBeVisible({

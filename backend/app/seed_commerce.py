@@ -198,6 +198,14 @@ async def seed_commerce_data(db: AsyncSession) -> None:
         # 给演示买家预置 1000 元：余额支付与提现都能直接试
         await seed_wallet_balance(db, buyer.id, tenant.id, 100000)
 
+    # e2e 买家也要有余额：真实支付上线后微信/支付宝必须有商户配置才能用，
+    # e2e 里只有余额支付是确定性的
+    e2e_buyer = (
+        await db.scalars(select(User).where(User.username == "e2e-shop@example.com"))
+    ).first()
+    if e2e_buyer is not None:
+        await seed_wallet_balance(db, e2e_buyer.id, tenant.id, 100000)
+
     order = (
         await db.scalars(
             select(Order).where(Order.tenant_id == tenant.id, Order.buyer_id == buyer.id)

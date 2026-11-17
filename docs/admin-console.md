@@ -215,6 +215,57 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 买家 completed → 无入口，后端也 400「已完成订单不再受理」
 ```
 
+## 真实支付接入（支付宝 / 微信）
+
+### 链路
+
+```
+买家点「微信/支付宝」
+  → POST /portal/orders/{id}/payments  {provider}
+      后端读**租户自己的**商户配置 → 下单
+      支付宝：返回签名后的 gateway URL（整页跳转收银台）
+      微信：调用 Native 下单，返回 code_url（前端渲染二维码）
+  → 渠道回调 POST /public/payments/{provider}/notify
+      支付宝：RSA2 验签 + app_id 核对
+      微信：平台证书验签 + APIv3 密钥 AES-GCM 解密
+  → 金额核对（必须等于订单应付）→ 置已支付（幂等）→ 写 payments.raw_payload
+  → 前端每 3 秒 POST /portal/orders/{id}/payments/query 兜底（回调丢了也能收敛）
+```
+
+### 两条铁律
+
+1. **买家侧没有"点一下就成功"**：`mock-pay` 只接受 `wallet`；`mock` 仅**运营 + 非生产环境**放行。
+   微信/支付宝必须走真实下单，结果只认渠道回调/主动查询。
+2. **回调靠 `out_trade_no` 定位租户**：格式 `T{tenant_id}-{order_no}`。
+   一个回调地址服务所有租户，没有这个前缀就无法知道该用哪套商户密钥验签。
+
+### 配置（租户控制台 → 支付设置）
+
+| 渠道 | 必填 |
+| --- | --- |
+| 支付宝 | `appId`、应用私钥 `privateKey`、**支付宝公钥** `publicKey`、`notifyUrl`；`environment` 选 sandbox/production |
+| 微信 | `mchId`、`appId`、`apiV3Key`（32 字节）、证书序列号 `serialNo`、商户私钥 `privateKey`、`notifyUrl` |
+
+可选 `platformPublicKey`：把微信平台证书公钥钉在配置里，回调时不再去 `/v3/certificates` 拉取
+（少一次外网依赖，生产推荐）。
+
+自检接口：`GET /admin/settings/payment/health` —— 返回每个渠道**缺哪些字段**、当前是沙箱还是生产。
+
+### 上线清单（需要你提供）
+
+1. 支付宝开放平台：应用（网页/移动）→ 应用私钥、**支付宝公钥**、`appId`；签约「电脑网站支付」。
+2. 微信支付商户平台：`mchId`、APIv3 密钥、商户证书序列号与私钥（`apiclient_key.pem`）；开通 Native 支付。
+3. **公网 HTTPS 回调地址**（渠道要能访问）：
+   - `https://<你的域名>/api/v1/public/payments/alipay/notify`
+   - `https://<你的域名>/api/v1/public/payments/wechat/notify`
+   - 支付宝同步返回可配 `returnUrl` 指向前台 `/portal/payment-result`
+4. 先在 `environment=sandbox`（支付宝）跑一笔小额，再切 production。
+
+### 退款口径（产品决定）
+
+**退款一律退回买家钱包余额**，不调用渠道原路退回 —— 所以 `refunds.provider` 只用于留痕与对账，
+不要指望"渠道退款"能力；如需原路退回，是另一套对账/回调设计。
+
 ## 钱包（按租户隔离的统一钱包）
 
 一套账户服务所有角色：买家充值/余额支付/退款入账，卖家货款到期自动结算。

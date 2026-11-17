@@ -27,7 +27,16 @@ import {
 import type { AddressRecord } from '@/services/commerce/types';
 import PortalShell from '../components/PortalShell';
 
-type FormValues = Omit<AddressRecord, 'id'>;
+/**
+ * 表单里省市区是一个**级联数组** `region`，落库时才拆成三个裸名称字段。
+ * 别退回"三个隐藏字段 + setFieldsValue"：未注册的字段 validateFields() 取不到。
+ */
+type FormValues = Omit<
+  AddressRecord,
+  'id' | 'province' | 'city' | 'district'
+> & {
+  region: string[];
+};
 
 const AddressesPage: React.FC = () => {
   const { message } = App.useApp();
@@ -51,9 +60,7 @@ const AddressesPage: React.FC = () => {
     form.setFieldsValue({
       receiver_name: '',
       receiver_phone: '',
-      province: '',
-      city: '',
-      district: '',
+      region: [],
       detail: '',
       is_default: false,
     });
@@ -62,19 +69,34 @@ const AddressesPage: React.FC = () => {
 
   const openEdit = (record: AddressRecord) => {
     setEditing(record);
-    form.setFieldsValue({ ...record });
+    form.setFieldsValue({
+      ...record,
+      // 级联控件吃数组；历史地址里省市区是三个裸名称
+      region: [record.province, record.city, record.district].filter(Boolean),
+    });
     setOpen(true);
   };
 
   const submit = async () => {
     const values = await form.validateFields();
+    // 级联控件给数组，落库仍是三个裸名称字段（与历史数据、其它接口一致）
+    const [province = '', city = '', district = ''] = values.region ?? [];
+    const payload = {
+      receiver_name: values.receiver_name,
+      receiver_phone: values.receiver_phone,
+      province,
+      city,
+      district,
+      detail: values.detail,
+      is_default: values.is_default ?? false,
+    };
     setSaving(true);
     try {
       if (editing) {
-        await updateAddress(editing.id, values);
+        await updateAddress(editing.id, payload);
         message.success('地址已更新');
       } else {
-        await createAddress(values);
+        await createAddress(payload);
         message.success('地址已保存');
       }
       setOpen(false);
@@ -196,32 +218,15 @@ const AddressesPage: React.FC = () => {
             <Input placeholder="手机号" />
           </Form.Item>
           {/* 省市区必须从内置行政区划里选：手填会出现"广东/广东省""深圳/深圳市"
-              这类脏数据，后面按地区统计和配送都受影响 */}
+              这类脏数据，后面按地区统计和配送都受影响。
+              **必须注册成 Form.Item 的字段**：之前用三个未注册的隐藏字段 +
+              setFieldsValue，validateFields() 拿不到它们，保存下来就是空的。 */}
           <Form.Item
             label="省 / 市 / 区"
-            required
-            shouldUpdate={(prev, next) =>
-              prev.province !== next.province ||
-              prev.city !== next.city ||
-              prev.district !== next.district
-            }
+            name="region"
+            rules={[{ required: true, message: '请选择省 / 市 / 区' }]}
           >
-            {() => (
-              <RegionCascader
-                value={{
-                  province: form.getFieldValue('province'),
-                  city: form.getFieldValue('city'),
-                  district: form.getFieldValue('district'),
-                }}
-                onChange={(picked) => {
-                  form.setFieldsValue({
-                    province: picked.province ?? '',
-                    city: picked.city ?? '',
-                    district: picked.district ?? '',
-                  });
-                }}
-              />
-            )}
+            <RegionCascader />
           </Form.Item>
           <Form.Item
             label="详细地址"

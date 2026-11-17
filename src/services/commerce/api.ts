@@ -226,6 +226,48 @@ export async function createPortalOrder(data: {
   );
 }
 
+/**
+ * 发起**真实**支付（微信 / 支付宝）。
+ *
+ * 返回 `{type:'redirect', url}`（支付宝：整页跳转）或 `{type:'qrcode', code_url}`（微信扫码）。
+ * 渠道没配好时后端会 400 并列出缺哪些字段 —— 不要吞掉这个错误。
+ */
+export async function createOrderPayment(
+  orderId: number,
+  provider: 'alipay' | 'wechat',
+) {
+  return unwrap<{
+    type: 'redirect' | 'qrcode' | 'already_paid';
+    url?: string;
+    code_url?: string;
+    out_trade_no?: string;
+    amount_cents?: number;
+  }>(
+    request(`/api/v1/portal/orders/${orderId}/payments`, {
+      method: 'POST',
+      data: { provider },
+    }),
+  );
+}
+
+/** 主动查询渠道状态（回调丢失/用户付完没跳回来时兜底）。 */
+export async function queryOrderPayment(
+  orderId: number,
+  provider: 'alipay' | 'wechat',
+) {
+  return unwrap<{
+    paid: boolean;
+    payment_status: string;
+    fulfillment_status: string;
+    trade_no?: string;
+  }>(
+    request(`/api/v1/portal/orders/${orderId}/payments/query`, {
+      method: 'POST',
+      data: { provider },
+    }),
+  );
+}
+
 export async function mockPayPortalOrder(
   id: number,
   method: 'wallet' | 'wechat' | 'alipay' = 'wallet',

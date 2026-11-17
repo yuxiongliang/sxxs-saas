@@ -18,6 +18,7 @@ from app.api.v1 import (
     platform_audit,
     platform_auth,
     platform_catalog,
+    payments,
     platform_jobs,
     wallet,
     platform_categories,
@@ -65,6 +66,8 @@ api_router.include_router(platform_categories.router)
 api_router.include_router(platform_catalog.router)
 api_router.include_router(platform_jobs.router)
 api_router.include_router(wallet.router)
+api_router.include_router(payments.router)
+api_router.include_router(payments.public_router)
 api_router.include_router(wallet.admin_router)
 api_router.include_router(platform_users.router)
 api_router.include_router(platform_notification_templates.router)

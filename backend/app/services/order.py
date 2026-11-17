@@ -245,17 +245,35 @@ async def mark_order_paid(
         sku = await db.get(ProductSku, item.sku_id)
         if sku is not None and sku.locked_stock >= item.quantity:
             sku.locked_stock -= item.quantity
-    db.add(
-        Payment(
-            tenant_id=context.tenant.id,
-            order_id=order.id,
-            provider=provider,
-            provider_trade_no=f"{provider.upper()}-{order.order_no}",
-            amount_cents=order.payable_amount_cents,
-            status="success",
-            paid_at=order.paid_at,
+    # 已有该渠道的 pending 记录就复用（真实支付回调会先建 pending），
+    # 否则同一笔支付会留下两行，对账时对不上
+    existing_payment = (
+        await db.scalars(
+            select(Payment)
+            .where(
+                Payment.order_id == order.id,
+                Payment.provider == provider,
+                Payment.status == "pending",
+            )
+            .order_by(Payment.id.desc())
         )
-    )
+    ).first()
+    if existing_payment is not None:
+        existing_payment.status = "success"
+        existing_payment.paid_at = order.paid_at
+        existing_payment.amount_cents = order.payable_amount_cents
+    else:
+        db.add(
+            Payment(
+                tenant_id=context.tenant.id,
+                order_id=order.id,
+                provider=provider,
+                provider_trade_no=f"{provider.upper()}-{order.order_no}",
+                amount_cents=order.payable_amount_cents,
+                status="success",
+                paid_at=order.paid_at,
+            )
+        )
     await audit_service.record(
         db,
         action=audit_service.ACTION_ORDER_PAID,

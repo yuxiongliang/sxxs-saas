@@ -16,8 +16,14 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { QRCodeSVG } from 'qrcode.react';
 import React, { useState } from 'react';
-import { listPortalOrders, mockPayPortalOrder } from '@/services/commerce/api';
+import {
+  createOrderPayment,
+  listPortalOrders,
+  mockPayPortalOrder,
+  queryOrderPayment,
+} from '@/services/commerce/api';
 import { FULFILLMENT_STATUS, labelOf, PAYMENT_STATUS } from '@/utils/labels';
 import PortalPlainShell from '../components/PortalPlainShell';
 
@@ -76,13 +82,54 @@ const PaymentResultPage: React.FC = () => {
     order?.payment_status === 'paid' ? 'paid' : 'pending_payment',
   );
 
+  // 微信扫码：code_url 渲染二维码，前端每 3 秒主动查一次（回调丢了也能自动收敛）
+  const [qr, setQr] = useState<{ codeUrl: string; provider: 'wechat' } | null>(
+    null,
+  );
+
+  const pollUntilPaid = async (provider: 'wechat' | 'alipay') => {
+    for (let i = 0; i < 100; i += 1) {
+      const result = await queryOrderPayment(orderId, provider).catch(
+        () => undefined,
+      );
+      if (result?.paid) {
+        message.success('支付成功');
+        await refetch();
+        setQr(null);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  };
+
   const pay = async (method: 'wallet' | 'wechat' | 'alipay') => {
     if (!order) return;
     setPaying(true);
     try {
-      await mockPayPortalOrder(order.id, method);
-      message.success('支付成功');
-      await refetch();
+      if (method === 'wallet') {
+        await mockPayPortalOrder(order.id, 'wallet');
+        message.success('支付成功');
+        await refetch();
+        return;
+      }
+      // 微信/支付宝：**真实下单**，支付结果只认渠道回调/主动查询
+      const result = await createOrderPayment(order.id, method);
+      if (result.type === 'already_paid') {
+        await refetch();
+        return;
+      }
+      if (result.type === 'redirect' && result.url) {
+        // 支付宝电脑网站支付：整页跳到渠道收银台
+        window.location.href = result.url;
+        return;
+      }
+      if (result.type === 'qrcode' && result.code_url) {
+        setQr({ codeUrl: result.code_url, provider: 'wechat' });
+        message.info('请用微信扫码支付，支付完成后页面会自动刷新');
+        await pollUntilPaid('wechat');
+        return;
+      }
+      message.error('渠道未返回可用的支付信息');
     } catch (error) {
       message.error((error as Error).message);
     } finally {
@@ -155,6 +202,16 @@ const PaymentResultPage: React.FC = () => {
                     <Button onClick={() => navigate('/portal')}>
                       继续购物
                     </Button>
+                    {qr ? (
+                      <div style={{ marginTop: 16, textAlign: 'center' }}>
+                        <QRCodeSVG value={qr.codeUrl} size={180} />
+                        <div style={{ marginTop: 8 }}>
+                          <Typography.Text type="secondary">
+                            微信扫码支付（关闭本页后仍可在「我的订单」继续支付）
+                          </Typography.Text>
+                        </div>
+                      </div>
+                    ) : null}
                   </Space>
                 }
               />

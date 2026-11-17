@@ -373,11 +373,7 @@ const CartPage: React.FC = () => {
                 <RegionCascader
                   onChange={(picked) => {
                     // 手动填地址时把省市区拼在 detail 前面（后端 receiver_address 只存 detail）
-                    setManualRegion(
-                      [picked.province, picked.city, picked.district]
-                        .filter(Boolean)
-                        .join(' '),
-                    );
+                    setManualRegion((picked ?? []).filter(Boolean).join(' '));
                   }}
                 />
               </Form.Item>
