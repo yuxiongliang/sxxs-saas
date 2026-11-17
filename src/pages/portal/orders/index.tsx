@@ -16,11 +16,16 @@ import {
   confirmPortalOrder,
   listPortalOrders,
   mockPayPortalOrder,
+  requestPortalRefund,
 } from '@/services/commerce/api';
 import type { OrderItemRecord, PortalOrder } from '@/services/commerce/types';
 import {
+  DELIVERY_METHOD,
+  FULFILLMENT_STATUS,
+  FULFILLMENT_STATUS_COLOR,
   labelOf,
-  ORDER_STATUS,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_COLOR,
   PRODUCT_TYPE,
   PRODUCT_TYPE_COLOR,
 } from '@/utils/labels';
@@ -28,14 +33,7 @@ import PortalShell from '../components/PortalShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 
-const STATUS_COLOR: Record<string, string> = {
-  pending_payment: 'orange',
-  paid: 'blue',
-  shipped: 'geekblue',
-  completed: 'green',
-  cancelled: 'default',
-  refunded: 'red',
-};
+// 状态配色已统一到 utils/labels（PAYMENT_STATUS_COLOR / FULFILLMENT_STATUS_COLOR）
 
 /** 我的订单（从原 /portal 的 Tab 迁出为独立页面） */
 export default function PortalOrdersPage() {
@@ -166,12 +164,39 @@ export default function PortalOrdersPage() {
       render: (_, record) => yuan(record.order.payable_amount_cents),
     },
     {
-      title: '状态',
-      width: 120,
+      title: '交付方式',
+      width: 100,
+      render: (_, record) => {
+        const method = record.item?.delivery_method ?? 'express';
+        return <Tag>{DELIVERY_METHOD[method] ?? method}</Tag>;
+      },
+    },
+    {
+      // 支付状态（钱）
+      title: '支付状态',
+      width: 110,
       onCell: merge,
       render: (_, record) => (
-        <Tag color={STATUS_COLOR[record.order.status] ?? 'default'}>
-          {labelOf(ORDER_STATUS, record.order.status)}
+        <Tag
+          color={PAYMENT_STATUS_COLOR[record.order.payment_status] ?? 'default'}
+        >
+          {labelOf(PAYMENT_STATUS, record.order.payment_status)}
+        </Tag>
+      ),
+    },
+    {
+      // 订单状态（货）
+      title: '订单状态',
+      width: 110,
+      onCell: merge,
+      render: (_, record) => (
+        <Tag
+          color={
+            FULFILLMENT_STATUS_COLOR[record.order.fulfillment_status] ??
+            'default'
+          }
+        >
+          {labelOf(FULFILLMENT_STATUS, record.order.fulfillment_status)}
         </Tag>
       ),
     },
@@ -189,7 +214,7 @@ export default function PortalOrdersPage() {
               详情
             </Button>
           ) : null}
-          {record.first && record.order.status === 'pending_payment' ? (
+          {record.first && record.order.payment_status === 'unpaid' ? (
             <Button
               size="small"
               type="primary"
@@ -202,7 +227,9 @@ export default function PortalOrdersPage() {
               模拟支付
             </Button>
           ) : null}
-          {record.first && record.order.status === 'shipped' ? (
+          {record.first &&
+          record.order.fulfillment_status === 'shipped' &&
+          record.order.payment_status === 'paid' ? (
             <Button
               size="small"
               onClick={async () => {
@@ -211,11 +238,36 @@ export default function PortalOrdersPage() {
                 refetch();
               }}
             >
-              确认收货
+              {record.item?.delivery_method === 'pickup'
+                ? '确认已自提'
+                : '确认收货'}
+            </Button>
+          ) : null}
+          {record.first &&
+          ['paid', 'refunding'].includes(record.order.payment_status) &&
+          ['to_ship', 'shipped'].includes(record.order.fulfillment_status) ? (
+            <Button
+              size="small"
+              danger
+              disabled={record.order.payment_status === 'refunding'}
+              onClick={async () => {
+                const refund = await requestPortalRefund(
+                  record.order.id,
+                  '买家申请售后',
+                );
+                if (refund) {
+                  message.success('售后申请已提交，等待卖家处理');
+                  refetch();
+                }
+              }}
+            >
+              {record.order.payment_status === 'refunding'
+                ? '售后处理中'
+                : '申请售后'}
             </Button>
           ) : null}
           {/* 完成后才有评价资格：一个订单项只能评一次，具体待评项在「我的评价」里列 */}
-          {record.first && record.order.status === 'completed' ? (
+          {record.first && record.order.fulfillment_status === 'completed' ? (
             <Button
               size="small"
               type="link"

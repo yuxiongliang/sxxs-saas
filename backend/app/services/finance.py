@@ -177,7 +177,7 @@ async def seller_ledger(db: AsyncSession, context: AuthContext, seller_id: int) 
             completed_at = seller_order.completed_at if seller_order is not None else None
             settled = (
                 seller_order is not None
-                and seller_order.status in {"completed", "confirmed"}
+                and seller_order.fulfillment_status == "completed"
                 and completed_at is not None
                 and completed_at <= cutoff
             )

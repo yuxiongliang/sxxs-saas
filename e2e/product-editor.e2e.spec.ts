@@ -89,6 +89,17 @@ test.describe('product editor (admin)', () => {
     await page.keyboard.type('详情页富文本回归');
     await page.waitForTimeout(400);
 
+    // 第 5 步：交付（不选不能发布）
+    await page.locator('button:has-text("下一步")').first().click();
+    await page.waitForTimeout(800);
+    await expect(page.getByTestId('product-delivery-step')).toBeVisible({
+      timeout: 20_000,
+    });
+    const express = page.getByTestId('delivery-express');
+    if (!(await express.isChecked())) {
+      await express.check();
+    }
+
     const saved = page.waitForResponse(
       (res) =>
         res.request().method() === 'PUT' &&

@@ -29,7 +29,11 @@ import {
   getPublicProductDetail,
   removeFavorite,
 } from '@/services/commerce/api';
-import { PRODUCT_TYPE, PRODUCT_TYPE_COLOR } from '@/utils/labels';
+import {
+  DELIVERY_METHOD,
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_COLOR,
+} from '@/utils/labels';
 import MallShell from '../components/MallShell';
 import RelatedProducts from './RelatedProducts';
 import ReviewsPanel from './ReviewsPanel';
@@ -249,7 +253,7 @@ export default function ProductDetailPage() {
                 <Card>
                   {/* 类型标签：目前只有实物，但标签先摆上 —— 以后开放虚拟/知识付费时，
                       买家一眼能看出自己买的是什么性质的东西 */}
-                  <Space size={8} style={{ marginBottom: 4 }}>
+                  <Space size={8} wrap style={{ marginBottom: 4 }}>
                     <Tag
                       color={
                         PRODUCT_TYPE_COLOR[data.product_type ?? 'physical'] ??
@@ -259,6 +263,12 @@ export default function ProductDetailPage() {
                       {PRODUCT_TYPE[data.product_type ?? 'physical'] ??
                         '实物商品'}
                     </Tag>
+                    {/* 交付方式：买家下单前就要知道能不能自提 */}
+                    {(data.delivery_methods ?? []).map((method) => (
+                      <Tag key={method} color="blue">
+                        {DELIVERY_METHOD[method] ?? method}
+                      </Tag>
+                    ))}
                   </Space>
                   <Typography.Title
                     level={3}

@@ -36,6 +36,22 @@ export async function getSellerProfile() {
   );
 }
 
+/** 卖家维护店铺资料：自提点地址与说明在这里填（自提单买家要看）。 */
+export async function updateSellerShop(data: {
+  name?: string;
+  description?: string;
+  address?: string;
+  pickup_note?: string;
+}) {
+  return unwrap<{
+    id: number;
+    name: string;
+    description?: string | null;
+    address?: string | null;
+    pickup_note?: string | null;
+  }>(request('/api/v1/portal/seller/shop', { method: 'PUT', data }));
+}
+
 export async function listSellerProducts(params?: {
   product_type?: string;
 }) {
@@ -53,6 +69,8 @@ export async function createSellerProduct(data: {
   category_id?: number | null;
   main_image?: string;
   video_url?: string;
+  /** 交付方式（向导第 5 步）：至少一个，不选后端拒绝发布 */
+  delivery_methods?: string[];
   /** 向导第 4 步「详情」：不传就会被静默丢弃 */
   description?: string;
   description_doc?: Record<string, unknown>;
@@ -101,6 +119,7 @@ export async function updateSellerProduct(
     category_id?: number | null;
     description_doc?: Record<string, unknown>;
     description_html?: string;
+    delivery_methods?: string[];
     price_cents?: number;
     stock?: number;
     commission_bps?: number;
@@ -130,12 +149,36 @@ export async function changeSellerProductStatus(
   );
 }
 
+/** 卖家发货：快递要运单号；自提单只标记「备货完成」，不传运单。 */
 export async function shipMySellerOrder(
   id: number,
-  data: { carrier: string; tracking_no: string },
+  data?: { carrier?: string; tracking_no?: string },
 ) {
   return unwrap<{ id: number; status: string }>(
     request(`/api/v1/portal/seller/orders/${id}/ship`, { method: 'POST', data }),
+  );
+}
+
+/** 卖家同意退款（买家申请过则复用那条待处理记录）。 */
+export async function refundMySellerOrder(
+  id: number,
+  data: { amount_cents: number; reason?: string },
+) {
+  return unwrap<{ id: number; status: string }>(
+    request(`/api/v1/portal/seller/orders/${id}/refund`, {
+      method: 'POST',
+      data: { amount_cents: data.amount_cents, reason: data.reason ?? '' },
+    }),
+  );
+}
+
+/** 卖家驳回买家售后申请。 */
+export async function rejectMySellerOrderRefund(id: number, reason: string) {
+  return unwrap<{ id: number; status: string }>(
+    request(`/api/v1/portal/seller/orders/${id}/refund/reject`, {
+      method: 'POST',
+      data: { reason },
+    }),
   );
 }
 
@@ -186,6 +229,18 @@ export async function createPortalOrder(data: {
 export async function mockPayPortalOrder(id: number) {
   return unwrap<{ id: number; status: string }>(
     request(`/api/v1/portal/orders/${id}/mock-pay`, { method: 'POST' }),
+  );
+}
+
+/**
+ * 买家申请售后（整单）。完成后（completed）后端会拒绝 —— 交易结束即关闭售后入口。
+ */
+export async function requestPortalRefund(id: number, reason: string) {
+  return unwrap<{ id: number; payment_status: string; fulfillment_status: string }>(
+    request(`/api/v1/portal/orders/${id}/refund-request`, {
+      method: 'POST',
+      data: { amount_cents: 1, reason },
+    }),
   );
 }
 
@@ -334,7 +389,13 @@ export async function createSellerPayout(id: number) {
   );
 }
 
-export async function listAdminOrders(params?: { keyword?: string; status?: string }) {
+export async function listAdminOrders(params?: {
+  keyword?: string;
+  /** 支付状态筛选（钱） */
+  payment_status?: string;
+  /** 履约状态筛选（货） */
+  fulfillment_status?: string;
+}) {
   return unwrap<OrderRecord[]>(
     request('/api/v1/admin/orders', { method: 'GET', params }),
   );
@@ -414,11 +475,13 @@ export async function clearPortalCart() {
 }
 
 export async function checkoutCart(data: {
-  receiver_name: string;
-  receiver_phone: string;
-  receiver_address: Record<string, string>;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_address?: Record<string, string>;
   address_id?: number;
   remark?: string;
+  /** 按卖家选交付方式：一单可拆多卖家单 */
+  delivery?: Array<{ seller_id: number; delivery_method: string }>;
 }) {
   return unwrap<PortalOrder>(
     request('/api/v1/portal/cart/checkout', { method: 'POST', data }),
@@ -545,6 +608,8 @@ export interface PublicProduct {
   status: string;
   /** 商品类型（physical 等）；买家详情页显示标签 */
   product_type?: string;
+  /** 交付方式：express / pickup（买家下单选交付方式时用） */
+  delivery_methods?: string[];
   main_image?: string | null;
   images?: string[];
   video_url?: string | null;

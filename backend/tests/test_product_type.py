@@ -18,7 +18,13 @@ from tests.conftest import bearer
 
 
 async def _create_product(client, token, name: str, **extra) -> dict:
-    body = {"name": name, "price_cents": 8800, "stock": 5, **extra}
+    body = {
+        "name": name,
+        "price_cents": 8800,
+        "stock": 5,
+        "delivery_methods": ["express"],
+        **extra,
+    }
     response = await client.post(
         "/api/v1/portal/seller/products", headers=bearer(token), json=body
     )
@@ -81,7 +87,13 @@ async def test_non_physical_type_is_rejected_by_backend(client, operator_token):
     response = await client.post(
         "/api/v1/portal/seller/products",
         headers=bearer(operator_token),
-        json={"name": "虚拟商品", "price_cents": 100, "stock": 1, "product_type": "virtual"},
+        json={
+            "name": "虚拟商品",
+            "price_cents": 100,
+            "stock": 1,
+            "delivery_methods": ["express"],
+            "product_type": "virtual",
+        },
     )
     assert response.status_code == 400, response.text
     assert "待开发" in response.json()["message"]

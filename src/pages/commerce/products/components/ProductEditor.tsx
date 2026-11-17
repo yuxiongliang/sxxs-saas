@@ -3,6 +3,7 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   Col,
   Divider,
   Flex,
@@ -33,7 +34,11 @@ import {
   updateAdminProductSpecs,
 } from '@/services/commerce/api';
 import type { CategoryRecord, ProductRecord } from '@/services/commerce/types';
-import { OPEN_PRODUCT_TYPES, PRODUCT_TYPE } from '@/utils/labels';
+import {
+  DELIVERY_METHOD_OPTIONS,
+  OPEN_PRODUCT_TYPES,
+  PRODUCT_TYPE,
+} from '@/utils/labels';
 import {
   buildCombos,
   comboKey,
@@ -80,8 +85,11 @@ type PickerTarget =
  * 只是在这里加一行（那些类型的步骤显然不会跟实物一样：没有规格库存、
  * 要填课程/场次信息），不用重写组件。
  */
-const TYPE_FLOWS: Record<string, Array<'basic' | 'specs' | 'detail'>> = {
-  physical: ['basic', 'specs', 'detail'],
+const TYPE_FLOWS: Record<
+  string,
+  Array<'basic' | 'specs' | 'detail' | 'delivery'>
+> = {
+  physical: ['basic', 'specs', 'detail', 'delivery'],
 };
 
 const STEP_LABELS: Record<string, string> = {
@@ -89,6 +97,7 @@ const STEP_LABELS: Record<string, string> = {
   basic: '基础信息',
   specs: '规格',
   detail: '详情',
+  delivery: '交付',
 };
 
 /** 运营端适配器：控制台商品管理用的那一套接口 */
@@ -172,6 +181,8 @@ export default function ProductEditor({
   const [step, setStep] = useState(0);
   // 商品类型：创建时确定，编辑时只读（改类型会让已有订单/库存/发货语义断层）
   const [productType, setProductType] = useState<string>('physical');
+  // 交付方式（实物）：物流快递 / 自提，可多选；**不预勾选**，不选不能发布
+  const [deliveryMethods, setDeliveryMethods] = useState<string[]>([]);
   const [detail, setDetail] = useState<ProductRecord>();
   const [groups, setGroups] = useState<DraftGroup[]>([]);
   const [skuDraft, setSkuDraft] = useState<Record<string, SkuDraft>>({});
@@ -189,6 +200,7 @@ export default function ProductEditor({
     if (!open) return;
     setStep(0);
     setProductType('physical');
+    setDeliveryMethods([]);
     setPreviewOverride(undefined);
     // 新建没有商品可加载：必须直接把富文本标成「已就绪」，
     // 否则第 4 步永远停在「加载中…」，卖家根本没地方写详情。
@@ -215,6 +227,7 @@ export default function ProductEditor({
         setDetail(data);
         // 编辑已有商品：类型只读展示（后端也不接受修改）
         setProductType(data.product_type || 'physical');
+        setDeliveryMethods(data.delivery_methods ?? []);
         // 富文本回显：doc 优先，没有 doc 就把历史纯文本包成一段段落展示
         setRichText(
           data.description_format === 'doc' && data.description_doc
@@ -410,7 +423,14 @@ export default function ProductEditor({
         return;
       }
 
+      if (deliveryMethods.length === 0) {
+        message.warning('请先在「交付」步骤选择至少一种交付方式');
+        setStep(steps.indexOf('delivery'));
+        return;
+      }
+
       const payload: Record<string, unknown> = {
+        delivery_methods: deliveryMethods,
         name: values.name,
         description: values.description,
         category_id: values.category_id ?? null,
@@ -981,6 +1001,54 @@ export default function ProductEditor({
         ) : (
           <div style={{ padding: 24, textAlign: 'center' }}>加载中…</div>
         )}
+      </div>
+
+      {/* 第 5 步：交付。
+          只有实物商品有：物流快递 / 自提，可多选。
+          不预勾选、不选不能发布（产品口径）—— 默认值会让人"不知不觉"发出去。 */}
+      <div
+        style={{ display: currentKey === 'delivery' ? 'block' : 'none' }}
+        data-testid="product-delivery-step"
+      >
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+          {DELIVERY_METHOD_OPTIONS.map((option) => {
+            const checked = deliveryMethods.includes(option.value);
+            return (
+              <Card
+                key={option.value}
+                size="small"
+                style={{
+                  borderColor: checked ? 'var(--ant-color-primary)' : undefined,
+                }}
+              >
+                <Checkbox
+                  checked={checked}
+                  data-testid={`delivery-${option.value}`}
+                  onChange={(event) =>
+                    setDeliveryMethods((prev) =>
+                      event.target.checked
+                        ? [...prev, option.value]
+                        : prev.filter((item) => item !== option.value),
+                    )
+                  }
+                >
+                  <span style={{ fontWeight: 600 }}>{option.label}</span>
+                </Checkbox>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '6px 0 0 24px', fontSize: 12 }}
+                >
+                  {option.desc}
+                </Typography.Paragraph>
+              </Card>
+            );
+          })}
+          {deliveryMethods.length === 0 ? (
+            <Typography.Text type="danger">
+              至少选择一种交付方式，否则不能发布
+            </Typography.Text>
+          ) : null}
+        </Space>
       </div>
 
       <AttachmentPicker

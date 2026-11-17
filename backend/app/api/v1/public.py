@@ -149,6 +149,46 @@ async def public_product_detail(
     )
 
 
+@router.get("/jobs/heartbeat")
+async def jobs_heartbeat(db: AsyncSession = Depends(get_db)):
+    """worker 心跳探针（无鉴权）。
+
+    只回"在线/离线 + 最后心跳时间"，不含任务内容 —— 给 dev-up 和运维脚本探活用，
+    也让「进程活着但卡死」这种情况能被外部发现。
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.job import WorkerHeartbeat
+
+    rows = list((await db.scalars(select(WorkerHeartbeat))).all())
+    now = datetime.now(UTC)
+    online = any(
+        row.last_seen_at and (now - row.last_seen_at).total_seconds() <= 120
+        for row in rows
+    )
+    if not online:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="worker 心跳超时")
+    return ok(
+        {
+            "online": True,
+            "workers": [
+                {
+                    "instance_id": row.instance_id,
+                    "jobs_done": row.jobs_done,
+                    "last_seen_at": row.last_seen_at.isoformat()
+                    if row.last_seen_at
+                    else None,
+                }
+                for row in rows
+            ],
+        }
+    )
+
+
 @router.get("/brand")
 async def public_brand(
     request: Request,

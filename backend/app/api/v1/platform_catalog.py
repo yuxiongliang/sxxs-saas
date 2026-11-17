@@ -67,6 +67,7 @@ async def platform_products(
                 "shop_name": shop.name if shop else None,
                 "name": product.name,
                 "product_type": product.product_type,
+                "delivery_methods": product.delivery_methods or [],
                 "main_image": product.main_image,
                 "status": product.status,
                 **stats.get(product.id, catalog_stats.ProductStats()).as_dict(),

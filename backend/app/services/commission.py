@@ -2,7 +2,7 @@
 
 口径（2026-11-13 更新）：
 
-* 基数 = 该租户当月**已完成**订单金额（`orders.status='completed'` 且 `completed_at`
+* 基数 = 该租户当月**已完成**订单金额（`orders.fulfillment_status='completed'` 且 `completed_at`
   落在当月，取 `payable_amount_cents`）。已支付但未确认收货的订单**不计入**——
   买家还没确认，钱还不算真的成交。
 * 比例 = 租户所属业务类目的 commission_bps（万分比）；
@@ -52,7 +52,7 @@ async def monthly_report(db: AsyncSession, month: str | None = None) -> dict:
         await db.execute(
             select(Order.tenant_id, func.coalesce(func.sum(Order.payable_amount_cents), 0))
             .where(
-                Order.status == "completed",
+                Order.fulfillment_status == "completed",
                 Order.completed_at.is_not(None),
                 Order.completed_at >= start,
                 Order.completed_at < end,

@@ -142,6 +142,7 @@ async def test_seller_can_create_product_with_main_image(client, operator_token,
             "name": f"带主图的商品-{attachment['id']}",
             "price_cents": 12300,
             "stock": 3,
+            "delivery_methods": ["express"],
             "main_image": public_url,
         },
     )

@@ -1,15 +1,35 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Form, Image, Input, Modal, Table, Tag } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Image,
+  Input,
+  Modal,
+  Space,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
-import { listSellerOrders, shipMySellerOrder } from '@/services/commerce/api';
+import {
+  listSellerOrders,
+  refundMySellerOrder,
+  rejectMySellerOrderRefund,
+  shipMySellerOrder,
+} from '@/services/commerce/api';
 import type {
   OrderItemRecord,
   SellerOrderRecord,
 } from '@/services/commerce/types';
 import {
+  DELIVERY_METHOD,
+  FULFILLMENT_STATUS,
+  FULFILLMENT_STATUS_COLOR,
   labelOf,
-  ORDER_STATUS,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_COLOR,
   PRODUCT_TYPE,
   PRODUCT_TYPE_COLOR,
 } from '@/utils/labels';
@@ -175,30 +195,99 @@ export default function SellerOrdersPage() {
       render: (_, record) => money(record.order.payable_to_seller_cents),
     },
     {
-      title: '状态',
+      title: '交付方式',
+      width: 100,
+      onCell: merge,
+      render: (_, record) => (
+        <Tag>
+          {DELIVERY_METHOD[record.order.delivery_method ?? 'express'] ??
+            record.order.delivery_method}
+        </Tag>
+      ),
+    },
+    {
+      title: '支付状态',
       width: 110,
       onCell: merge,
       render: (_, record) => (
-        <Tag>{labelOf(ORDER_STATUS, record.order.status)}</Tag>
+        <Tag
+          color={PAYMENT_STATUS_COLOR[record.order.payment_status] ?? 'default'}
+        >
+          {labelOf(PAYMENT_STATUS, record.order.payment_status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '订单状态',
+      width: 110,
+      onCell: merge,
+      render: (_, record) => (
+        <Tag
+          color={
+            FULFILLMENT_STATUS_COLOR[record.order.fulfillment_status] ??
+            'default'
+          }
+        >
+          {labelOf(FULFILLMENT_STATUS, record.order.fulfillment_status)}
+        </Tag>
       ),
     },
     {
       title: '操作',
-      width: 110,
+      width: 160,
       fixed: 'right',
-      render: (_, record) =>
-        ['paid', 'processing'].includes(record.order.status) ? (
-          <Button
-            type="link"
-            size="small"
-            onClick={() => {
-              setSelectedOrder(record.order);
-              setShipOpen(true);
-            }}
-          >
-            发货
-          </Button>
-        ) : null,
+      render: (_, record) => (
+        <Space size={0} wrap>
+          {/* 快递 → 填运单号发货；自提 → 一键「备货完成」（不需要运单号） */}
+          {record.order.fulfillment_status === 'to_ship' ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                setSelectedOrder(record.order);
+                setShipOpen(true);
+              }}
+            >
+              {record.order.delivery_method === 'pickup' ? '备货完成' : '发货'}
+            </Button>
+          ) : null}
+          {/* 买家申请售后（退款中）→ 卖家同意或驳回 */}
+          {record.order.payment_status === 'refunding' ? (
+            <>
+              <Button
+                type="link"
+                size="small"
+                onClick={async () => {
+                  await refundMySellerOrder(record.order.id, {
+                    amount_cents: record.order.goods_amount_cents,
+                    reason: '卖家同意退款',
+                  });
+                  message.success('已退款');
+                  queryClient.invalidateQueries({
+                    queryKey: ['seller-orders'],
+                  });
+                }}
+              >
+                同意退款
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={async () => {
+                  await rejectMySellerOrderRefund(record.order.id, '卖家驳回');
+                  message.success('已驳回售后申请');
+                  queryClient.invalidateQueries({
+                    queryKey: ['seller-orders'],
+                  });
+                }}
+              >
+                驳回
+              </Button>
+            </>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 

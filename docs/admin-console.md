@@ -171,10 +171,78 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 > 真实投递（SMTP / 短信网关 / 站内信收件箱）仍未接入：这里落地的是「谁会收到」，
 > 不是「已经送达」。站内信目前只有群发记录，没有按用户的收件箱，所以 inbox 渠道强制不可关。
 
+## 订单双状态（支付 / 履约）
+
+以前一个 `orders.status` 同时表达「付没付钱」和「发没发货」：`paid` 既表示已付款、也表示待发货，
+运营想筛「已支付未发货」根本筛不出来。现在拆成两列（**旧 `status` 已删**）：
+
+| 列 | 枚举 |
+| --- | --- |
+| `payment_status` | `unpaid` 待支付 / `paid` 已支付 / `refunding` 退款中 / `partially_refunded` 部分退款 / `refunded` 已退款 / `cancelled` 已取消 |
+| `fulfillment_status` | `awaiting_payment` 待付款 / `to_ship` 待发货 / `shipped` 已发货 / `completed` 已完成 / `cancelled` 已取消 |
+
+**订单级状态由卖家单汇总**（一单可拆多卖家单），规则只写在 `services/order_state.py::sync_order()`：
+
+- 履约：全部 completed → completed；有任一 shipped → **shipped**（产品口径不要「部分发货」）；全部 cancelled → cancelled
+- 支付：全退 → refunded；有退款中 → refunding；部分退 → partially_refunded；否则按付款事实
+- 全取消时**两列都显示「已取消」**
+
+> 统计口径必须跟着改：`catalog_stats.SOLD_STATUSES` 现在是 `fulfillment_status in ('to_ship','shipped','completed')`，
+> 改错会让销量/佣金/评分静默变少。
+
+## 交付方式（向导第 5 步）
+
+实物商品：**物流快递 / 自提，可多选，不预勾选，不选不能发布**（前后端双重校验）。
+
+| | 物流快递 | 自提 |
+| --- | --- | --- |
+| 下单 | 选收货地址 | 只填联系人 + 手机号（`shops.address` / `pickup_note` 显示自提点） |
+| 卖家 | 填物流公司 + 运单号 → 已发货 | **备货完成**（不写运单） → 已发货 |
+| 买家 | 确认收货 | 确认已自提（同一接口，文案不同） |
+| 兑现 | **7 天**未确认自动完成 | **90 天**兑底自动完成 |
+
+- 交付方式落在 `seller_orders.delivery_method`（一个卖家单一种），`order_items.delivery_method` 做快照
+- 历史商品迁移回填 `["express"]`（系统此前只有快递这一条路径）
+
+## 售后最小闭环
+
+```
+买家 paid/shipped → 申请售后 → payment_status=refunding + Refund(status=pending)
+  卖家/运营 → 同意（复用那条记录 → refunded）/ 驳回（→ 回 paid，自动收货倒计时恢复）
+买家 completed → 无入口，后端也 400「已完成订单不再受理」
+```
+
+## 定时任务（`scheduled_jobs` + 常驻 worker）
+
+系统以前只有「HTTP 请求进来 → 干活」这一种执行方式，没有任何定时/延时能力。
+「7 天自动收货」需要一个真进程，而不是在读接口里顺手改状态（GET 写数据是反模式）。
+
+**队列表 `scheduled_jobs`**：`kind / ref_type / ref_id / run_at / status / attempts / last_error`
+- 入队：卖家发货成功 → `run_at = shipped_at + 7天（快递）/ 90天（自提）`
+- 撤销：买家确认收货 / 退款 / 取消订单 → 置 `cancelled`（不删，要能查「为什么没执行」）
+
+**执行器 `python -m app.worker.jobs`**（常驻，pm2 管理）：
+- **心跳** 30s 写 `worker_heartbeats`，管理页/`/public/jobs/heartbeat` 据此判在线
+- **僵尸回收**：`running` 超过 5 分钟回 `pending`（进程被杀不丢任务）
+- **失败退避** 1min / 5min / 30min，超 3 次置 `failed`
+- **优雅停机**：SIGTERM 跑完当前批再退
+- 取任务 `FOR UPDATE SKIP LOCKED`，多实例不重复
+- `--once` 跑一批就退（运维补跑 / 测试）
+
+**管理页 `/jobs`（平台控制台）**：列表（类型 / 关联单号 / 计划执行时间 / 状态 / 尝试 / 最后错误）
++ worker 在线状态 + 待执行/失败计数 + **立即执行 / 重试 / 取消**（写审计）。
+
+**进程管理**：仓库根 `ecosystem.config.js` 管 `sxxs-api` + `sxxs-jobs`；
+本地 `scripts/dev-up.py` 也把 worker 纳管（健康检查多一条 heartbeat 探针）。
+
 ## 订单管理（`/orders`）与三端订单列表
 
-**一行 = 一个商品行**，不是一个订单。订单级字段（用户ID / 买家 / 订单号 / 订单金额 / 状态 /
-下单时间）用 `rowSpan` 合并，只在首行渲染。
+**一行 = 一个商品行**，不是一个订单。订单级字段（用户ID / 买家 / 订单号 / 订单金额 /
+支付状态 / 订单状态 / 下单时间）用 `rowSpan` 合并，只在首行渲染。
+
+**状态拆两列**（支付状态 + 订单状态）+ **交付方式列**；筛选也是两个下拉。
+时间列按**浏览器本地时区**渲染 —— 以前 `value.replace('T',' ').slice(0,16)` 是 UTC 截断，
+显示比北京时间少 8 小时。
 
 ### 为什么不用抽屉
 

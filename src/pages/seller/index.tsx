@@ -133,7 +133,7 @@ const SellerPage: React.FC = () => {
       title: '操作',
       width: 120,
       render: (_, record) =>
-        ['paid', 'processing'].includes(record.status) ? (
+        record.fulfillment_status === 'to_ship' ? (
           <Button
             type="link"
             size="small"

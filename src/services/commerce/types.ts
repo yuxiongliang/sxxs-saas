@@ -62,6 +62,8 @@ export interface ProductRecord {
   status: string;
   /** 商品类型：创建后不可修改（physical / virtual / knowledge / event） */
   product_type?: string;
+  /** 交付方式：express 物流快递 / pickup 自提（可多选；空 = 未选，不能发布） */
+  delivery_methods?: string[];
   main_image?: string | null;
   images?: string[];
   created_at?: string | null;
@@ -106,7 +108,10 @@ export interface OrderRecord {
   /** 买家归属人（全站只展示用户ID + 用户名） */
   buyer_public_id?: string | null;
   buyer_username?: string | null;
-  status: string;
+  /** 支付状态（钱）：unpaid / paid / refunding / partially_refunded / refunded / cancelled */
+  payment_status: string;
+  /** 履约状态（货）：awaiting_payment / to_ship / shipped / completed / cancelled */
+  fulfillment_status: string;
   payable_amount_cents: number;
   created_at?: string | null;
   /** 列表里直接带商品，不用点开详情抽屉 */
@@ -122,7 +127,11 @@ export interface SellerOrderRecord {
   seller_name?: string | null;
   seller_public_id?: string | null;
   seller_username?: string | null;
-  status: string;
+  payment_status: string;
+  fulfillment_status: string;
+  /** 交付方式（一个卖家单一种）：express / pickup */
+  delivery_method?: string;
+  shipped_at?: string | null;
   goods_amount_cents: number;
   commission_amount_cents: number;
   payable_to_seller_cents: number;
@@ -137,6 +146,8 @@ export interface OrderItemRecord {
   seller_order_id?: number;
   /** 下单时的类型快照，商品后来改类型也不影响历史订单 */
   product_type?: string;
+  /** 下单时的交付方式快照：express 物流快递 / pickup 自提 */
+  delivery_method?: string;
   product_name: string;
   sku_name: string;
   /** 下单时的图片快照（SKU 图优先，否则商品主图） */
@@ -161,7 +172,15 @@ export interface SellerProfile {
   display_name: string;
   status: string;
   kyc_status: string;
-  shop?: { id: number; name: string; slug: string } | null;
+  shop?: {
+    id: number;
+    name: string;
+    slug: string;
+    description?: string | null;
+    /** 自提点：选了「自提」的商品，买家结算时看到 */
+    address?: string | null;
+    pickup_note?: string | null;
+  } | null;
 }
 
 export interface SellerProductRecord {
@@ -197,7 +216,10 @@ export interface SellerOrderRecord {
   id: number;
   order_id: number;
   seller_order_no: string;
-  status: string;
+  payment_status: string;
+  fulfillment_status: string;
+  delivery_method?: string;
+  shipped_at?: string | null;
   goods_amount_cents: number;
   commission_amount_cents: number;
   payable_to_seller_cents: number;
@@ -209,7 +231,8 @@ export interface SellerOrderRecord {
 export interface PortalOrder {
   id: number;
   order_no: string;
-  status: string;
+  payment_status: string;
+  fulfillment_status: string;
   payable_amount_cents: number;
   created_at?: string;
   /** 买家也要在列表里直接看到买的是什么 */
@@ -252,6 +275,11 @@ export interface CartItemRecord {
   main_image?: string;
   subtotal_cents: number;
   available: boolean;
+  /** 该商品支持的交付方式（express / pickup） */
+  delivery_methods?: string[];
+  /** 卖家自提点（选「自提」时买家要看） */
+  shop_address?: string | null;
+  shop_pickup_note?: string | null;
 }
 
 export interface CartSummary {

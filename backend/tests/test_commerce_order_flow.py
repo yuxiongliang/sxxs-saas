@@ -65,7 +65,8 @@ async def test_create_order_locks_stock_and_splits_by_seller(
     )
     assert response.status_code == 200, response.text
     order_data = response.json()["data"]
-    assert order_data["status"] == "pending_payment"
+    assert order_data["payment_status"] == "unpaid"
+    assert order_data["fulfillment_status"] == "awaiting_payment"
     # Server-side pricing: 2 * sku price, never trusted from the client.
     assert order_data["payable_amount_cents"] == sku.price_cents * 2
 
@@ -130,7 +131,8 @@ async def test_mock_pay_converts_locked_stock_into_sold_stock(
     assert sku.locked_stock == locked_before
 
     order = await db_session.get(Order, order_id)
-    assert order.status == "paid"
+    assert order.payment_status == "paid"
+    assert order.fulfillment_status == "to_ship"
     assert order.paid_at is not None
 
 
@@ -154,7 +156,9 @@ async def test_cancel_order_releases_locked_stock(client, admin_token, customer_
     await db_session.refresh(sku)
     assert sku.locked_stock == locked_before
     assert sku.stock == stock_before
-    assert (await db_session.get(Order, order_id)).status == "cancelled"
+    cancelled_order = await db_session.get(Order, order_id)
+    assert cancelled_order.payment_status == "cancelled"
+    assert cancelled_order.fulfillment_status == "cancelled"
 
 
 async def test_buyer_cannot_read_another_buyers_order(client, db_session):
@@ -236,7 +240,7 @@ async def test_full_fulfilment_flow(client, admin_token, customer_token, db_sess
     assert confirmed.status_code == 200, confirmed.text
 
     await db_session.refresh(seller_order)
-    assert seller_order.status in {"completed", "shipped", "confirmed"}
+    assert seller_order.fulfillment_status in {"completed", "shipped"}
 
 
 async def test_confirm_before_shipping_is_rejected(client, customer_token, db_session):

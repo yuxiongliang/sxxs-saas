@@ -11,6 +11,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Table,
@@ -37,6 +38,10 @@ const CartPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // 一个订单可拆多个卖家单，交付方式按卖家各选一个（默认快递）
+  const [deliveryBySeller, setDeliveryBySeller] = useState<
+    Record<number, 'express' | 'pickup'>
+  >({});
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
 
@@ -96,12 +101,45 @@ const CartPage: React.FC = () => {
     setCheckoutOpen(true);
   };
 
+  const checkedItems = (data?.items ?? []).filter((item) =>
+    selectedIds.includes(item.id),
+  );
+  const sellerGroups = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        sellerId: number;
+        methods: string[];
+        pickupAddress?: string;
+        pickupNote?: string;
+      }
+    >();
+    for (const item of checkedItems) {
+      if (!map.has(item.seller_id)) {
+        map.set(item.seller_id, {
+          sellerId: item.seller_id,
+          methods: item.delivery_methods ?? ['express'],
+          pickupAddress: item.shop_address ?? undefined,
+          pickupNote: item.shop_pickup_note ?? undefined,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [checkedItems]);
+  const needsAddress = sellerGroups.some(
+    (group) => (deliveryBySeller[group.sellerId] ?? 'express') === 'express',
+  );
+
   const submitCheckout = async () => {
     const values = await form.validateFields();
     const address = addresses?.find((item) => item.id === values.address_id);
     setSubmitting(true);
     try {
       const order = await checkoutCart({
+        delivery: checkedItems.map((item) => ({
+          seller_id: item.seller_id,
+          delivery_method: deliveryBySeller[item.seller_id] ?? 'express',
+        })),
         receiver_name: address?.receiver_name ?? values.receiver_name,
         receiver_phone: address?.receiver_phone ?? values.receiver_phone,
         receiver_address: address
@@ -270,25 +308,79 @@ const CartPage: React.FC = () => {
         okText="提交订单"
       >
         <Form form={form} layout="vertical">
-          <Form.Item label="收货地址" name="address_id">
-            <Select
-              allowClear
-              placeholder="选择已保存的地址（也可直接填写下方信息）"
-              options={(addresses ?? []).map((item) => ({
-                value: item.id,
-                label: `${item.is_default ? '[默认] ' : ''}${item.receiver_name} ${item.receiver_phone} ${item.province}${item.city}${item.detail}`,
-              }))}
-            />
-          </Form.Item>
-          <Form.Item label="收货人" name="receiver_name">
-            <Input placeholder="收货人姓名" />
-          </Form.Item>
-          <Form.Item label="联系电话" name="receiver_phone">
-            <Input placeholder="手机号" />
-          </Form.Item>
-          <Form.Item label="详细地址" name="receiver_address">
-            <Input placeholder="未选择已保存地址时填写" />
-          </Form.Item>
+          {/* 交付方式按卖家分组：同一单可能一个卖家发快递、另一个自提 */}
+          {sellerGroups.map((group) => (
+            <Form.Item
+              key={group.sellerId}
+              label={`交付方式（卖家 #${group.sellerId}）`}
+            >
+              <Radio.Group
+                value={deliveryBySeller[group.sellerId] ?? 'express'}
+                onChange={(event) =>
+                  setDeliveryBySeller((prev) => ({
+                    ...prev,
+                    [group.sellerId]: event.target.value,
+                  }))
+                }
+              >
+                <Radio.Button value="express">物流快递</Radio.Button>
+                <Radio.Button
+                  value="pickup"
+                  disabled={
+                    !group.methods.includes('pickup') || !group.pickupAddress
+                  }
+                >
+                  自提
+                </Radio.Button>
+              </Radio.Group>
+              {deliveryBySeller[group.sellerId] === 'pickup' ? (
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '6px 0 0', fontSize: 12 }}
+                >
+                  自提点：{group.pickupAddress || '卖家未填写'}
+                  {group.pickupNote ? ` · ${group.pickupNote}` : ''}
+                </Typography.Paragraph>
+              ) : null}
+            </Form.Item>
+          ))}
+          {needsAddress ? (
+            <>
+              <Form.Item label="收货地址" name="address_id">
+                <Select
+                  allowClear
+                  placeholder="选择已保存的地址（也可直接填写下方信息）"
+                  options={(addresses ?? []).map((item) => ({
+                    value: item.id,
+                    label: `${item.is_default ? '[默认] ' : ''}${item.receiver_name} ${item.receiver_phone} ${item.province}${item.city}${item.detail}`,
+                  }))}
+                />
+              </Form.Item>
+              <Form.Item label="收货人" name="receiver_name">
+                <Input placeholder="收货人姓名" />
+              </Form.Item>
+              <Form.Item label="联系电话" name="receiver_phone">
+                <Input placeholder="手机号" />
+              </Form.Item>
+              <Form.Item label="详细地址" name="receiver_address">
+                <Input placeholder="未选择已保存地址时填写" />
+              </Form.Item>
+            </>
+          ) : (
+            <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+              全部商品为自提，无需填写收货地址；请留下联系人姓名与手机号。
+            </Typography.Paragraph>
+          )}
+          {!needsAddress ? (
+            <>
+              <Form.Item label="联系人" name="receiver_name">
+                <Input placeholder="到店自提的联系人" />
+              </Form.Item>
+              <Form.Item label="联系电话" name="receiver_phone">
+                <Input placeholder="手机号" />
+              </Form.Item>
+            </>
+          ) : null}
           <Form.Item label="备注" name="remark">
             <Input.TextArea rows={2} placeholder="选填" />
           </Form.Item>

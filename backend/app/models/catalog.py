@@ -73,6 +73,9 @@ class Product(Base, TimestampMixin):
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 商品视频（主图/多图之外的展示素材）
     video_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 交付方式（实物）：["express"] 物流快递 / ["pickup"] 自提 / 两者都支持。
+    # NULL = 卖家还没选过（历史数据），**不允许发布**；由向导第 5 步填写。
+    delivery_methods: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 浏览数（PV）：买家侧打开详情页就 +1。运营后台预览不计，避免自己刷自己的数。
     # 这是「浏览量」不是广告曝光：刷新会重复计数，界面列头要写清楚。
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -666,6 +666,48 @@ export const listPlatformProducts = (params: {
   product_type?: string;
 } = {}) => apiGet<PlatformProductRow[]>(`/platform/products${query(params)}`);
 
+/** 定时任务（延时任务队列）。平台运维要能看计划、手动执行、取消、重试。 */
+export interface ScheduledJobRow {
+  id: number;
+  kind: string;
+  ref_type: string;
+  ref_id: number;
+  ref_no?: string | null;
+  run_at?: string | null;
+  status: string;
+  attempts: number;
+  last_error?: string | null;
+  created_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface WorkerStatus {
+  instance_id: string;
+  version?: string | null;
+  jobs_done: number;
+  last_seen_at?: string | null;
+  alive: boolean;
+}
+
+export interface JobsPayload {
+  list: ScheduledJobRow[];
+  workers: WorkerStatus[];
+  summary: { pending: number; failed: number };
+  kinds: string[];
+}
+
+export const listScheduledJobs = (params: { kind?: string; status?: string } = {}) =>
+  apiGet<JobsPayload>(`/platform/jobs${query(params)}`);
+
+export const runScheduledJob = (id: number) =>
+  apiPost<{ id: number; status: string; note: string }>(`/platform/jobs/${id}/run`);
+
+export const cancelScheduledJob = (id: number) =>
+  apiPost<{ id: number; status: string }>(`/platform/jobs/${id}/cancel`);
+
+export const retryScheduledJob = (id: number) =>
+  apiPost<{ id: number; status: string }>(`/platform/jobs/${id}/retry`);
+
 /** 全站收藏（跨租户）。人物标识：用户ID + 用户名。 */
 export interface PlatformFavoriteRow {
   id: number;

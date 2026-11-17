@@ -37,6 +37,15 @@ SERVICES = [
         Path("/tmp/backend.log"),
         9000,
     ),
+    (
+        # 常驻延时任务执行器：自动收货（快递 7 天 / 自提 90 天）。
+        # 没有端口，存活判断走 pgrep（见 _worker_alive）。
+        "jobs-worker",
+        [str(REPO / "backend/.venv/bin/python"), "-m", "app.worker.jobs"],
+        REPO / "backend",
+        Path("/tmp/jobs-worker.log"),
+        0,
+    ),
     ("tenant-console", ["npm", "run", "dev"], REPO, Path("/tmp/dev8010.log"), 8010),
     (
         "platform-console",
@@ -52,6 +61,11 @@ CHECKS = [
     ("backend", "http://127.0.0.1:9000/api/v1/public/brand"),
     ("tenant-console", "http://127.0.0.1:8010/products"),
     ("platform-console", "http://127.0.0.1:8001/login"),
+    # worker 没有端口：读它的心跳表，超过 2 分钟没更新就算掉线
+    (
+        "jobs-worker",
+        "http://127.0.0.1:9000/api/v1/public/jobs/heartbeat",
+    ),
 ]
 
 
@@ -68,10 +82,25 @@ def _listening_pids(port: int) -> list[int]:
     return [int(line) for line in out.split() if line.strip().isdigit()]
 
 
+def _pids_by_cmdline(pattern: str) -> list[int]:
+    """无端口的常驻进程（jobs worker）只能用命令行特征找。"""
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", pattern], capture_output=True, text=True, check=False
+        ).stdout
+    except FileNotFoundError:
+        return []
+    return [int(line) for line in out.split() if line.strip().isdigit()]
+
+
+def _service_pids(port: int, name: str) -> list[int]:
+    return _listening_pids(port) if port else _pids_by_cmdline("app.worker.jobs")
+
+
 def stop_existing() -> None:
     for name, _cmd, _cwd, _log, port in SERVICES:
-        for pid in _listening_pids(port):
-            print(f"{name}: 停止旧进程 pid={pid} (port {port})")
+        for pid in _service_pids(port, name):
+            print(f"{name}: 停止旧进程 pid={pid}" + (f" (port {port})" if port else ""))
             try:
                 os.kill(pid, signal.SIGTERM)
             except ProcessLookupError:

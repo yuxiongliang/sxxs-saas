@@ -84,6 +84,7 @@ async def _cart_rows(db: AsyncSession, context: AuthContext) -> list[CartItem]:
 
 async def _to_out(db: AsyncSession, item: CartItem) -> CartItemOut:
     product = await db.get(Product, item.product_id)
+    shop = await db.get(Shop, product.shop_id) if product else None
     sku = await db.get(ProductSku, item.sku_id)
     price = sku.price_cents if sku else 0
     stock = sku.stock if sku else 0
@@ -108,6 +109,9 @@ async def _to_out(db: AsyncSession, item: CartItem) -> CartItemOut:
         main_image=product.main_image if product else None,
         subtotal_cents=price * item.quantity,
         available=available,
+        delivery_methods=(product.delivery_methods or ["express"]) if product else ["express"],
+        shop_address=shop.address if shop else None,
+        shop_pickup_note=shop.pickup_note if shop else None,
     )
 
 

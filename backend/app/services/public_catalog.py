@@ -74,6 +74,8 @@ def _product_public_dict(product, shop, seller, sku) -> dict:
         "status": product.status,
         # 商品类型：详情页要显示标签；买家侧目前只有实物
         "product_type": product.product_type,
+        # 交付方式：买家下单要按卖家选快递/自提，详情页先告诉他能选什么
+        "delivery_methods": product.delivery_methods or [],
         "main_image": product.main_image,
         "shop_name": shop.name,
         "seller_name": seller.display_name,
@@ -172,7 +174,7 @@ _sold_sq = (
         func.sum(OrderItem.quantity).label("sold"),
     )
     .join(SellerOrder, SellerOrder.id == OrderItem.seller_order_id)
-    .where(SellerOrder.status.in_(catalog_stats.SOLD_STATUSES))
+    .where(SellerOrder.fulfillment_status.in_(catalog_stats.SOLD_STATUSES))
     .group_by(OrderItem.product_id)
     .subquery("sold")
 )

@@ -165,10 +165,10 @@ async def _order_status(db: AsyncSession, tenant_id: int) -> list[dict]:
     rows = list(
         (
             await db.execute(
-                select(Order.status, func.count(Order.id))
+                select(Order.fulfillment_status, func.count(Order.id))
                 .where(Order.tenant_id == tenant_id)
-                .group_by(Order.status)
-                .order_by(func.count(Order.id).desc(), Order.status)
+                .group_by(Order.fulfillment_status)
+                .order_by(func.count(Order.id).desc(), Order.fulfillment_status)
             )
         ).all()
     )
@@ -252,7 +252,7 @@ async def overview(db: AsyncSession, tenant_id: int, days: int = 30) -> dict:
             db,
             Order,
             Order.tenant_id == tenant_id,
-            Order.status == "pending_payment",
+            Order.payment_status == "unpaid",
         ),
         "products_on_sale": await _count_where(
             db, Product, Product.tenant_id == tenant_id, Product.status == "on_sale"

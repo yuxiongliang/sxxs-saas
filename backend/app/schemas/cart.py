@@ -27,6 +27,10 @@ class CartItemOut(BaseModel):
     main_image: str | None = None
     subtotal_cents: int
     available: bool
+    # 交付方式与自提点：结算页按卖家选快递/自提时要显示
+    delivery_methods: list[str] = []
+    shop_address: str | None = None
+    shop_pickup_note: str | None = None
 
 
 class CartSummary(BaseModel):
@@ -98,8 +102,11 @@ class AddressOut(BaseModel):
 class CheckoutFromCartRequest(BaseModel):
     """Checkout only the *selected* cart lines."""
 
-    receiver_name: str = Field(min_length=1, max_length=64)
-    receiver_phone: str = Field(min_length=1, max_length=32)
-    receiver_address: dict
+    # 自提单不需要收货地址，所以这三项不再强制（快递单缺地址由服务层拒绝）
+    receiver_name: str | None = Field(default=None, max_length=64)
+    receiver_phone: str | None = Field(default=None, max_length=32)
+    receiver_address: dict | None = None
     remark: str | None = None
     address_id: int | None = None
+    # 按卖家选交付方式：express / pickup
+    delivery: list[dict] = []

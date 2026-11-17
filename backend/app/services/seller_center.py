@@ -10,6 +10,7 @@ from app.models.order import OrderItem, SellerOrder, Shipment
 from app.models.seller import Seller, SellerMember, Shop
 from app.schemas.commerce import (
     ProductSpecsUpdate,
+    ShopProfileUpdate,
     SellerProductCreate,
     SellerProductStatusRequest,
     SellerProductUpdate,
@@ -19,6 +20,7 @@ from app.services import audit as audit_service
 from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
+from app.services import order as order_service
 from app.services.auth import AuthContext
 
 
@@ -80,6 +82,7 @@ async def seller_products(
                 "description_html": product.description_html,
                 "main_image": product.main_image,
                 "video_url": product.video_url,
+                "delivery_methods": product.delivery_methods or [],
                 "status": product.status,
                 # 商品类型：卖家列表也要显示，创建后不可改
                 "product_type": product.product_type,
@@ -141,6 +144,7 @@ async def seller_product_detail(
         "main_image": product.main_image,
         "images": product.images or [],
         "video_url": product.video_url,
+        "delivery_methods": product.delivery_methods or [],
         "reject_reason": product.reject_reason,
         "commission_bps": product.commission_bps,
         "commission_locked": bool(product.commission_locked),
@@ -212,6 +216,32 @@ async def save_seller_product_specs(
     }
 
 
+async def update_shop_profile(
+    db: AsyncSession, context: AuthContext, payload: ShopProfileUpdate
+) -> dict:
+    """卖家维护店铺资料。
+
+    自提交付靠这里的 `address` / `pickup_note`：买家下单选自提时要看到去哪儿取、
+    什么时间取，没有这两个字段自提单就是"凭空自提"。
+    """
+    seller, shop = await current_seller(db, context)
+    if shop is None:
+        raise HTTPException(status_code=400, detail="卖家店铺不存在")
+    data = payload.model_dump(exclude_unset=True)
+    for key in ("name", "description", "address", "pickup_note"):
+        if key in data:
+            setattr(shop, key, data[key] or None)
+    await db.commit()
+    await db.refresh(shop)
+    return {
+        "id": shop.id,
+        "name": shop.name,
+        "description": shop.description,
+        "address": shop.address,
+        "pickup_note": shop.pickup_note,
+    }
+
+
 async def update_seller_product(
     db: AsyncSession, context: AuthContext, product_id: int, payload: SellerProductUpdate
 ) -> dict:
@@ -228,6 +258,12 @@ async def update_seller_product(
     if "category_id" in data and data["category_id"] != product.category_id:
         await category_service.ensure_category_usable(db, data["category_id"])
         product.category_id = data["category_id"]
+        category_changed = True
+
+    # 交付方式变更同样算内容变更（改了买家能选什么，必须重新过审）
+    delivery = normalize_delivery_methods(data.pop("delivery_methods", None))
+    if delivery is not None and (product.delivery_methods or []) != delivery:
+        product.delivery_methods = delivery
         category_changed = True
 
     content_changed = category_changed
@@ -368,6 +404,10 @@ async def change_seller_product_status(
     else:  # pragma: no cover - schema 已限死两个值
         raise HTTPException(status_code=400, detail="不支持的状态")
 
+    # 不选交付方式不能发布（重新提交审核也走这条）
+    if target == "pending_review":
+        ensure_delivery_methods_for_publish(product)
+
     before = product.status
     product.status = target
     # 重新提审时清空上次的驳回原因
@@ -387,12 +427,45 @@ async def change_seller_product_status(
     return {"id": product.id, "status": product.status}
 
 
+#: 允许的交付方式：物流快递 / 自提
+DELIVERY_METHODS = ("express", "pickup")
+
+
+def normalize_delivery_methods(values: list[str] | None) -> list[str] | None:
+    """去重 + 白名单校验。返回 None 表示"这次不改动"；返回 [] 表示明确的空选择。"""
+    if values is None:
+        return None
+    cleaned: list[str] = []
+    for item in values:
+        value = str(item).strip()
+        if value and value not in DELIVERY_METHODS:
+            raise HTTPException(status_code=400, detail=f"不支持的交付方式：{value}")
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return cleaned
+
+
+def ensure_delivery_methods_for_publish(product: Product) -> None:
+    """没选交付方式就不能进审核/上架（产品口径：不选不能发布）。"""
+    if not (product.delivery_methods or []):
+        raise HTTPException(
+            status_code=400,
+            detail="请先在「交付」步骤选择至少一种交付方式（物流快递 / 自提）",
+        )
+
+
 async def create_seller_product(
     db: AsyncSession, context: AuthContext, payload: SellerProductCreate
 ) -> dict:
     seller, shop = await current_seller(db, context)
     if shop is None:
         raise HTTPException(status_code=400, detail="卖家店铺不存在")
+    delivery = normalize_delivery_methods(payload.delivery_methods) or []
+    if not delivery:
+        raise HTTPException(
+            status_code=400,
+            detail="请先选择交付方式（物流快递 / 自提），否则不能提交发布",
+        )
     # 只有实物商品已打通下单/库存/发货/退款；其它三类先拒，
     # 否则库里会出现一堆没有配套逻辑的「虚拟商品」
     if payload.product_type != "physical":
@@ -408,6 +481,7 @@ async def create_seller_product(
         category_id=payload.category_id,
         name=payload.name,
         product_type=payload.product_type,
+        delivery_methods=delivery,
         main_image=payload.main_image or None,
         video_url=payload.video_url or None,
         status="pending_review",
@@ -453,9 +527,14 @@ async def ship_seller_order(
     db: AsyncSession,
     context: AuthContext,
     seller_order_id: int,
-    carrier: str,
-    tracking_no: str,
+    carrier: str | None,
+    tracking_no: str | None,
 ) -> dict:
+    """卖家发货 / 自提备货完成。
+
+    归属校验（只能是自己的卖家单）在这里，之后的发货动作**复用订单服务的同一段逻辑** ——
+    自提不写运单、发货入队自动完成倒计时，这些规则只能有一份。
+    """
     seller, _ = await current_seller(db, context)
     seller_order = await db.get(SellerOrder, seller_order_id)
     if (
@@ -464,21 +543,14 @@ async def ship_seller_order(
         or seller_order.seller_id != seller.id
     ):
         raise HTTPException(status_code=404, detail="卖家订单不存在")
-    if seller_order.status not in {"paid", "processing"}:
-        raise HTTPException(status_code=400, detail="当前卖家订单不可发货")
-    seller_order.status = "shipped"
-    seller_order.shipped_at = datetime.now(UTC)
-    db.add(
-        Shipment(
-            tenant_id=context.tenant.id,
-            seller_order_id=seller_order.id,
-            carrier=carrier,
-            tracking_no=tracking_no,
-            status="shipped",
-        )
+    result = await order_service.ship_seller_order(
+        db, context, seller_order_id, carrier, tracking_no
     )
-    await db.commit()
-    return {"id": seller_order.id, "status": seller_order.status}
+    return {
+        "id": result.id,
+        "fulfillment_status": result.fulfillment_status,
+        "delivery_method": result.delivery_method,
+    }
 
 
 async def request_payout(db: AsyncSession, context: AuthContext):
@@ -520,7 +592,9 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
             "id": item.id,
             "order_id": item.order_id,
             "seller_order_no": item.seller_order_no,
-            "status": item.status,
+            "payment_status": item.payment_status,
+            "fulfillment_status": item.fulfillment_status,
+            "delivery_method": item.delivery_method,
             "goods_amount_cents": item.goods_amount_cents,
             "commission_amount_cents": item.commission_amount_cents,
             "payable_to_seller_cents": item.payable_to_seller_cents,

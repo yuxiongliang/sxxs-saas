@@ -30,6 +30,67 @@ export const PRODUCT_TYPE_COLOR: Record<string, string> = {
   event: 'default',
 };
 
+/**
+ * 支付状态（钱的事）。
+ *
+ * 与履约状态拆开：以前一个 `status` 同时表达「付没付钱」和「发没发货」，
+ * 想筛「已支付未发货」根本筛不出来。
+ */
+export const PAYMENT_STATUS: Record<string, string> = {
+  unpaid: '待支付',
+  paid: '已支付',
+  refunding: '退款中',
+  partially_refunded: '部分退款',
+  refunded: '已退款',
+  cancelled: '已取消',
+};
+
+export const PAYMENT_STATUS_COLOR: Record<string, string> = {
+  unpaid: 'gold',
+  paid: 'blue',
+  refunding: 'orange',
+  partially_refunded: 'orange',
+  refunded: 'red',
+  cancelled: 'default',
+};
+
+/** 履约状态（货的事）。产品口径：不要「部分发货」，多卖家单部分发货也显示「已发货」。 */
+export const FULFILLMENT_STATUS: Record<string, string> = {
+  awaiting_payment: '待付款',
+  to_ship: '待发货',
+  shipped: '已发货',
+  completed: '已完成',
+  cancelled: '已取消',
+};
+
+export const FULFILLMENT_STATUS_COLOR: Record<string, string> = {
+  awaiting_payment: 'gold',
+  to_ship: 'blue',
+  shipped: 'geekblue',
+  completed: 'green',
+  cancelled: 'default',
+};
+
+/** 交付方式：实物商品的配送方式，一个卖家单一种。 */
+export const DELIVERY_METHOD: Record<string, string> = {
+  express: '物流快递',
+  pickup: '自提',
+};
+
+/** 交付方式多选（商品维度）：勾选项与文案。 */
+export const DELIVERY_METHOD_OPTIONS = [
+  {
+    value: 'express',
+    label: '物流快递',
+    desc: '买家下单 → 卖家填运单号发货 → 7 天自动收货 → 完成（完成后不再受理售后）',
+  },
+  {
+    value: 'pickup',
+    label: '自提',
+    desc: '买家下单 → 卖家备货完成 → 买家到场确认自提 → 完成（90 天未确认自动完成，完成后不再受理售后）',
+  },
+];
+
 export const ORDER_STATUS: Record<string, string> = {
   pending_payment: '待支付',
   paid: '已支付',

@@ -17,7 +17,13 @@ from tests.conftest import bearer
 
 
 async def _create(client, token, name: str, **extra) -> dict:
-    body = {"name": name, "price_cents": 8800, "stock": 5, **extra}
+    body = {
+        "name": name,
+        "price_cents": 8800,
+        "stock": 5,
+        "delivery_methods": ["express"],
+        **extra,
+    }
     response = await client.post(
         "/api/v1/portal/seller/products", headers=bearer(token), json=body
     )

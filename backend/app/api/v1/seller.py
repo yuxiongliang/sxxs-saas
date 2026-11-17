@@ -5,7 +5,9 @@ from app.api.deps import get_current_context, get_db, require_permission
 from app.core.response import ok
 from app.schemas.commerce import (
     ProductSpecsUpdate,
-    ProductSpecsUpdate,
+    ShopProfileUpdate,
+    RefundCreateRequest,
+    RefundRejectRequest,
     SellerApplyRequest,
     SellerProductCreate,
     SellerProductStatusRequest,
@@ -13,6 +15,7 @@ from app.schemas.commerce import (
     SellerShipRequest,
 )
 from app.services import category as category_service
+from app.services import order as order_service
 from app.services import seller_center as seller_service
 from app.services.auth import AuthContext
 
@@ -56,7 +59,19 @@ async def seller_profile(
             "display_name": seller.display_name,
             "status": seller.status,
             "kyc_status": seller.kyc_status,
-            "shop": {"id": shop.id, "name": shop.name, "slug": shop.slug} if shop else None,
+            "shop": (
+                {
+                    "id": shop.id,
+                    "name": shop.name,
+                    "slug": shop.slug,
+                    "description": shop.description,
+                    # 自提点信息：买家选自提时要看到
+                    "address": shop.address,
+                    "pickup_note": shop.pickup_note,
+                }
+                if shop
+                else None
+            ),
         }
     )
 
@@ -68,6 +83,34 @@ async def create_product(
     db: AsyncSession = Depends(get_db),
 ):
     return ok(await seller_service.create_seller_product(db, context, payload), "商品已提交审核")
+
+
+@router.post("/orders/{seller_order_id}/refund/reject")
+async def seller_reject_refund(
+    seller_order_id: int,
+    payload: RefundRejectRequest,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家驳回买家的售后申请（归属校验在服务层 current_seller）。"""
+    refund = await order_service.reject_refund(
+        db, context, seller_order_id, payload.reason
+    )
+    return ok({"id": refund.id, "status": refund.status}, "已驳回售后申请")
+
+
+@router.post("/orders/{seller_order_id}/refund")
+async def seller_refund_order(
+    seller_order_id: int,
+    payload: RefundCreateRequest,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家同意退款（买家申请过则复用那条待处理记录）。"""
+    refund = await order_service.refund_seller_order(
+        db, context, seller_order_id, payload.amount_cents, payload.reason
+    )
+    return ok({"id": refund.id, "status": refund.status}, "退款成功")
 
 
 @router.post("/orders/{seller_order_id}/ship")
@@ -94,6 +137,16 @@ async def request_payout(
     return ok(
         {"id": payout.id, "amount_cents": payout.amount_cents, "status": payout.status}, "结算成功"
     )
+
+
+@router.put("/shop")
+async def update_shop(
+    payload: ShopProfileUpdate,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """维护店铺资料（含自提点地址与说明）。"""
+    return ok(await seller_service.update_shop_profile(db, context, payload), "店铺资料已更新")
 
 
 @router.get("/products")

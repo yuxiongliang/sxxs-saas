@@ -75,6 +75,13 @@ export default [
     component: './audit',
   },
   {
+    // 延时任务队列：自动收货倒计时等。平台运维要能看计划、手动执行、取消、重试
+    path: '/jobs',
+    name: 'jobs',
+    icon: 'ClockCircleOutlined',
+    component: './jobs',
+  },
+  {
     path: '/notifications',
     name: 'notifications',
     icon: 'NotificationOutlined',

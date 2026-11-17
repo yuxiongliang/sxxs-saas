@@ -31,7 +31,7 @@ async def _seller(db_session, tenant_id: int = 1) -> Seller:
 async def _complete_order(db_session, order_id: int) -> None:
     """Mark a seller_order completed and clear the settlement hold period.
 
-    Withdrawal now requires ``seller_order.status == completed`` *and* the
+    Withdrawal now requires ``seller_order.fulfillment_status == completed`` *and* the
     tenant's 账期 (``settlement_hold_days``) to have elapsed, so tests that
     exercise payouts must finish the order first.
     """
@@ -43,7 +43,7 @@ async def _complete_order(db_session, order_id: int) -> None:
         await db_session.execute(select(SellerOrder).where(SellerOrder.order_id == order_id))
     ).scalars().first()
     assert seller_order is not None
-    seller_order.status = "completed"
+    seller_order.fulfillment_status = "completed"
     seller_order.completed_at = datetime.now(UTC)
     await db_session.flush()
 
@@ -121,6 +121,7 @@ async def test_seller_can_create_a_product_pending_review(client, operator_token
             "subtitle": "自动化验收",
             "price_cents": 12800,
             "stock": 7,
+            "delivery_methods": ["express"],
         },
     )
     assert response.status_code == 200, response.text
@@ -140,9 +141,9 @@ async def test_seller_can_create_a_product_pending_review(client, operator_token
 @pytest.mark.parametrize(
     "payload",
     [
-        {"name": "零价", "price_cents": 0, "stock": 1},
-        {"name": "", "price_cents": 100, "stock": 1},
-        {"name": "负库存", "price_cents": 100, "stock": -1},
+        {"name": "零价", "price_cents": 0, "stock": 1, "delivery_methods": ["express"]},
+        {"name": "", "price_cents": 100, "stock": 1, "delivery_methods": ["express"]},
+        {"name": "负库存", "price_cents": 100, "stock": -1, "delivery_methods": ["express"]},
     ],
 )
 async def test_seller_product_payload_is_validated(client, operator_token, payload):
@@ -215,7 +216,7 @@ async def test_payment_is_idempotent_for_the_ledger(
     from app.models.order import Order
 
     order = (
-        await db_session.execute(select(Order).where(Order.status == "paid"))
+        await db_session.execute(select(Order).where(Order.payment_status == "paid"))
     ).scalars().first()
     replay = await client.post(
         f"/api/v1/admin/orders/{order.id}/mock-pay", headers=bearer(admin_token)

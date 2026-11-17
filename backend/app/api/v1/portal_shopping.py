@@ -21,7 +21,11 @@ from app.schemas.cart import (
     CartSummary,
     CheckoutFromCartRequest,
 )
-from app.schemas.order import OrderCreateRequest, OrderItemInput
+from app.schemas.order import (
+    OrderCreateRequest,
+    OrderDeliveryChoice,
+    OrderItemInput,
+)
 from app.services import cart as cart_service
 from app.services import order as order_service
 from app.services.auth import AuthContext
@@ -169,7 +173,7 @@ async def checkout_from_cart(
 
         raise HTTPException(status_code=400, detail="购物车中没有已选商品")
 
-    receiver_address = dict(payload.receiver_address)
+    receiver_address = dict(payload.receiver_address or {})
     if payload.address_id is not None:
         address = await cart_service.get_address(db, context, payload.address_id)
         receiver_address = {
@@ -189,8 +193,15 @@ async def checkout_from_cart(
             ],
             receiver_name=payload.receiver_name,
             receiver_phone=payload.receiver_phone,
-            receiver_address=receiver_address,
+            receiver_address=receiver_address or None,
             remark=payload.remark,
+            delivery=[
+                OrderDeliveryChoice(
+                    seller_id=int(item.get("seller_id")),
+                    delivery_method=item.get("delivery_method", "express"),
+                )
+                for item in payload.delivery
+            ],
         ),
     )
 
@@ -202,7 +213,8 @@ async def checkout_from_cart(
         {
             "id": order.id,
             "order_no": order.order_no,
-            "status": order.status,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
             "payable_amount_cents": order.payable_amount_cents,
         },
         "下单成功",

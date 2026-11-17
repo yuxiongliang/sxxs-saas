@@ -31,27 +31,33 @@ import type {
   SellerOrderRecord,
 } from '@/services/commerce/types';
 import {
+  DELIVERY_METHOD,
+  FULFILLMENT_STATUS,
+  FULFILLMENT_STATUS_COLOR,
   labelOf,
-  ORDER_STATUS,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_COLOR,
   PRODUCT_TYPE,
   PRODUCT_TYPE_COLOR,
 } from '@/utils/labels';
 import SettingPage from '../../system/components/SettingPage';
 
-const statusColor = (status: string) =>
-  status === 'paid' || status === 'completed'
-    ? 'success'
-    : status === 'pending_payment'
-      ? 'gold'
-      : status === 'refunded'
-        ? 'red'
-        : 'default';
-
 const money = (cents?: number | null) =>
   typeof cents === 'number' ? `¥${(cents / 100).toFixed(2)}` : '—';
 
-const formatTime = (value?: string | null) =>
-  value ? value.replace('T', ' ').slice(0, 16) : '—';
+/**
+ * 时间按**浏览器本地时区**展示。
+ *
+ * 之前是 `value.replace('T',' ').slice(0,16)` —— 后端返回的是带 `+00:00` 的 UTC，
+ * 直接截字符串会让显示时间比北京时间少 8 小时；倒计时/计划时间照抄就更离谱。
+ */
+const formatTime = (value?: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 /**
  * 一行 = 一个商品行（`order_items`），不是一个订单。
@@ -83,11 +89,17 @@ const OrderManagementPage: React.FC = () => {
   const [shipForm] = Form.useForm();
   const [refundForm] = Form.useForm();
   const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<string>();
+  const [paymentStatus, setPaymentStatus] = useState<string>();
+  const [fulfillmentStatus, setFulfillmentStatus] = useState<string>();
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin-orders', keyword, status],
-    queryFn: () => listAdminOrders({ keyword: keyword || undefined, status }),
+    queryKey: ['admin-orders', keyword, paymentStatus, fulfillmentStatus],
+    queryFn: () =>
+      listAdminOrders({
+        keyword: keyword || undefined,
+        payment_status: paymentStatus,
+        fulfillment_status: fulfillmentStatus,
+      }),
   });
 
   const rows: OrderRow[] = useMemo(() => {
@@ -263,14 +275,41 @@ const OrderManagementPage: React.FC = () => {
       render: (_, record) => money(record.order.payable_amount_cents),
     },
     {
-      title: '状态',
+      // 支付状态（钱）：待支付 / 已支付 / 退款中 / 部分退款 / 已退款 / 已取消
+      title: '支付状态',
       width: 110,
       onCell: merge,
       render: (_, record) => (
-        <Tag color={statusColor(record.order.status)}>
-          {labelOf(ORDER_STATUS, record.order.status)}
+        <Tag
+          color={PAYMENT_STATUS_COLOR[record.order.payment_status] ?? 'default'}
+        >
+          {labelOf(PAYMENT_STATUS, record.order.payment_status)}
         </Tag>
       ),
+    },
+    {
+      // 履约状态（货）：待付款 / 待发货 / 已发货 / 已完成 / 已取消
+      title: '订单状态',
+      width: 110,
+      onCell: merge,
+      render: (_, record) => (
+        <Tag
+          color={
+            FULFILLMENT_STATUS_COLOR[record.order.fulfillment_status] ??
+            'default'
+          }
+        >
+          {labelOf(FULFILLMENT_STATUS, record.order.fulfillment_status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '交付方式',
+      width: 100,
+      render: (_, record) => {
+        const method = record.item?.delivery_method ?? 'express';
+        return <Tag>{DELIVERY_METHOD[method] ?? method}</Tag>;
+      },
     },
     {
       title: '下单时间',
@@ -287,7 +326,7 @@ const OrderManagementPage: React.FC = () => {
         return (
           <Space size={0} wrap>
             {/* 订单级操作只在首行出现，避免同一订单重复出现「模拟支付」 */}
-            {record.first && record.order.status === 'pending_payment' ? (
+            {record.first && record.order.payment_status === 'unpaid' ? (
               <>
                 <Button
                   type="link"
@@ -315,8 +354,7 @@ const OrderManagementPage: React.FC = () => {
               </>
             ) : null}
             {/* 发货/退款是**卖家单粒度**：按本行商品所属的卖家单来，不能拿订单 id 去发货 */}
-            {sellerOrder &&
-            ['paid', 'processing'].includes(sellerOrder.status) ? (
+            {sellerOrder && sellerOrder.fulfillment_status === 'to_ship' ? (
               <Button
                 type="link"
                 size="small"
@@ -329,7 +367,7 @@ const OrderManagementPage: React.FC = () => {
               </Button>
             ) : null}
             {sellerOrder &&
-            ['paid', 'shipped', 'completed'].includes(sellerOrder.status) ? (
+            ['paid', 'refunding'].includes(sellerOrder.payment_status) ? (
               <Button
                 type="link"
                 size="small"
@@ -369,17 +407,31 @@ const OrderManagementPage: React.FC = () => {
           onKeywordChange={setKeyword}
           onRefresh={() => refetch()}
           filters={
-            <Select
-              allowClear
-              placeholder="订单状态"
-              style={{ width: 150 }}
-              value={status}
-              onChange={setStatus}
-              options={Object.entries(ORDER_STATUS).map(([value, label]) => ({
-                label,
-                value,
-              }))}
-            />
+            <>
+              <Select
+                allowClear
+                placeholder="支付状态"
+                style={{ width: 140 }}
+                value={paymentStatus}
+                onChange={setPaymentStatus}
+                options={Object.entries(PAYMENT_STATUS).map(
+                  ([value, label]) => ({
+                    label,
+                    value,
+                  }),
+                )}
+              />
+              <Select
+                allowClear
+                placeholder="订单状态"
+                style={{ width: 140 }}
+                value={fulfillmentStatus}
+                onChange={setFulfillmentStatus}
+                options={Object.entries(FULFILLMENT_STATUS).map(
+                  ([value, label]) => ({ label, value }),
+                )}
+              />
+            </>
           }
         />
         <Table<OrderRow>
@@ -421,13 +473,31 @@ const OrderManagementPage: React.FC = () => {
                     ),
                   },
                   {
-                    title: '状态',
-                    dataIndex: 'status',
+                    title: '支付状态',
+                    dataIndex: 'payment_status',
                     width: 110,
                     render: (value: string) => (
-                      <Tag color={statusColor(value)}>
-                        {labelOf(ORDER_STATUS, value)}
+                      <Tag color={PAYMENT_STATUS_COLOR[value] ?? 'default'}>
+                        {labelOf(PAYMENT_STATUS, value)}
                       </Tag>
+                    ),
+                  },
+                  {
+                    title: '订单状态',
+                    dataIndex: 'fulfillment_status',
+                    width: 110,
+                    render: (value: string) => (
+                      <Tag color={FULFILLMENT_STATUS_COLOR[value] ?? 'default'}>
+                        {labelOf(FULFILLMENT_STATUS, value)}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    title: '交付方式',
+                    dataIndex: 'delivery_method',
+                    width: 100,
+                    render: (value: string) => (
+                      <Tag>{DELIVERY_METHOD[value] ?? value}</Tag>
                     ),
                   },
                   {

@@ -1,7 +1,7 @@
 """按月抽佣台账：GMV × 类目比例，买断/自定义档期豁免。
 
 口径（2026-11-13 更新）：基数 = 当月**已完成**订单金额（`completed_at` 落在当月、
-`status='completed'`）；已支付但未确认收货的**不计入**。比例 = 租户所属业务类目；
+`fulfillment_status='completed'`）；已支付但未确认收货的**不计入**。比例 = 租户所属业务类目；
 买断（lifetime）与自定义档期（custom）套餐的租户恒为 0。
 
 这是**乙线**（平台→租户），与 `tests/test_commission_rate.py` 的甲线（租户→卖家）无关。
@@ -76,13 +76,13 @@ async def test_only_completed_orders_count_into_gmv(client, platform_token, cust
     # 手动把这单标成已完成（当前月份）
     order = await db_session.get(Order, order_id)
     assert order is not None
-    order.status = "completed"
+    order.fulfillment_status = "completed"
     order.completed_at = datetime.now(UTC)
     seller_orders = (
         await db_session.execute(select(SellerOrder).where(SellerOrder.order_id == order_id))
     ).scalars().all()
     for row in seller_orders:
-        row.status = "completed"
+        row.fulfillment_status = "completed"
         row.completed_at = datetime.now(UTC)
     await db_session.flush()
 

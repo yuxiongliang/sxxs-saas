@@ -20,6 +20,7 @@ export default {
   settings: 'Platform Settings',
   login: 'Sign in',
   'menu.audit': 'Platform Audit',
+  'menu.jobs': 'Scheduled jobs',
   'menu.notifications': 'Notifications',
   'menu.tenantManage': 'Tenants',
   'menu.tenantList': 'Tenant List',

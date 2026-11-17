@@ -68,6 +68,8 @@ async def test_response_is_whitelisted(client):
         "status",
         # 商品类型：买家详情页要显示标签
         "product_type",
+        # 交付方式：买家下单要能选快递/自提
+        "delivery_methods",
         "main_image",
         "shop_name",
         "seller_name",

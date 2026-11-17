@@ -15,6 +15,13 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { listMyFavorites, listPortalOrders } from '@/services/commerce/api';
 import type { PortalOrder } from '@/services/commerce/types';
+import {
+  FULFILLMENT_STATUS,
+  FULFILLMENT_STATUS_COLOR,
+  labelOf,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_COLOR,
+} from '@/utils/labels';
 import PortalShell from './components/PortalShell';
 
 /**
@@ -35,20 +42,41 @@ export default function PortalCenterPage() {
   });
 
   const list = orders.data ?? [];
-  const toPay = list.filter((item) => item.status === 'pending_payment').length;
-  const toReview = list.filter((item) => item.status === 'completed').length;
+  const toPay = list.filter((item) => item.payment_status === 'unpaid').length;
+  const toReview = list.filter(
+    (item) => item.fulfillment_status === 'completed',
+  ).length;
 
   const columns: ColumnsType<PortalOrder> = [
     { title: '订单号', dataIndex: 'order_no' },
     {
-      title: '状态',
-      dataIndex: 'status',
-      render: (v: string) => <Tag>{v}</Tag>,
+      // 支付状态（钱）与订单状态（货）分开显示：概览页也不该混成一个"状态"
+      title: '支付状态',
+      width: 100,
+      render: (_, record) => (
+        <Tag color={PAYMENT_STATUS_COLOR[record.payment_status] ?? 'default'}>
+          {labelOf(PAYMENT_STATUS, record.payment_status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '订单状态',
+      width: 100,
+      render: (_, record) => (
+        <Tag
+          color={
+            FULFILLMENT_STATUS_COLOR[record.fulfillment_status] ?? 'default'
+          }
+        >
+          {labelOf(FULFILLMENT_STATUS, record.fulfillment_status)}
+        </Tag>
+      ),
     },
     {
       title: '金额',
-      dataIndex: 'total_amount_cents',
-      render: (v: number) => `¥${(v / 100).toFixed(2)}`,
+      dataIndex: 'payable_amount_cents',
+      width: 110,
+      render: (v: number) => `¥${((v ?? 0) / 100).toFixed(2)}`,
     },
   ];
 

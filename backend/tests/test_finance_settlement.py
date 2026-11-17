@@ -71,7 +71,7 @@ async def _complete(db_session, order: Order) -> None:
         )
     ).scalars().first()
     assert seller_order is not None
-    seller_order.status = "completed"
+    seller_order.fulfillment_status = "completed"
     seller_order.completed_at = datetime.now(UTC)
     await db_session.flush()
 

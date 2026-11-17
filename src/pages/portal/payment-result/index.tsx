@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import { listPortalOrders, mockPayPortalOrder } from '@/services/commerce/api';
+import { FULFILLMENT_STATUS, labelOf, PAYMENT_STATUS } from '@/utils/labels';
 import PortalPlainShell from '../components/PortalPlainShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
@@ -70,7 +71,10 @@ const PaymentResultPage: React.FC = () => {
   });
 
   const order = data?.find((item) => item.id === orderId);
-  const meta = statusMeta(order?.status ?? 'pending_payment');
+  // 支付结果页只关心钱这一维：已支付即成功，其余按未支付处理
+  const meta = statusMeta(
+    order?.payment_status === 'paid' ? 'paid' : 'pending_payment',
+  );
 
   const pay = async () => {
     if (!order) return;
@@ -110,7 +114,7 @@ const PaymentResultPage: React.FC = () => {
                 subTitle={order ? `订单号 ${order.order_no}` : '正在加载订单…'}
                 extra={
                   <Space>
-                    {order?.status === 'pending_payment' ? (
+                    {order?.payment_status === 'unpaid' ? (
                       <Button type="primary" loading={paying} onClick={pay}>
                         立即支付（模拟）
                       </Button>
@@ -131,9 +135,16 @@ const PaymentResultPage: React.FC = () => {
                   <Descriptions.Item label="订单号">
                     {order.order_no}
                   </Descriptions.Item>
+                  <Descriptions.Item label="支付状态">
+                    <Tag
+                      color={order.payment_status === 'paid' ? 'green' : 'gold'}
+                    >
+                      {labelOf(PAYMENT_STATUS, order.payment_status)}
+                    </Tag>
+                  </Descriptions.Item>
                   <Descriptions.Item label="订单状态">
-                    <Tag color={order.status === 'paid' ? 'green' : 'gold'}>
-                      {order.status}
+                    <Tag>
+                      {labelOf(FULFILLMENT_STATUS, order.fulfillment_status)}
                     </Tag>
                   </Descriptions.Item>
                   <Descriptions.Item label="应付金额">

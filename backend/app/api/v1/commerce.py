@@ -10,6 +10,7 @@ from app.models.seller import Seller, Shop
 from app.models.user import User
 from app.schemas.commerce import (
     ProductSkuUpdate,
+    RefundRejectRequest,
     ProductSpecsUpdate,
     ProductStatusRequest,
     ProductUpdate,
@@ -25,6 +26,7 @@ from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
+from app.services import seller_center as seller_center_service
 from app.services.auth import AuthContext
 
 router = APIRouter(tags=["C2C 商城"])
@@ -131,6 +133,8 @@ def _product_dict(
         "main_image": product.main_image,
         "images": product.images or [],
         "video_url": product.video_url,
+        # 交付方式：买家能选快递还是自提，列表/详情都要能看出来
+        "delivery_methods": product.delivery_methods or [],
         "commission_bps": product.commission_bps,
         "commission_locked": bool(product.commission_locked),
         "reject_reason": product.reject_reason,
@@ -248,14 +252,22 @@ async def admin_order_detail(
             "buyer_id": order.buyer_id,
             "buyer_public_id": buyer_public_id,
             "buyer_username": buyer_username,
-            "status": order.status,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
             "payable_amount_cents": order.payable_amount_cents,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "receiver_name": order.receiver_name,
+            "receiver_phone": order.receiver_phone,
+            "receiver_address": order.receiver_address,
             "seller_orders": [
                 {
                     "id": item.id,
                     "seller_id": item.seller_id,
                     **(seller_identities.get(item.seller_id) or {}),
-                    "status": item.status,
+                    "payment_status": item.payment_status,
+                    "fulfillment_status": item.fulfillment_status,
+                    "delivery_method": item.delivery_method,
+                    "shipped_at": item.shipped_at.isoformat() if item.shipped_at else None,
                     "goods_amount_cents": item.goods_amount_cents,
                     "commission_amount_cents": item.commission_amount_cents,
                     "payable_to_seller_cents": item.payable_to_seller_cents,
@@ -568,6 +580,12 @@ async def update_product(
     if "category_id" in data:
         product.category_id = data["category_id"]
         applied["category_id"] = data["category_id"]
+    if "delivery_methods" in data:
+        cleaned = seller_center_service.normalize_delivery_methods(
+            data["delivery_methods"]
+        )
+        product.delivery_methods = cleaned or []
+        applied["delivery_methods"] = product.delivery_methods
     # ---- 富文本描述：服务端重新清洗 html，不信任前端传来的 html ----
     if "description_doc" in data or "description_html" in data:
         doc, html, text = rich_text.prepare_payload(
@@ -641,6 +659,9 @@ async def change_product_status(
     if required not in context.permissions:
         raise HTTPException(status_code=403, detail="无权限")
 
+    if target in {"on_sale", "pending_review"}:
+        # 不选交付方式不能发布（与卖家端同一个校验函数）
+        seller_center_service.ensure_delivery_methods_for_publish(product)
     if target == "on_sale":
         seller = await db.get(Seller, product.seller_id)
         if seller is None or seller.status != "active":
@@ -727,18 +748,25 @@ async def update_product_sku(
 @router.get("/admin/orders")
 async def admin_orders(
     keyword: str | None = Query(default=None, max_length=64),
-    status: str | None = Query(default=None, max_length=24),
+    payment_status: str | None = Query(default=None, max_length=24),
+    fulfillment_status: str | None = Query(default=None, max_length=24),
     context: AuthContext = Depends(require_permission("order:read:tenant")),
     db: AsyncSession = Depends(get_db),
 ):
-    """订单列表。keyword 同时匹配 订单号 / 买家用户名 / 买家用户ID。"""
+    """订单列表。keyword 同时匹配 订单号 / 买家用户名 / 买家用户ID。
+
+    状态拆成两个独立筛选（支付 / 履约）：原来一个下拉里混着「已支付」「已发货」，
+    想筛「已付款还没发货」根本做不到。
+    """
     stmt = (
         select(Order)
         .join(User, User.id == Order.buyer_id, isouter=True)
         .where(Order.tenant_id == context.tenant.id)
     )
-    if status:
-        stmt = stmt.where(Order.status == status)
+    if payment_status:
+        stmt = stmt.where(Order.payment_status == payment_status)
+    if fulfillment_status:
+        stmt = stmt.where(Order.fulfillment_status == fulfillment_status)
     if keyword:
         pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
@@ -780,7 +808,8 @@ async def admin_orders(
                 "buyer_id": item.buyer_id,
                 "buyer_public_id": public_id,
                 "buyer_username": username,
-                "status": item.status,
+                "payment_status": item.payment_status,
+                "fulfillment_status": item.fulfillment_status,
                 "payable_amount_cents": item.payable_amount_cents,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "items": [_item_dict(row) for row in items_map.get(item.id, [])],
@@ -790,7 +819,9 @@ async def admin_orders(
                         "id": row.id,
                         "seller_id": row.seller_id,
                         **(seller_identities.get(row.seller_id) or {}),
-                        "status": row.status,
+                        "payment_status": row.payment_status,
+                        "fulfillment_status": row.fulfillment_status,
+                        "delivery_method": row.delivery_method,
                         "goods_amount_cents": row.goods_amount_cents,
                         "commission_amount_cents": row.commission_amount_cents,
                         "payable_to_seller_cents": row.payable_to_seller_cents,
@@ -809,7 +840,15 @@ async def mock_pay_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await order_service.mock_pay(db, context, order_id)
-    return ok({"id": order.id, "order_no": order.order_no, "status": order.status}, "支付成功")
+    return ok(
+        {
+            "id": order.id,
+            "order_no": order.order_no,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "支付成功",
+    )
 
 
 @router.post("/admin/orders/{order_id}/cancel")
@@ -819,20 +858,40 @@ async def cancel_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await order_service.cancel_order(db, context, order_id)
-    return ok({"id": order.id, "order_no": order.order_no, "status": order.status}, "订单已取消")
+    return ok(
+        {
+            "id": order.id,
+            "order_no": order.order_no,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "订单已取消",
+    )
 
 
 @router.post("/admin/seller-orders/{seller_order_id}/ship")
 async def ship_order(
     seller_order_id: int,
-    payload: ShipmentCreateRequest,
+    payload: ShipmentCreateRequest | None = None,
     context: AuthContext = Depends(require_permission("order:manage")),
     db: AsyncSession = Depends(get_db),
 ):
+    """发货。快递必须带运单号；自提单只需标记「备货完成」，可以不传 payload。"""
     seller_order = await order_service.ship_seller_order(
-        db, context, seller_order_id, payload.carrier, payload.tracking_no
+        db,
+        context,
+        seller_order_id,
+        payload.carrier if payload else None,
+        payload.tracking_no if payload else None,
     )
-    return ok({"id": seller_order.id, "status": seller_order.status}, "发货成功")
+    return ok(
+        {
+            "id": seller_order.id,
+            "fulfillment_status": seller_order.fulfillment_status,
+            "delivery_method": seller_order.delivery_method,
+        },
+        "发货成功",
+    )
 
 
 @router.post("/admin/seller-orders/{seller_order_id}/refund")
@@ -848,6 +907,39 @@ async def refund_order(
     return ok({"id": refund.id, "status": refund.status}, "退款成功")
 
 
+@router.post("/admin/seller-orders/{seller_order_id}/refund/reject")
+async def reject_refund(
+    seller_order_id: int,
+    payload: RefundRejectRequest,
+    context: AuthContext = Depends(require_permission("order:refund")),
+    db: AsyncSession = Depends(get_db),
+):
+    """驳回买家售后申请：卖家单回到「已支付」，自动收货倒计时恢复。"""
+    refund = await order_service.reject_refund(
+        db, context, seller_order_id, payload.reason
+    )
+    return ok({"id": refund.id, "status": refund.status}, "已驳回售后申请")
+
+
+@router.post("/portal/orders/{order_id}/refund-request")
+async def request_refund(
+    order_id: int,
+    payload: RefundCreateRequest,
+    context: AuthContext = Depends(require_permission("order:read:self")),
+    db: AsyncSession = Depends(get_db),
+):
+    """买家申请售后（已完成订单不再受理 —— 交易结束即关闭售后入口）。"""
+    order = await order_service.request_refund(db, context, order_id, payload.reason or "")
+    return ok(
+        {
+            "id": order.id,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "售后申请已提交，等待卖家处理",
+    )
+
+
 @router.post("/portal/orders/{order_id}/confirm")
 async def confirm_order(
     order_id: int,
@@ -855,7 +947,14 @@ async def confirm_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await order_service.confirm_order(db, context, order_id)
-    return ok({"id": order.id, "status": order.status}, "已确认收货")
+    return ok(
+        {
+            "id": order.id,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "已确认收货",
+    )
 
 
 @router.post("/portal/orders/{order_id}/mock-pay")
@@ -868,7 +967,14 @@ async def mock_pay_portal_order(
     if order is None or order.tenant_id != context.tenant.id or order.buyer_id != context.user.id:
         raise HTTPException(status_code=404, detail="订单不存在")
     order = await order_service.mock_pay(db, context, order_id)
-    return ok({"id": order.id, "status": order.status}, "支付成功")
+    return ok(
+        {
+            "id": order.id,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "支付成功",
+    )
 
 
 @router.get("/portal/products")
@@ -913,8 +1019,12 @@ async def create_portal_order(
         {
             "id": order.id,
             "order_no": order.order_no,
-            "status": order.status,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
             "payable_amount_cents": order.payable_amount_cents,
+            "receiver_name": order.receiver_name,
+            "receiver_phone": order.receiver_phone,
+            "receiver_address": order.receiver_address,
         },
         "订单创建成功",
     )
@@ -943,7 +1053,8 @@ async def portal_orders(
             {
                 "id": item.id,
                 "order_no": item.order_no,
-                "status": item.status,
+                "payment_status": item.payment_status,
+                "fulfillment_status": item.fulfillment_status,
                 "payable_amount_cents": item.payable_amount_cents,
                 "created_at": item.created_at,
                 # 买家也要在列表里直接看到买的是什么，不用点进详情
@@ -989,10 +1100,18 @@ async def portal_order_detail(
         {
             "id": order.id,
             "order_no": order.order_no,
-            "status": order.status,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
             "payable_amount_cents": order.payable_amount_cents,
             "seller_orders": [
-                {"id": item.id, "seller_id": item.seller_id, "status": item.status}
+                {
+                    "id": item.id,
+                    "seller_id": item.seller_id,
+                    "payment_status": item.payment_status,
+                    "fulfillment_status": item.fulfillment_status,
+                    "delivery_method": item.delivery_method,
+                    "shipped_at": item.shipped_at.isoformat() if item.shipped_at else None,
+                }
                 for item in seller_orders
             ],
             "items": [_item_dict(item) for item in items],

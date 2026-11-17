@@ -22,7 +22,7 @@ async def _create_product(client, token, name: str) -> dict:
     response = await client.post(
         "/api/v1/portal/seller/products",
         headers=bearer(token),
-        json={"name": name, "price_cents": 8800, "stock": 3},
+        json={"name": name, "price_cents": 8800, "stock": 3, "delivery_methods": ["express"]},
     )
     assert response.status_code == 200, response.text
     return response.json()["data"]

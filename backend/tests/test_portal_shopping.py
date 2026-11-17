@@ -250,7 +250,7 @@ async def test_checkout_from_cart_creates_order_and_empties_selected_lines(
     assert (await client.get("/api/v1/portal/cart", headers=headers)).json()["data"]["items"] == []
 
     stored = await db_session.get(Order, order["id"])
-    assert stored is not None and stored.status == "pending_payment"
+    assert stored is not None and stored.payment_status == "unpaid"
 
 
 async def test_checkout_with_empty_cart_is_rejected(client, customer_token):

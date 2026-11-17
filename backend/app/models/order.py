@@ -14,7 +14,14 @@ class Order(Base, TimestampMixin):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     order_no: Mapped[str] = mapped_column(String(64), index=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    status: Mapped[str] = mapped_column(String(32), default="pending_payment", index=True)
+    # 双状态：钱（payment_status）与货（fulfillment_status）各自独立演进。
+    # 旧 `status` 列已删除（迁移 d1a9f0c3b7e2），映射与汇总规则见 services/order_state.py。
+    payment_status: Mapped[str] = mapped_column(
+        String(24), default="unpaid", server_default="unpaid", index=True
+    )
+    fulfillment_status: Mapped[str] = mapped_column(
+        String(24), default="awaiting_payment", server_default="awaiting_payment", index=True
+    )
     total_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     discount_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     payable_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
@@ -38,7 +45,17 @@ class SellerOrder(Base, TimestampMixin):
     seller_id: Mapped[int] = mapped_column(ForeignKey("sellers.id"), index=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), index=True)
     seller_order_no: Mapped[str] = mapped_column(String(64), index=True)
-    status: Mapped[str] = mapped_column(String(32), default="pending_payment", index=True)
+    # 双状态（同 orders，规则见 services/order_state.py）
+    payment_status: Mapped[str] = mapped_column(
+        String(24), default="unpaid", server_default="unpaid", index=True
+    )
+    fulfillment_status: Mapped[str] = mapped_column(
+        String(24), default="awaiting_payment", server_default="awaiting_payment", index=True
+    )
+    # 交付方式：一个卖家单一种（一单可拆多卖家单，可能一个快递一个自提）
+    delivery_method: Mapped[str] = mapped_column(
+        String(16), default="express", server_default="express"
+    )
     goods_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     commission_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     payable_to_seller_cents: Mapped[int] = mapped_column(Integer, default=0)
@@ -60,6 +77,8 @@ class OrderItem(Base):
     sku_name: Mapped[str] = mapped_column(String(128))
     # 下单时的商品类型快照：商品以后改类型，历史订单仍按当时的语义对账
     product_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # 下单时的交付方式快照（express / pickup）
+    delivery_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     price_cents: Mapped[int] = mapped_column(Integer)
     quantity: Mapped[int] = mapped_column(Integer)

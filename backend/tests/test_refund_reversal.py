@@ -210,7 +210,8 @@ async def test_refund_of_an_unpaid_order_writes_no_reversal_entries(
         .first()
     )
     assert seller_order is not None
-    assert seller_order.status == "pending_payment"
+    assert seller_order.payment_status == "unpaid"
+    assert seller_order.fulfillment_status == "awaiting_payment"
 
     response = await _refund(client, admin_token, seller_order.id, seller_order.goods_amount_cents)
     assert response.status_code == 200, response.text
@@ -244,7 +245,7 @@ async def test_refund_after_completion_keeps_the_ledger_reconcilable(
     """A completed order that gets refunded must net out to zero, not to a frozen pending bucket."""
     seller = await _seller(db_session)
     seller_order = await _place_and_pay(client, customer_token, db_session)
-    seller_order.status = "completed"
+    seller_order.fulfillment_status = "completed"
     seller_order.completed_at = datetime.now(UTC)
     await db_session.flush()
 

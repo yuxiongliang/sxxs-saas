@@ -15,6 +15,7 @@ from app.models.department import Department
 from app.models.finance import LedgerEntry, Payout, SettlementBatch
 from app.models.im import Conversation, ConversationMember, ImReport, Message
 from app.models.interaction import ProductFavorite, ProductReview
+from app.models.job import ScheduledJob, WorkerHeartbeat
 from app.models.moderation import ModerationCache, ModerationLog
 from app.models.notification import Notification
 from app.models.notification_pref import TenantNotificationPref, UserNotificationPref
@@ -65,6 +66,7 @@ __all__ = [
     "Refund",
     "Role",
     "RolePermission",
+    "ScheduledJob",
     "Seller",
     "SellerMember",
     "SellerOrder",
@@ -80,4 +82,5 @@ __all__ = [
     "TenantSubscription",
     "User",
     "UserNotificationPref",
+    "WorkerHeartbeat",
 ]

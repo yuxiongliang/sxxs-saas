@@ -85,6 +85,7 @@ async def test_approved_seller_manages_shop_without_staff_permissions(
             "name": "自营键盘",
             "price_cents": 12900,
             "stock": 3,
+            "delivery_methods": ["express"],
             "description": "开店主上架的第一个商品",
         },
     )

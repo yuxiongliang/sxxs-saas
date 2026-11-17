@@ -36,6 +36,12 @@ ACTION_ORDER_CANCELLED = "order.cancelled"
 ACTION_ORDER_CONFIRMED = "order.confirmed"
 ACTION_SELLER_ORDER_SHIPPED = "seller_order.shipped"
 ACTION_SELLER_ORDER_REFUNDED = "seller_order.refunded"
+# 买家申请售后 / 卖家驳回售后：售后闭环的两端，都要能在审计里查
+ACTION_ORDER_REFUND_REQUESTED = "order.refund_requested"
+ACTION_SELLER_ORDER_REFUND_REJECTED = "seller_order.refund_rejected"
+# 定时任务的人工操作（立即执行 / 取消）：改的是"系统自动行为"，必须留痕
+ACTION_JOB_RUN = "job.run"
+ACTION_JOB_CANCELLED = "job.cancelled"
 ACTION_SELLER_APPLIED = "seller.applied"
 ACTION_SELLER_APPROVED = "seller.approved"
 ACTION_PRODUCT_CREATED = "product.created"
@@ -77,6 +83,10 @@ ACTION_LABELS: dict[str, str] = {
     ACTION_ORDER_CONFIRMED: "确认收货",
     ACTION_SELLER_ORDER_SHIPPED: "卖家发货",
     ACTION_SELLER_ORDER_REFUNDED: "子订单退款",
+    ACTION_ORDER_REFUND_REQUESTED: "买家申请售后",
+    ACTION_SELLER_ORDER_REFUND_REJECTED: "驳回售后申请",
+    ACTION_JOB_RUN: "手动执行定时任务",
+    ACTION_JOB_CANCELLED: "取消定时任务",
     ACTION_SELLER_APPLIED: "卖家入驻申请",
     ACTION_SELLER_APPROVED: "卖家审核通过",
     ACTION_PRODUCT_CREATED: "创建商品",
@@ -188,6 +198,7 @@ TARGET_TYPE_LABELS: dict[str, str] = {
     "settlement_batch": "结算批次",
     "platform_setting": "平台配置",
     "im_message": "站内信",
+    "scheduled_job": "定时任务",
 }
 
 target_type_label = TARGET_TYPE_LABELS.get

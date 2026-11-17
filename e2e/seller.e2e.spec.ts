@@ -52,7 +52,7 @@ test.describe('seller centre', () => {
     await expect(modal).toBeVisible({ timeout: 30_000 });
 
     // 第 1 步：类型
-    await expect(modal.locator('.ant-steps-item-title')).toHaveCount(4);
+    await expect(modal.locator('.ant-steps-item-title')).toHaveCount(5);
     await expect(modal.getByTestId('product-type-step')).toBeVisible();
     await modal.getByTestId('product-editor-next').click();
     await page.waitForTimeout(700);
@@ -74,6 +74,12 @@ test.describe('seller centre', () => {
     await expect(modal.getByTestId('rich-text-toolbar')).toBeVisible({
       timeout: 20_000,
     });
+
+    // 第 5 步：交付（卖家必须自己选，不选不能发布）
+    await modal.getByTestId('product-editor-next').click();
+    await page.waitForTimeout(800);
+    await expect(modal.getByTestId('product-delivery-step')).toBeVisible();
+    await modal.getByTestId('delivery-express').check();
 
     await page
       .locator('button:has-text("保 存"), button:has-text("保存")')

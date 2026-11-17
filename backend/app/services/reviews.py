@@ -77,7 +77,7 @@ async def create_review(
     item, seller_order = item_row
     # 只能评自己买过的东西：item 的买家通过 order 关联，这里用 seller_order.tenant 校验后
     # 再由调用方保证 order 属于当前用户（见 api 层）
-    if seller_order.status != "completed":
+    if seller_order.fulfillment_status != "completed":
         raise HTTPException(status_code=400, detail="订单完成后才能评价")
 
     exists = (
@@ -304,7 +304,7 @@ async def reviewable_order_items(
             .where(
                 OrderItem.tenant_id == tenant_id,
                 Order.buyer_id == user_id,
-                SellerOrder.status == "completed",
+                SellerOrder.fulfillment_status == "completed",
                 OrderItem.id.not_in(reviewed),
             )
             .order_by(OrderItem.id.desc())

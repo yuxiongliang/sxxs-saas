@@ -23,6 +23,7 @@ export default {
   settings: '平台配置',
   login: '登录',
   'menu.audit': '平台审计',
+  'menu.jobs': '定时任务',
   'menu.notifications': '通知中心',
   'menu.tenantManage': '租户管理',
   'menu.tenantList': '租户列表',

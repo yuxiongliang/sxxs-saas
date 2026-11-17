@@ -94,8 +94,8 @@ async def test_payment_is_audited_with_before_after(
     rows = await _logs(client, admin_token, action="order.paid", target_id=order_id)
     assert rows, "payment must produce an audit row"
     row = rows[0]
-    assert row["before"]["status"] == "pending_payment"
-    assert row["after"]["status"] == "paid"
+    assert row["before"]["payment_status"] == "unpaid"
+    assert row["after"]["payment_status"] == "paid"
     assert row["after"]["amount_cents"] > 0
 
 
@@ -105,7 +105,7 @@ async def test_cancellation_is_audited(client, admin_token, customer_token, db_s
 
     rows = await _logs(client, admin_token, action="order.cancelled", target_id=order_id)
     assert rows
-    assert rows[0]["after"]["status"] == "cancelled"
+    assert rows[0]["after"]["fulfillment_status"] == "cancelled"
 
 
 async def test_ship_and_confirm_are_audited(
@@ -142,7 +142,7 @@ async def test_ship_and_confirm_are_audited(
     )
     confirmed = await _logs(client, admin_token, action="order.confirmed", target_id=order_id)
     assert confirmed
-    assert confirmed[0]["after"]["status"] == "completed"
+    assert confirmed[0]["after"]["fulfillment_status"] == "completed"
 
 
 async def test_refund_is_audited(client, admin_token, customer_token, db_session):
@@ -196,7 +196,8 @@ async def test_payout_and_settlement_events_are_audited(
             select(SellerOrder).where(SellerOrder.order_id == order_id)
         )
     ).scalars().first()
-    seller_order.status = "completed"
+    seller_order.fulfillment_status = "completed"
+    seller_order.payment_status = "paid"
     seller_order.completed_at = datetime.now(UTC)
     await db_session.flush()
 

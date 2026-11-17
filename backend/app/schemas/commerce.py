@@ -34,6 +34,8 @@ class ProductUpdate(BaseModel):
     description_html: str | None = None
     images: list[str] | None = None
     category_id: int | None = None
+    # 交付方式（express / pickup），运营也能改
+    delivery_methods: list[str] | None = None
     # 租户向卖家抽佣的比例（万分比）：>=100 即 1%；不传 = 保持原值
     commission_bps: int | None = Field(default=None, ge=100, le=100_000)
 
@@ -69,6 +71,9 @@ class SellerProductCreate(BaseModel):
     description: str | None = None
     description_doc: dict | None = None
     description_html: str | None = None
+    # 交付方式：向导第 5 步。express 物流快递 / pickup 自提，可多选；
+    # 一个都没选 = 未完成发布条件（服务层会拒绝提交审核）
+    delivery_methods: list[str] | None = None
 
 
 class SellerProductUpdate(BaseModel):
@@ -94,6 +99,8 @@ class SellerProductUpdate(BaseModel):
     stock: int | None = Field(default=None, ge=0, le=1_000_000)
     # 卖家自填的佣金比例（万分比，下限 1%）；商品被运营锁定后不可再改
     commission_bps: int | None = Field(default=None, ge=100, le=100_000)
+    # 交付方式（向导第 5 步）
+    delivery_methods: list[str] | None = None
 
 
 class SpecValueIn(BaseModel):
@@ -136,9 +143,25 @@ class RefundCreateRequest(BaseModel):
     reason: str = Field(default="", max_length=255)
 
 
+class RefundRejectRequest(BaseModel):
+    reason: str = Field(default="", max_length=255)
+
+
 class SellerShipRequest(BaseModel):
-    carrier: str = Field(min_length=1, max_length=64)
-    tracking_no: str = Field(min_length=1, max_length=128)
+    """卖家发货。自提单只需标记「备货完成」，所以运单信息可为空
+    （快递单缺运单号由服务层拒绝，校验规则只有一份）。"""
+
+    carrier: str = Field(default="", max_length=64)
+    tracking_no: str = Field(default="", max_length=128)
+
+
+class ShopProfileUpdate(BaseModel):
+    """卖家店铺资料。自提信息在这里维护。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+    address: str | None = Field(default=None, max_length=255)
+    pickup_note: str | None = Field(default=None, max_length=255)
 
 
 class SellerApplyRequest(BaseModel):
