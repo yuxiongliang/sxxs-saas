@@ -13,6 +13,7 @@ import ThemeSwitch from '@/components/RightContent/ThemeSwitch';
 import { listConversations } from '@/services/im/api';
 import type { PortalMenuItem } from './menuConfig';
 import { activeMenuKey } from './menuConfig';
+import PortalBrand, { PORTAL_HEADER_HEIGHT } from './PortalBrand';
 
 const { Header, Sider, Content } = Layout;
 
@@ -142,8 +143,8 @@ export default function PortalLayout({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: 56,
-          lineHeight: '56px',
+          height: PORTAL_HEADER_HEIGHT,
+          lineHeight: `${PORTAL_HEADER_HEIGHT}px`,
         }}
       >
         <Space size={12}>
@@ -156,28 +157,7 @@ export default function PortalLayout({
             aria-label="打开菜单"
             style={{ display: 'none' }}
           />
-          <Link
-            to="/products"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontWeight: 700,
-            }}
-          >
-            {brand?.logo_url ? (
-              <img
-                src={brand.logo_url}
-                alt={brand.display_name}
-                style={{ height: 28, objectFit: 'contain' }}
-              />
-            ) : (
-              <ShopOutlined />
-            )}
-            <span style={{ fontSize: 18 }}>
-              {brand?.display_name || 'C2C 商城'}
-            </span>
-          </Link>
+          <PortalBrand brand={brand} />
           {/* 面包屑已去掉：导航在侧栏，顶部再挂一层标题冗余 */}
         </Space>
         <Space size={12}>

@@ -250,7 +250,7 @@ All module uploads should use `src/components/AttachmentUpload` and the `/api/v1
 | --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | 全站名称 `display_name`     | 文本                                                         | 页脚版权、登录页标题、买家中心头部、`<title>`、通知模板 `{{tenant_name}}`                               |
 | 站点描述 `site_description` | **多行文本，上限 300 字**（库里是 `TEXT`，长度只在接口层卡） | 登录页副标题、控制台页脚、买家商城页脚（替代写死的 tagline）、买家中心头部、`<meta name="description">` |
-| 站点 Logo `logo_url`        | **点缩略图 / 「从附件中心选择」挑图**                        | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心                                 |
+| 站点 Logo `logo_url`        | **点缩略图 / 「从附件中心选择」挑图**                        | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心（同样只显 logo） |
 | Favicon `favicon_url`       | 同样从附件中心选图                                           | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`）                                         |
 | ICP 备案号 `icp_number`     | 文本，如 `京ICP备12345678号`                                 | 页脚，自动链到 `beian.miit.gov.cn`                                                                      |
 | ICP 许可证号 `icp_license`  | 文本，如 `京ICP证030173号`                                   | 页脚                                                                                                    |
@@ -549,7 +549,9 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 ### 顶栏与视觉
 
 - 顶栏接 **`LangDropdown` + `ThemeSwitch`**（现成组件）。**只接切换器**，买家/卖家中心的页面文案仍是硬编码中文 —— 全量 key 化是单独一轮的事。
-- 面包屑（`/ 概览`）已删，`title` 改用作浏览器标签页标题；站名 `18px`、logo `28px`。
+- 面包屑（`/ 概览`）已删，`title` 改用作浏览器标签页标题。
+- 顶栏品牌块**只留 logo**（与商城头部同一原则）：logo 容器 44×44、顶栏 64px；站名不写成文字，改用 `aria-label`/`title` 保留（不丢可访问名）。
+  买家中心与支付结果页共用 `portal/components/PortalBrand.tsx`，改一处两边同步。
 - **侧栏菜单顺序**：买家/卖家两边都是「概览 → **消息** → 我的订单 → …」，消息不再沉在最后一项。
 - **卖家中心入口**：侧栏底部按钮 + 概览页卡片（`portal-go-seller`）+ 商品详情店铺卡，全部 `target="_blank"`。
 - 详情页**店铺信息卡**改成独立悬浮块（白底 + `box-shadow` + hover 抬起），不再和父级卡片融成一片。

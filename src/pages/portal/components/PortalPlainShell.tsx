@@ -1,9 +1,11 @@
-import { ShopOutlined, UserOutlined } from '@ant-design/icons';
-import { Link, useModel } from '@umijs/max';
+import { UserOutlined } from '@ant-design/icons';
+import { useModel } from '@umijs/max';
 import { Space } from 'antd';
 import type React from 'react';
+import { useEffect } from 'react';
 import { LangDropdown } from '@/components/RightContent/LangDropdown';
 import ThemeSwitch from '@/components/RightContent/ThemeSwitch';
+import PortalBrand, { PORTAL_HEADER_HEIGHT } from './PortalBrand';
 
 /**
  * 精简外壳：只有顶栏，**不带侧栏**。
@@ -18,6 +20,16 @@ const PortalPlainShell: React.FC<{
   const { initialState } = useModel('@@initialState');
   const brand = initialState?.brand;
 
+  // 与 PortalLayout 一致：面包屑不挂在顶栏，`title` 用作浏览器标签页标题
+  useEffect(() => {
+    const site = brand?.display_name;
+    document.title = title
+      ? site
+        ? `${title} - ${site}`
+        : title
+      : site || document.title;
+  }, [title, brand?.display_name]);
+
   return (
     <div
       style={{ minHeight: '100vh', background: 'var(--ant-color-bg-layout)' }}
@@ -27,38 +39,17 @@ const PortalPlainShell: React.FC<{
           background: 'var(--ant-color-bg-container)',
           borderBottom: '1px solid var(--ant-color-border-secondary)',
           padding: '0 16px',
-          height: 56,
+          height: PORTAL_HEADER_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
         <Space size={12}>
-          <Link
-            to="/products"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontWeight: 700,
-            }}
-          >
-            {brand?.logo_url ? (
-              <img
-                src={brand.logo_url}
-                alt={brand.display_name}
-                style={{ height: 24, objectFit: 'contain' }}
-              />
-            ) : (
-              <ShopOutlined />
-            )}
-            <span style={{ fontSize: 15 }}>
-              {brand?.display_name || 'C2C 商城'}
-            </span>
-          </Link>
+          <PortalBrand brand={brand} />
           {title ? (
             <span style={{ color: 'var(--ant-color-text-tertiary)' }}>
-              / {title}
+              {title}
             </span>
           ) : null}
         </Space>

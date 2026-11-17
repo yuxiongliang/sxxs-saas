@@ -209,7 +209,20 @@ const Login: React.FC = () => {
             minWidth: 280,
             maxWidth: '75vw',
           }}
-          logo={<img alt="logo" src={brand?.logo_url || '/logo.svg'} />}
+          logo={
+            <img
+              alt={brand?.display_name || 'logo'}
+              src={brand?.logo_url || '/logo.svg'}
+              // 站名 logo 是横版字标（如 548×129）：交给容器自适应宽度，
+              // 否则会被 44px 宽的方框压成 10px 高
+              style={{
+                height: 40,
+                width: 'auto',
+                maxWidth: 220,
+                objectFit: 'contain',
+              }}
+            />
+          }
           title={siteTitle}
           // 副标题优先用租户自己写的站点描述；没填才回落到模板默认文案
           subTitle={

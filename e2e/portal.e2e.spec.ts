@@ -265,6 +265,12 @@ test.describe('portal: buyer journey', () => {
     await expect(goSeller).toBeVisible();
     await expect(goSeller).toHaveAttribute('target', '_blank');
 
+    // 顶栏品牌块：只显 logo（无站名文字），站名落在 aria-label 上
+    const brandBox = page.getByTestId('portal-brand');
+    await expect(brandBox).toBeVisible();
+    await expect(brandBox).toHaveAttribute('aria-label', /.+/);
+    await expect(brandBox).toHaveText('');
+
     await sider.getByText('消息').click();
     await expect(page).toHaveURL(/\/portal\/messages/, { timeout: 20_000 });
 
