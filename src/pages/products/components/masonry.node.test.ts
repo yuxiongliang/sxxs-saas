@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { columnsForWidth, splitIntoColumns } from './masonry';
+import { columnsForWidth, effectiveColumns, splitIntoColumns } from './masonry';
 
 describe('splitIntoColumns', () => {
   it('横向优先分配，保证综合排序的阅读顺序', () => {
@@ -31,5 +31,23 @@ describe('columnsForWidth', () => {
     expect(columnsForWidth(1280)).toBe(4);
     expect(columnsForWidth(900)).toBe(3);
     expect(columnsForWidth(375)).toBe(2);
+  });
+});
+
+describe('effectiveColumns', () => {
+  it('商品数少于期望列数时，不制造空列', () => {
+    // 详情页「猜你喜欢」只剩 1 个推荐时，两列会把卡片挤成半宽
+    expect(effectiveColumns(2, 1)).toBe(1);
+    expect(effectiveColumns(5, 2)).toBe(2);
+  });
+
+  it('商品足够多时按期望列数', () => {
+    expect(effectiveColumns(5, 40)).toBe(5);
+    expect(effectiveColumns(2, 12)).toBe(2);
+  });
+
+  it('空列表与非法列数都不炸', () => {
+    expect(effectiveColumns(5, 0)).toBe(1);
+    expect(effectiveColumns(0, 10)).toBe(1);
   });
 });

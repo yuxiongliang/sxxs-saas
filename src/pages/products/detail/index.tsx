@@ -432,10 +432,11 @@ export default function ProductDetailPage() {
               窄屏（<lg）时左列整行下移，取消 sticky 与内滚，避免手机上双滚动条打架。 */}
           {!isLoading && !isError && data ? (
             <Row gutter={[24, 24]} style={{ marginTop: 16 }}>
-              <Col xs={24} lg={6}>
+              {/* 与主图列（lg=8）**同宽**：用户要求左栏宽度与主图显示区一致 */}
+              <Col xs={24} lg={8}>
                 <RelatedProducts productId={productId} enabled={!isError} />
               </Col>
-              <Col xs={24} lg={18}>
+              <Col xs={24} lg={16}>
                 <Card>
                   <Tabs
                     activeKey={activeTab}

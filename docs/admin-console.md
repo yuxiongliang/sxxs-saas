@@ -486,6 +486,13 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 （同分类含子类 → 同卖家 → 全站兜底），末尾用 `Product.id DESC` 做稳定 tiebreaker，
 保证 offset 分页不重不漏。
 
+**宽度对齐**：左栏用 `lg=8`，与第一行的**主图列 `lg=8` 同宽**（右栏 Tabs `lg=16`）；
+`md` 以下两栏各自整行堆叠（移动端不能并排）。
+
+**列数收敛**：`effectiveColumns(desired, itemCount)` 保证**列数不多于商品数**——
+只有 1 个推荐时如果硬撑两列，卡片会被挤成半宽、右半边空白（看起来像布局坏了）。
+列表页瀑布流用同一个函数。
+
 ### 富文本编辑器的受控回灌坑
 
 `RichTextEditor` 里 `onUpdate` 必须把**自己刚产生的 html** 写回 `lastExternal`，
