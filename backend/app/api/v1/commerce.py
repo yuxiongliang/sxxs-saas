@@ -48,6 +48,51 @@ def _seller_dict(seller: Seller, owner: User | None = None) -> dict:
     }
 
 
+def _item_dict(item: OrderItem) -> dict:
+    """订单行对外形状。
+
+    `image` / `product_type` 都是**下单时的快照**：商品后来换图/换类型，
+    历史订单仍按当时的成交内容展示（对账、客服、退款都靠这个）。
+    `seller_order_id` 必须带上 —— 发货/退款是**卖家单粒度**，
+    一个订单可能拆多个卖家单，拿订单 id 去发货会发错单。
+    """
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "sku_id": item.sku_id,
+        "seller_id": item.seller_id,
+        "seller_order_id": item.seller_order_id,
+        "product_type": item.product_type or "physical",
+        "product_name": item.product_name,
+        "sku_name": item.sku_name,
+        "image": item.image,
+        "price_cents": item.price_cents,
+        "quantity": item.quantity,
+        "subtotal_cents": item.subtotal_cents,
+    }
+
+
+async def _order_items_map(
+    db: AsyncSession, order_ids: list[int]
+) -> dict[int, list[OrderItem]]:
+    """批量取订单行（IN 一次），避免列表页逐单查。"""
+    if not order_ids:
+        return {}
+    rows = list(
+        (
+            await db.scalars(
+                select(OrderItem)
+                .where(OrderItem.order_id.in_(order_ids))
+                .order_by(OrderItem.id)
+            )
+        ).all()
+    )
+    grouped: dict[int, list[OrderItem]] = {}
+    for row in rows:
+        grouped.setdefault(row.order_id, []).append(row)
+    return grouped
+
+
 def _product_dict(
     product: Product,
     sku: ProductSku | None = None,
@@ -74,6 +119,9 @@ def _product_dict(
         "shop_id": product.shop_id,
         "category_id": product.category_id,
         "name": product.name,
+        # 商品类型（physical / virtual / knowledge / event）；创建后不可改，
+        # 三端共用这个字段做标签与筛选
+        "product_type": product.product_type,
         "description": product.description,
         # 富文本：编辑器回显需要 doc，审核页要能直接看渲染效果
         "description_format": product.description_format,
@@ -214,17 +262,7 @@ async def admin_order_detail(
                 }
                 for item in seller_orders
             ],
-            "items": [
-                {
-                    "id": item.id,
-                    "product_name": item.product_name,
-                    "sku_name": item.sku_name,
-                    "price_cents": item.price_cents,
-                    "quantity": item.quantity,
-                    "subtotal_cents": item.subtotal_cents,
-                }
-                for item in items
-            ],
+            "items": [_item_dict(item) for item in items],
         }
     )
 
@@ -361,6 +399,7 @@ async def admin_products(
     keyword: str | None = Query(default=None, max_length=64),
     status: str | None = Query(default=None, max_length=24),
     category_id: int | None = Query(default=None),
+    product_type: str | None = Query(default=None, max_length=16),
     context: AuthContext = Depends(require_permission("product:read")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -376,6 +415,8 @@ async def admin_products(
         stmt = stmt.where(Product.status == status)
     if category_id is not None:
         stmt = stmt.where(Product.category_id == category_id)
+    if product_type:
+        stmt = stmt.where(Product.product_type == product_type)
     if keyword:
         pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
@@ -708,7 +749,27 @@ async def admin_orders(
             )
         )
     orders = list((await db.scalars(stmt.order_by(Order.id.desc()))).all())
+    order_ids = [order.id for order in orders]
     buyers = await _identity_map(db, {item.buyer_id for item in orders})
+    # 商品行 + 卖家拆单都批量取一次：列表页要能直接看到「买了什么、发到哪一步」，
+    # 否则必须点开详情抽屉，运营一屏只能处理一单。
+    items_map = await _order_items_map(db, order_ids)
+    seller_orders_map: dict[int, list[SellerOrder]] = {}
+    if order_ids:
+        rows = list(
+            (
+                await db.scalars(
+                    select(SellerOrder)
+                    .where(SellerOrder.order_id.in_(order_ids))
+                    .order_by(SellerOrder.id)
+                )
+            ).all()
+        )
+        for row in rows:
+            seller_orders_map.setdefault(row.order_id, []).append(row)
+    seller_identities = await _seller_identity_map(
+        db, {row.seller_id for rows in seller_orders_map.values() for row in rows}
+    )
     payload = []
     for item in orders:
         public_id, username = buyers.get(item.buyer_id, (None, None))
@@ -721,6 +782,21 @@ async def admin_orders(
                 "buyer_username": username,
                 "status": item.status,
                 "payable_amount_cents": item.payable_amount_cents,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "items": [_item_dict(row) for row in items_map.get(item.id, [])],
+                # 发货/退款是卖家单粒度，列表里也要能看到每个卖家单走到哪一步
+                "seller_orders": [
+                    {
+                        "id": row.id,
+                        "seller_id": row.seller_id,
+                        **(seller_identities.get(row.seller_id) or {}),
+                        "status": row.status,
+                        "goods_amount_cents": row.goods_amount_cents,
+                        "commission_amount_cents": row.commission_amount_cents,
+                        "payable_to_seller_cents": row.payable_to_seller_cents,
+                    }
+                    for row in seller_orders_map.get(item.id, [])
+                ],
             }
         )
     return ok(payload)
@@ -861,6 +937,7 @@ async def portal_orders(
             )
         ).all()
     )
+    items_map = await _order_items_map(db, [order.id for order in orders])
     return ok(
         [
             {
@@ -869,6 +946,8 @@ async def portal_orders(
                 "status": item.status,
                 "payable_amount_cents": item.payable_amount_cents,
                 "created_at": item.created_at,
+                # 买家也要在列表里直接看到买的是什么，不用点进详情
+                "items": [_item_dict(row) for row in items_map.get(item.id, [])],
             }
             for item in orders
         ]
@@ -916,14 +995,6 @@ async def portal_order_detail(
                 {"id": item.id, "seller_id": item.seller_id, "status": item.status}
                 for item in seller_orders
             ],
-            "items": [
-                {
-                    "product_name": item.product_name,
-                    "sku_name": item.sku_name,
-                    "price_cents": item.price_cents,
-                    "quantity": item.quantity,
-                }
-                for item in items
-            ],
+            "items": [_item_dict(item) for item in items],
         }
     )

@@ -2,12 +2,16 @@ import { LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import {
   App,
   Button,
+  Card,
+  Col,
   Divider,
   Flex,
   Form,
   Input,
   InputNumber,
   Modal,
+  Radio,
+  Row,
   Select,
   Space,
   Steps,
@@ -28,6 +32,7 @@ import {
   updateAdminProductSpecs,
 } from '@/services/commerce/api';
 import type { CategoryRecord, ProductRecord } from '@/services/commerce/types';
+import { OPEN_PRODUCT_TYPES, PRODUCT_TYPE } from '@/utils/labels';
 import { buildCombos, comboKey, resolveMedia } from './specUtils';
 
 /** 草稿里的规格组/规格值（带本地 key，便于增删） */
@@ -62,6 +67,24 @@ type PickerTarget =
       media: 'image' | 'video';
     };
 
+/**
+ * 商品类型 → 后续步骤。
+ *
+ * **数据驱动**而不是硬编码 3 步：以后开放虚拟/知识付费/活动报名时，
+ * 只是在这里加一行（那些类型的步骤显然不会跟实物一样：没有规格库存、
+ * 要填课程/场次信息），不用重写组件。
+ */
+const TYPE_FLOWS: Record<string, Array<'basic' | 'specs' | 'detail'>> = {
+  physical: ['basic', 'specs', 'detail'],
+};
+
+const STEP_LABELS: Record<string, string> = {
+  type: '类型',
+  basic: '基础信息',
+  specs: '规格',
+  detail: '详情',
+};
+
 interface ProductEditorProps {
   open: boolean;
   productId?: number;
@@ -85,6 +108,8 @@ export default function ProductEditor({
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
+  // 商品类型：创建时确定，编辑时只读（改类型会让已有订单/库存/发货语义断层）
+  const [productType, setProductType] = useState<string>('physical');
   const [detail, setDetail] = useState<ProductRecord>();
   const [groups, setGroups] = useState<DraftGroup[]>([]);
   const [skuDraft, setSkuDraft] = useState<Record<string, SkuDraft>>({});
@@ -101,6 +126,7 @@ export default function ProductEditor({
   useEffect(() => {
     if (!open) return;
     setStep(0);
+    setProductType('physical');
     setPreviewOverride(undefined);
     listAdminCategories()
       .then(setCategoryList)
@@ -112,6 +138,8 @@ export default function ProductEditor({
     getAdminProduct(productId)
       .then((data) => {
         setDetail(data);
+        // 编辑已有商品：类型只读展示（后端也不接受修改）
+        setProductType(data.product_type || 'physical');
         // 富文本回显：doc 优先，没有 doc 就把历史纯文本包成一段段落展示
         setRichText(
           data.description_format === 'doc' && data.description_doc
@@ -314,7 +342,8 @@ export default function ProductEditor({
       onClose();
     } catch (error) {
       if ((error as { errorFields?: unknown }).errorFields) {
-        setStep(0);
+        // 必填项都在「基础信息」：跳回去，但别跳回类型步
+        setStep(1);
         return;
       }
       message.error((error as Error).message);
@@ -322,6 +351,14 @@ export default function ProductEditor({
       setSaving(false);
     }
   };
+
+  // 类型是第 0 步，后面几步由类型决定（见 TYPE_FLOWS）
+  const flowSteps = TYPE_FLOWS[productType] ?? TYPE_FLOWS.physical;
+  const steps: string[] = ['type', ...flowSteps];
+  const currentKey = steps[step] ?? 'type';
+  const isLastStep = step >= steps.length - 1;
+  // 第 0 步必须"看过并选了类型"才能往下走；目前只有实物可选中
+  const canLeaveTypeStep = Boolean(productType);
 
   return (
     <Modal
@@ -334,24 +371,24 @@ export default function ProductEditor({
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>
-          {step === 0 ? (
-            <Button type="primary" onClick={() => setStep(1)}>
-              下一步：规格
+          {step > 0 ? (
+            <Button onClick={() => setStep(step - 1)}>上一步</Button>
+          ) : null}
+          {isLastStep ? (
+            <Button type="primary" loading={saving} onClick={handleSave}>
+              保存
             </Button>
-          ) : step === 1 ? (
-            <>
-              <Button onClick={() => setStep(0)}>上一步</Button>
-              <Button type="primary" onClick={() => setStep(2)}>
-                下一步：详情
-              </Button>
-            </>
           ) : (
-            <>
-              <Button onClick={() => setStep(1)}>上一步</Button>
-              <Button type="primary" loading={saving} onClick={handleSave}>
-                保存
-              </Button>
-            </>
+            <Button
+              type="primary"
+              onClick={() => setStep(step + 1)}
+              disabled={step === 0 && !canLeaveTypeStep}
+              data-testid="product-editor-next"
+            >
+              {step === 0
+                ? '下一步：基础信息'
+                : `下一步：${STEP_LABELS[flowSteps[step] ?? 'detail']}`}
+            </Button>
           )}
         </Space>
       }
@@ -360,7 +397,7 @@ export default function ProductEditor({
         size="small"
         current={step}
         style={{ marginBottom: 20 }}
-        items={[{ title: '基础信息' }, { title: '规格' }, { title: '详情' }]}
+        items={steps.map((key) => ({ title: STEP_LABELS[key] }))}
       />
 
       {/*
@@ -373,8 +410,57 @@ export default function ProductEditor({
 
         现在 Form 始终挂载，只切换可见性，字段值不会丢。
       */}
+      {/* 第 1 步：类型。
+          只有「实物商品」可选，其余三类显示「待开发」且禁用 —— 它们在下单/库存/
+          发货/退款上还没打通，让用户选了只会产生一堆跑不通的数据。 */}
+      <div
+        style={{ display: currentKey === 'type' ? 'block' : 'none' }}
+        data-testid="product-type-step"
+      >
+        <Radio.Group
+          value={productType}
+          onChange={(event) => setProductType(event.target.value)}
+          style={{ width: '100%' }}
+        >
+          <Row gutter={[12, 12]}>
+            {Object.entries(PRODUCT_TYPE).map(([value, label]) => {
+              const open = OPEN_PRODUCT_TYPES.includes(value);
+              return (
+                <Col xs={24} sm={12} key={value}>
+                  <Card
+                    size="small"
+                    style={{
+                      opacity: open ? 1 : 0.55,
+                      borderColor:
+                        productType === value
+                          ? 'var(--ant-color-primary)'
+                          : undefined,
+                    }}
+                  >
+                    <Radio value={value} disabled={!open}>
+                      <Space>
+                        <span style={{ fontWeight: 600 }}>{label}</span>
+                        {open ? null : <Tag>待开发</Tag>}
+                      </Space>
+                    </Radio>
+                  </Card>
+                </Col>
+              );
+            })}
+          </Row>
+        </Radio.Group>
+        <Typography.Paragraph
+          type="secondary"
+          style={{ marginTop: 16, marginBottom: 0 }}
+        >
+          类型在创建时确定，**创建后不可修改** ——
+          已有订单、库存与发货流程都按创建时的
+          语义进行，事后改类型会让历史订单对不上账。
+        </Typography.Paragraph>
+      </div>
+
       <Form form={form} layout="vertical">
-        <div style={{ display: step === 0 ? 'block' : 'none' }}>
+        <div style={{ display: currentKey === 'basic' ? 'block' : 'none' }}>
           <Form.Item
             label="商品名称"
             name="name"
@@ -431,7 +517,7 @@ export default function ProductEditor({
         </div>
       </Form>
 
-      <div style={{ display: step === 1 ? 'block' : 'none' }}>
+      <div style={{ display: currentKey === 'specs' ? 'block' : 'none' }}>
         <Flex gap={16} align="flex-start">
           <div style={{ flex: 1, minWidth: 0 }}>
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
@@ -772,7 +858,7 @@ export default function ProductEditor({
 
       {/* 第 3 步：富文本详情。
           同样用 display 切换而不是条件卸载 —— 卸载会丢编辑器状态（同 ② 基础信息的坑）。 */}
-      <div style={{ display: step === 2 ? 'block' : 'none' }}>
+      <div style={{ display: currentKey === 'detail' ? 'block' : 'none' }}>
         {richLoaded ? (
           <RichTextEditor
             value={richText}

@@ -6,6 +6,14 @@ import { useState } from 'react';
 import PageShell from '@/components/PageShell';
 import { listPlatformProducts, type PlatformProductRow } from '@/services/api';
 
+/** 与租户端、买家端共用同一套文案（各 app 独立部署，但枚举必须一致） */
+const PRODUCT_TYPE: Record<string, string> = {
+  physical: '实物商品',
+  virtual: '虚拟商品',
+  knowledge: '知识付费',
+  event: '活动报名',
+};
+
 const STATUS_COLOR: Record<string, string> = {
   on_sale: 'green',
   pending_review: 'orange',
@@ -23,9 +31,11 @@ const STATUS_COLOR: Record<string, string> = {
 export default function PlatformProductsPage() {
   const [keyword, setKeyword] = useState<string>();
   const [status, setStatus] = useState<string>();
+  const [productType, setProductType] = useState<string>();
   const products = useQuery({
-    queryKey: ['platform-products', keyword, status],
-    queryFn: () => listPlatformProducts({ keyword, status }),
+    queryKey: ['platform-products', keyword, status, productType],
+    queryFn: () =>
+      listPlatformProducts({ keyword, status, product_type: productType }),
   });
 
   const columns: ColumnsType<PlatformProductRow> = [
@@ -66,6 +76,14 @@ export default function PlatformProductsPage() {
           <div>{record.seller_name ?? '—'}</div>
           <div style={{ color: '#999' }}>{record.shop_name ?? '—'}</div>
         </div>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'product_type',
+      width: 110,
+      render: (value: string) => (
+        <Tag>{PRODUCT_TYPE[value ?? 'physical'] ?? value ?? '—'}</Tag>
       ),
     },
     {
@@ -126,6 +144,17 @@ export default function PlatformProductsPage() {
               { label: '已驳回', value: 'rejected' },
               { label: '草稿', value: 'draft' },
             ]}
+          />
+          <Select
+            allowClear
+            placeholder="类型"
+            style={{ width: 140 }}
+            value={productType}
+            onChange={setProductType}
+            options={Object.entries(PRODUCT_TYPE).map(([value, label]) => ({
+              label,
+              value,
+            }))}
           />
           <Button icon={<ReloadOutlined />} onClick={() => products.refetch()}>
             刷新

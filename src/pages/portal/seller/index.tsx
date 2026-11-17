@@ -38,7 +38,7 @@ export default function SellerOverviewPage() {
   });
   const products = useQuery({
     queryKey: ['seller-products'],
-    queryFn: listSellerProducts,
+    queryFn: () => listSellerProducts(),
   });
   const orders = useQuery({
     queryKey: ['seller-orders'],

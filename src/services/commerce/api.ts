@@ -36,9 +36,11 @@ export async function getSellerProfile() {
   );
 }
 
-export async function listSellerProducts() {
+export async function listSellerProducts(params?: {
+  product_type?: string;
+}) {
   return unwrap<SellerProductRecord[]>(
-    request('/api/v1/portal/seller/products', { method: 'GET' }),
+    request('/api/v1/portal/seller/products', { method: 'GET', params }),
   );
 }
 
@@ -46,6 +48,8 @@ export async function createSellerProduct(data: {
   name: string;
   price_cents: number;
   stock: number;
+  /** 类型创建时确定、之后不可改；目前后端只接受 physical */
+  product_type?: string;
   category_id?: number | null;
   main_image?: string;
   video_url?: string;
@@ -179,6 +183,7 @@ export async function listAdminProducts(params?: {
   keyword?: string;
   status?: string;
   category_id?: number;
+  product_type?: string;
 }) {
   return unwrap<ProductRecord[]>(
     request('/api/v1/admin/products', { method: 'GET', params }),
@@ -497,6 +502,8 @@ export interface PublicProduct {
   name: string;
   description?: string | null;
   status: string;
+  /** 商品类型（physical 等）；买家详情页显示标签 */
+  product_type?: string;
   main_image?: string | null;
   images?: string[];
   video_url?: string | null;

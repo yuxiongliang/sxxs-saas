@@ -171,6 +171,36 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 > 真实投递（SMTP / 短信网关 / 站内信收件箱）仍未接入：这里落地的是「谁会收到」，
 > 不是「已经送达」。站内信目前只有群发记录，没有按用户的收件箱，所以 inbox 渠道强制不可关。
 
+## 订单管理（`/orders`）与三端订单列表
+
+**一行 = 一个商品行**，不是一个订单。订单级字段（用户ID / 买家 / 订单号 / 订单金额 / 状态 /
+下单时间）用 `rowSpan` 合并，只在首行渲染。
+
+### 为什么不用抽屉
+
+原来 `/admin/orders` 列表**只回订单头**，运营必须点开抽屉才知道买了什么，一屏只能处理一单。
+现在列表直接带 `items[]`（含 `image` / `product_type` / `sku_name` / `seller_order_id`）与
+`seller_orders[]`，一屏看完，列多就**横向滚动**（不折行、不隐藏）。
+
+### 发货/退款是**卖家单粒度**
+
+一个订单可能拆多个卖家单（不同卖家），所以行内按钮必须绑 `order_items.seller_order_id`，
+**不能拿订单 id 去发货**。按钮仍弹**小 Modal** 收物流单号/退款金额（写操作才弹，看数据不弹）。
+
+### 金额不求和
+
+合并单元格参与求和会把同一笔订单金额重复累加，所以**不做合计行**。
+
+### 三端同步
+
+| 端       | 接口                        | 列表里的商品                      |
+| -------- | --------------------------- | --------------------------------- |
+| 控制台   | `GET /admin/orders`         | `items[]` + `seller_orders[]`     |
+| 卖家中心 | `GET /portal/seller/orders` | `items[]`（卖家原来只看得到金额） |
+| 买家中心 | `GET /portal/orders`        | `items[]`（买家原来必须点进详情） |
+
+订单详情接口的 `items` 也走同一个 `_item_dict()`，避免两处形状分叉。
+
 ## 商品管理（`/commerce/products`）
 
 租户控制台的商品管理：卖家在 `/portal/seller` 提交的商品进这里，运营在这里审核、上下架、改价改库存。
@@ -250,7 +280,7 @@ All module uploads should use `src/components/AttachmentUpload` and the `/api/v1
 | --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | 全站名称 `display_name`     | 文本                                                         | 页脚版权、登录页标题、买家中心头部、`<title>`、通知模板 `{{tenant_name}}`                               |
 | 站点描述 `site_description` | **多行文本，上限 300 字**（库里是 `TEXT`，长度只在接口层卡） | 登录页副标题、控制台页脚、买家商城页脚（替代写死的 tagline）、买家中心头部、`<meta name="description">` |
-| 站点 Logo `logo_url`        | **点缩略图 / 「从附件中心选择」挑图**                        | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心（同样只显 logo） |
+| 站点 Logo `logo_url`        | **点缩略图 / 「从附件中心选择」挑图**                        | 控制台头部（**只显 logo，不再带站名**）、登录页、买家商城头部、买家中心（同样只显 logo）                |
 | Favicon `favicon_url`       | 同样从附件中心选图                                           | 运行时插入 `<link rel="icon">`（`src/services/publicBrand.ts`）                                         |
 | ICP 备案号 `icp_number`     | 文本，如 `京ICP备12345678号`                                 | 页脚，自动链到 `beian.miit.gov.cn`                                                                      |
 | ICP 许可证号 `icp_license`  | 文本，如 `京ICP证030173号`                                   | 页脚                                                                                                    |
@@ -391,9 +421,37 @@ change a member's effective rights calls `bump_permission_version()`:
 Without the bump a demoted user kept their old privileges until the TTL expired —
 covered by `test_users_management.py::test_role_change_invalidates_cached_permissions`.
 
+## 商品类型（`products.product_type`）
+
+四类：**实物商品 `physical` / 虚拟商品 `virtual` / 知识付费 `knowledge` / 活动报名 `event`**。
+
+**只有 `physical` 已开放。** 其余三类在编辑器和卖家新建弹窗里都显示「待开发」且**不可选中**；
+后端 `create_seller_product` 同样拒绝（400「该商品类型待开发」）—— 只靠前端禁用挡不住直接调接口。
+
+### 创建后不可修改
+
+- `ProductUpdate` / `SellerProductUpdate` **根本没有 `product_type` 字段**，传了也不生效；
+- 编辑器里是只读展示。理由：已有订单、库存锁定、发货、退款都按创建时的语义跑，
+  事后改类型会让历史订单对不上账。
+
+### 订单快照
+
+`order_items.product_type` 是**下单时的快照**（迁移 `a4d7c2e91b03`，历史行回填 `physical`）。
+商品以后改类型，历史订单仍按当时语义对账 —— 和 `product_name` / `sku_name` / `image` 同一个原则。
+
+### 编辑器步骤是数据驱动的
+
+```ts
+// ProductEditor.tsx
+const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
+```
+
+第 1 步固定是「类型」，后续步骤由类型决定。以后开放虚拟/知识付费时，只是在这里加一行
+（它们显然不需要「规格/库存」这些步骤），不用重写组件。
+
 ## 商品富文本描述（Tiptap v3）
 
-商品编辑弹窗是三步：**基础信息 → 规格 → 详情**，详情步骤里是 Tiptap 富文本编辑器。
+商品编辑弹窗是四步：**类型 → 基础信息 → 规格 → 详情**，详情步骤里是 Tiptap 富文本编辑器。
 
 ### 版本与依赖
 

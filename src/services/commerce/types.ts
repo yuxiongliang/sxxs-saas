@@ -60,6 +60,8 @@ export interface ProductRecord {
   description_doc?: Record<string, unknown> | null;
   description_html?: string | null;
   status: string;
+  /** 商品类型：创建后不可修改（physical / virtual / knowledge / event） */
+  product_type?: string;
   main_image?: string | null;
   images?: string[];
   created_at?: string | null;
@@ -106,6 +108,11 @@ export interface OrderRecord {
   buyer_username?: string | null;
   status: string;
   payable_amount_cents: number;
+  created_at?: string | null;
+  /** 列表里直接带商品，不用点开详情抽屉 */
+  items?: OrderItemRecord[];
+  /** 卖家拆单（发货/退款是卖家单粒度） */
+  seller_orders?: SellerOrderRecord[];
 }
 
 export interface SellerOrderRecord {
@@ -123,8 +130,17 @@ export interface SellerOrderRecord {
 
 export interface OrderItemRecord {
   id: number;
+  product_id?: number;
+  sku_id?: number;
+  seller_id?: number;
+  /** 发货/退款是**卖家单粒度**：一个订单可能拆多个卖家单 */
+  seller_order_id?: number;
+  /** 下单时的类型快照，商品后来改类型也不影响历史订单 */
+  product_type?: string;
   product_name: string;
   sku_name: string;
+  /** 下单时的图片快照（SKU 图优先，否则商品主图） */
+  image?: string | null;
   price_cents: number;
   quantity: number;
   subtotal_cents: number;
@@ -185,6 +201,9 @@ export interface SellerOrderRecord {
   goods_amount_cents: number;
   commission_amount_cents: number;
   payable_to_seller_cents: number;
+  created_at?: string | null;
+  /** 卖家要知道自己卖了什么：图片/名称/规格/类型都来自订单行快照 */
+  items?: OrderItemRecord[];
 }
 
 export interface PortalOrder {
@@ -193,6 +212,8 @@ export interface PortalOrder {
   status: string;
   payable_amount_cents: number;
   created_at?: string;
+  /** 买家也要在列表里直接看到买的是什么 */
+  items?: OrderItemRecord[];
 }
 
 export interface SellerLedgerEntry {

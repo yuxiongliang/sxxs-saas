@@ -66,6 +66,8 @@ async def test_response_is_whitelisted(client):
         "shop_id",
         "name",
         "status",
+        # 商品类型：买家详情页要显示标签
+        "product_type",
         "main_image",
         "shop_name",
         "seller_name",

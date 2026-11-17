@@ -30,7 +30,12 @@ import {
   listAdminProducts,
 } from '@/services/commerce/api';
 import type { ProductRecord } from '@/services/commerce/types';
-import { labelOf, PRODUCT_STATUS } from '@/utils/labels';
+import {
+  labelOf,
+  PRODUCT_STATUS,
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_COLOR,
+} from '@/utils/labels';
 import SettingPage from '../../system/components/SettingPage';
 import ProductEditor from './components/ProductEditor';
 
@@ -127,6 +132,8 @@ const ProductManagementPage: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string>();
   const [categoryId, setCategoryId] = useState<number>();
+  // 商品类型筛选：当前只有实物，但字段先通着，免得以后加类型再改一遍
+  const [productType, setProductType] = useState<string>();
 
   const categories = useQuery({
     queryKey: ['admin-categories'],
@@ -134,12 +141,13 @@ const ProductManagementPage: React.FC = () => {
   });
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin-products', keyword, status, categoryId],
+    queryKey: ['admin-products', keyword, status, categoryId, productType],
     queryFn: () =>
       listAdminProducts({
         keyword: keyword || undefined,
         status,
         category_id: categoryId,
+        product_type: productType,
       }),
   });
 
@@ -194,6 +202,16 @@ const ProductManagementPage: React.FC = () => {
       width: 160,
       render: (value: string | null, record) =>
         value ?? `店铺 #${record.shop_id}`,
+    },
+    {
+      title: '类型',
+      dataIndex: 'product_type',
+      width: 110,
+      render: (value: string | null) => (
+        <Tag color={PRODUCT_TYPE_COLOR[value ?? 'physical'] ?? 'default'}>
+          {PRODUCT_TYPE[value ?? 'physical'] ?? value ?? '—'}
+        </Tag>
+      ),
     },
     {
       title: '商品',
@@ -394,6 +412,17 @@ const ProductManagementPage: React.FC = () => {
                 options={(categories.data ?? []).map((item) => ({
                   label: item.name,
                   value: item.id,
+                }))}
+              />
+              <Select
+                allowClear
+                placeholder="类型"
+                style={{ width: 130 }}
+                value={productType}
+                onChange={setProductType}
+                options={Object.entries(PRODUCT_TYPE).map(([value, label]) => ({
+                  label,
+                  value,
                 }))}
               />
             </>

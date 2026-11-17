@@ -72,6 +72,8 @@ def _product_public_dict(product, shop, seller, sku) -> dict:
         "shop_id": product.shop_id,
         "name": product.name,
         "status": product.status,
+        # 商品类型：详情页要显示标签；买家侧目前只有实物
+        "product_type": product.product_type,
         "main_image": product.main_image,
         "shop_name": shop.name,
         "seller_name": seller.display_name,

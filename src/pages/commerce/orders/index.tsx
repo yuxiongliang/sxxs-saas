@@ -4,9 +4,8 @@ import {
   App,
   Button,
   Card,
-  Descriptions,
-  Drawer,
   Form,
+  Image,
   Input,
   InputNumber,
   Modal,
@@ -17,22 +16,26 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import ListToolbar from '@/components/ListToolbar';
 import {
   cancelOrder,
-  getAdminOrderDetail,
   listAdminOrders,
   mockPayOrder,
   refundSellerOrder,
   shipSellerOrder,
 } from '@/services/commerce/api';
 import type {
-  OrderDetail,
+  OrderItemRecord,
   OrderRecord,
   SellerOrderRecord,
 } from '@/services/commerce/types';
-import { labelOf, ORDER_STATUS } from '@/utils/labels';
+import {
+  labelOf,
+  ORDER_STATUS,
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_COLOR,
+} from '@/utils/labels';
 import SettingPage from '../../system/components/SettingPage';
 
 const statusColor = (status: string) =>
@@ -44,11 +47,36 @@ const statusColor = (status: string) =>
         ? 'red'
         : 'default';
 
+const money = (cents?: number | null) =>
+  typeof cents === 'number' ? `¥${(cents / 100).toFixed(2)}` : '—';
+
+const formatTime = (value?: string | null) =>
+  value ? value.replace('T', ' ').slice(0, 16) : '—';
+
+/**
+ * 一行 = 一个商品行（`order_items`），不是一个订单。
+ *
+ * 为什么：运营在订单列表上要回答的核心问题是「这一单卖了什么、发到哪一步」，
+ * 原来只回订单头，必须点开抽屉才知道商品，一屏只能处理一单。
+ * 一行一商品后，配合横向滚动，整单信息在一屏内看完。
+ *
+ * 订单级字段（用户ID/买家/订单号/金额/状态/时间）用 `rowSpan` 合并，
+ * 只在第一行渲染、并**不做金额合计** —— 合并单元格参与求和会把订单金额算重。
+ */
+type OrderRow = {
+  /** 行 key：订单 id + 商品行 id，商品行可能为空（老数据/空订单） */
+  key: string;
+  order: OrderRecord;
+  item?: OrderItemRecord;
+  /** 这一行商品所属的卖家单（发货/退款是卖家单粒度） */
+  sellerOrder?: SellerOrderRecord;
+  /** 该订单第一行：只有它渲染订单级信息与订单级操作 */
+  first: boolean;
+  rowSpan: number;
+};
+
 const OrderManagementPage: React.FC = () => {
   const { message } = App.useApp();
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detail, setDetail] = useState<OrderDetail>();
-  const [detailLoading, setDetailLoading] = useState(false);
   const [shipOpen, setShipOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [selected, setSelected] = useState<SellerOrderRecord>();
@@ -62,32 +90,49 @@ const OrderManagementPage: React.FC = () => {
     queryFn: () => listAdminOrders({ keyword: keyword || undefined, status }),
   });
 
-  const openDetail = async (record: OrderRecord) => {
-    setDetailOpen(true);
-    setDetailLoading(true);
-    try {
-      setDetail(await getAdminOrderDetail(record.id));
-    } catch (error: any) {
-      message.error(error?.message || '加载订单详情失败');
-    } finally {
-      setDetailLoading(false);
+  const rows: OrderRow[] = useMemo(() => {
+    const result: OrderRow[] = [];
+    for (const order of data ?? []) {
+      const items = order.items ?? [];
+      const sellerOrderById = new Map(
+        (order.seller_orders ?? []).map((item) => [item.id, item]),
+      );
+      if (items.length === 0) {
+        result.push({
+          key: `${order.id}`,
+          order,
+          first: true,
+          rowSpan: 1,
+        });
+        continue;
+      }
+      items.forEach((item, index) => {
+        result.push({
+          key: `${order.id}-${item.id}`,
+          order,
+          item,
+          sellerOrder: item.seller_order_id
+            ? sellerOrderById.get(item.seller_order_id)
+            : undefined,
+          first: index === 0,
+          rowSpan: items.length,
+        });
+      });
     }
-  };
-
-  const reloadDetail = async () => {
-    if (!detail) return;
-    setDetail(await getAdminOrderDetail(detail.id));
-    refetch();
-  };
+    return result;
+  }, [data]);
 
   const handleShip = async () => {
     if (!selected) return;
     const values = await shipForm.validateFields();
-    await shipSellerOrder(selected.id, values);
-    message.success('发货成功');
+    await shipSellerOrder(selected.id, {
+      carrier: values.carrier,
+      tracking_no: values.tracking_no,
+    });
+    message.success('已发货');
     setShipOpen(false);
     shipForm.resetFields();
-    await reloadDetail();
+    await refetch();
   };
 
   const handleRefund = async () => {
@@ -100,26 +145,29 @@ const OrderManagementPage: React.FC = () => {
     message.success('退款成功');
     setRefundOpen(false);
     refundForm.resetFields();
-    await reloadDetail();
+    // 刷新**列表**：原来刷的是抽屉里的详情，抽屉去掉后必须刷列表，
+    // 否则界面不动、用户以为没生效
+    await refetch();
   };
 
-  const columns: ColumnsType<OrderRecord> = [
-    {
-      title: '订单号',
-      dataIndex: 'order_no',
-      render: (value: string) => (
-        <span style={{ fontWeight: 600 }}>{value}</span>
-      ),
-    },
+  /** 订单级单元格：合并到该订单的所有商品行 */
+  const merge = (record: OrderRow) => ({
+    rowSpan: record.first ? record.rowSpan : 0,
+  });
+
+  const columns: ColumnsType<OrderRow> = [
     {
       // 全站规则：买家给「用户ID + 用户名」，不显示裸 buyer_id
       title: '用户ID',
-      dataIndex: 'buyer_public_id',
-      width: 220,
-      render: (value: string | null) =>
-        value ? (
-          <Typography.Text code copyable={{ text: value }}>
-            {value}
+      width: 210,
+      onCell: merge,
+      render: (_, record) =>
+        record.order.buyer_public_id ? (
+          <Typography.Text
+            code
+            copyable={{ text: record.order.buyer_public_id }}
+          >
+            {record.order.buyer_public_id}
           </Typography.Text>
         ) : (
           '—'
@@ -127,132 +175,179 @@ const OrderManagementPage: React.FC = () => {
     },
     {
       title: '买家',
-      dataIndex: 'buyer_username',
-      width: 140,
-      render: (value: string | null) => value ?? '—',
+      width: 130,
+      onCell: merge,
+      render: (_, record) => record.order.buyer_username ?? '—',
     },
     {
-      title: '金额',
-      dataIndex: 'payable_amount_cents',
-      width: 140,
-      render: (value: number) => `¥${(value / 100).toFixed(2)}`,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 160,
+      title: '订单号',
+      dataIndex: ['order', 'order_no'],
+      width: 190,
+      onCell: merge,
       render: (value: string) => (
-        <Tag color={statusColor(value)}>{labelOf(ORDER_STATUS, value)}</Tag>
+        <span style={{ fontWeight: 600 }}>{value}</span>
       ),
     },
     {
-      title: '操作',
-      width: 260,
+      title: '商品类型',
+      width: 110,
+      render: (_, record) => {
+        const type = record.item?.product_type ?? 'physical';
+        return (
+          <Tag color={PRODUCT_TYPE_COLOR[type] ?? 'default'}>
+            {PRODUCT_TYPE[type] ?? type}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '商品图片',
+      width: 90,
+      render: (_, record) =>
+        record.item?.image ? (
+          <Image
+            src={record.item.image}
+            alt={record.item.product_name}
+            width={56}
+            height={56}
+            style={{ objectFit: 'cover', borderRadius: 6 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 6,
+              background: 'var(--ant-color-fill-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12,
+              color: 'var(--ant-color-text-tertiary)',
+            }}
+          >
+            无图
+          </div>
+        ),
+    },
+    {
+      title: '商品名称',
+      width: 220,
+      render: (_, record) => record.item?.product_name ?? '—',
+    },
+    {
+      title: '商品规格',
+      width: 180,
+      render: (_, record) => record.item?.sku_name ?? '—',
+    },
+    {
+      title: '单价',
+      width: 110,
+      render: (_, record) => money(record.item?.price_cents),
+    },
+    {
+      title: '数量',
+      width: 80,
+      render: (_, record) => record.item?.quantity ?? '—',
+    },
+    {
+      title: '小计',
+      width: 110,
+      render: (_, record) => money(record.item?.subtotal_cents),
+    },
+    {
+      // 订单级金额**不做合计**：合并单元格参与求和会把同一金额重复累加
+      title: '订单金额',
+      width: 120,
+      onCell: merge,
+      render: (_, record) => money(record.order.payable_amount_cents),
+    },
+    {
+      title: '状态',
+      width: 110,
+      onCell: merge,
       render: (_, record) => (
-        <Space>
-          <Button type="link" size="small" onClick={() => openDetail(record)}>
-            详情
-          </Button>
-          {record.status === 'pending_payment' && (
-            <>
+        <Tag color={statusColor(record.order.status)}>
+          {labelOf(ORDER_STATUS, record.order.status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '下单时间',
+      width: 150,
+      onCell: merge,
+      render: (_, record) => formatTime(record.order.created_at),
+    },
+    {
+      title: '操作',
+      width: 200,
+      fixed: 'right',
+      render: (_, record) => {
+        const sellerOrder = record.sellerOrder;
+        return (
+          <Space size={0} wrap>
+            {/* 订单级操作只在首行出现，避免同一订单重复出现「模拟支付」 */}
+            {record.first && record.order.status === 'pending_payment' ? (
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={async () => {
+                    await mockPayOrder(record.order.id);
+                    message.success('模拟支付成功');
+                    refetch();
+                  }}
+                >
+                  模拟支付
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={async () => {
+                    await cancelOrder(record.order.id);
+                    message.success('订单已取消');
+                    refetch();
+                  }}
+                >
+                  取消
+                </Button>
+              </>
+            ) : null}
+            {/* 发货/退款是**卖家单粒度**：按本行商品所属的卖家单来，不能拿订单 id 去发货 */}
+            {sellerOrder &&
+            ['paid', 'processing'].includes(sellerOrder.status) ? (
               <Button
                 type="link"
                 size="small"
-                onClick={async () => {
-                  await mockPayOrder(record.id);
-                  message.success('模拟支付成功');
-                  refetch();
+                onClick={() => {
+                  setSelected(sellerOrder);
+                  setShipOpen(true);
                 }}
               >
-                模拟支付
+                发货
               </Button>
+            ) : null}
+            {sellerOrder &&
+            ['paid', 'shipped', 'completed'].includes(sellerOrder.status) ? (
               <Button
                 type="link"
                 size="small"
                 danger
-                onClick={async () => {
-                  await cancelOrder(record.id);
-                  message.success('订单已取消');
-                  refetch();
+                onClick={() => {
+                  setSelected(sellerOrder);
+                  refundForm.setFieldsValue({
+                    amount: sellerOrder.goods_amount_cents / 100,
+                  });
+                  setRefundOpen(true);
                 }}
               >
-                取消
+                退款
               </Button>
-            </>
-          )}
-        </Space>
-      ),
-    },
-  ];
-
-  const sellerColumns: ColumnsType<SellerOrderRecord> = [
-    { title: '卖家单 ID', dataIndex: 'id', width: 100 },
-    {
-      title: '卖家',
-      width: 180,
-      render: (_, record) => (
-        <Space orientation="vertical" size={0}>
-          <span style={{ fontWeight: 600 }}>
-            {record.seller_username ?? '—'}
-          </span>
-          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-            {record.seller_name ?? `卖家 #${record.seller_id}`}
-          </span>
-        </Space>
-      ),
-    },
-    {
-      title: '商品金额',
-      dataIndex: 'goods_amount_cents',
-      render: (value: number) => `¥${(value / 100).toFixed(2)}`,
-    },
-    {
-      title: '佣金',
-      dataIndex: 'commission_amount_cents',
-      render: (value: number) => `¥${(value / 100).toFixed(2)}`,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      render: (value: string) => (
-        <Tag color={statusColor(value)}>{labelOf(ORDER_STATUS, value)}</Tag>
-      ),
-    },
-    {
-      title: '操作',
-      width: 180,
-      render: (_, record) => (
-        <Space>
-          {['paid', 'processing'].includes(record.status) && (
-            <Button
-              type="link"
-              size="small"
-              onClick={() => {
-                setSelected(record);
-                setShipOpen(true);
-              }}
-            >
-              发货
-            </Button>
-          )}
-          {['paid', 'shipped', 'completed'].includes(record.status) && (
-            <Button
-              type="link"
-              size="small"
-              danger
-              onClick={() => {
-                setSelected(record);
-                refundForm.setFieldsValue({
-                  amount: record.goods_amount_cents / 100,
-                });
-                setRefundOpen(true);
-              }}
-            >
-              退款
-            </Button>
-          )}
-        </Space>
-      ),
+            ) : null}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -287,78 +382,78 @@ const OrderManagementPage: React.FC = () => {
             />
           }
         />
-        <Table
-          rowKey="id"
+        <Table<OrderRow>
+          rowKey="key"
           loading={isLoading}
           columns={columns}
-          dataSource={data ?? []}
-          pagination={false}
-        />
-      </Card>
-
-      <Drawer
-        title={detail ? `订单 ${detail.order_no}` : '订单详情'}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        size={880}
-        loading={detailLoading}
-      >
-        {detail && (
-          <Space orientation="vertical" size={20} style={{ display: 'flex' }}>
-            <Descriptions column={2} size="small" bordered>
-              <Descriptions.Item label="订单号">
-                {detail.order_no}
-              </Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={statusColor(detail.status)}>{detail.status}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="买家">
-                {detail.buyer_username ?? '—'}
-                {detail.buyer_public_id ? (
-                  <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-                    {detail.buyer_public_id}
-                  </Typography.Text>
-                ) : null}
-              </Descriptions.Item>
-              <Descriptions.Item label="金额">
-                ¥{(detail.payable_amount_cents / 100).toFixed(2)}
-              </Descriptions.Item>
-            </Descriptions>
-            <Card size="small" title="卖家拆单">
-              <Table
-                rowKey="id"
-                size="small"
-                columns={sellerColumns}
-                dataSource={detail.seller_orders}
-                pagination={false}
-              />
-            </Card>
-            <Card size="small" title="商品明细">
-              <Table
+          dataSource={rows}
+          // 列多就让用户左右滑，不折行、不隐藏 —— 一屏看完比"清爽"重要
+          scroll={{ x: 1980 }}
+          pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+          expandable={{
+            // 展开看卖家拆单与佣金：这是"不跳抽屉也要看完"的补充信息，
+            // 商品与金额已经在主表行内
+            expandedRowRender: (record) => (
+              <Table<SellerOrderRecord>
                 rowKey="id"
                 size="small"
                 pagination={false}
-                dataSource={detail.items}
+                dataSource={record.order.seller_orders ?? []}
                 columns={[
-                  { title: '商品', dataIndex: 'product_name' },
-                  { title: 'SKU', dataIndex: 'sku_name' },
+                  { title: '卖家单 ID', dataIndex: 'id', width: 100 },
                   {
-                    title: '单价',
-                    dataIndex: 'price_cents',
-                    render: (v: number) => `¥${(v / 100).toFixed(2)}`,
+                    title: '卖家',
+                    width: 200,
+                    render: (_, row) => (
+                      <Space orientation="vertical" size={0}>
+                        <span style={{ fontWeight: 600 }}>
+                          {row.seller_username ?? '—'}
+                        </span>
+                        <span
+                          style={{
+                            color: 'var(--ant-color-text-secondary)',
+                            fontSize: 12,
+                          }}
+                        >
+                          {row.seller_name ?? `卖家 #${row.seller_id}`}
+                        </span>
+                      </Space>
+                    ),
                   },
-                  { title: '数量', dataIndex: 'quantity' },
                   {
-                    title: '小计',
-                    dataIndex: 'subtotal_cents',
-                    render: (v: number) => `¥${(v / 100).toFixed(2)}`,
+                    title: '状态',
+                    dataIndex: 'status',
+                    width: 110,
+                    render: (value: string) => (
+                      <Tag color={statusColor(value)}>
+                        {labelOf(ORDER_STATUS, value)}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    title: '商品金额',
+                    dataIndex: 'goods_amount_cents',
+                    width: 120,
+                    render: (value: number) => money(value),
+                  },
+                  {
+                    title: '佣金',
+                    dataIndex: 'commission_amount_cents',
+                    width: 110,
+                    render: (value: number) => money(value),
+                  },
+                  {
+                    title: '应付卖家',
+                    dataIndex: 'payable_to_seller_cents',
+                    width: 120,
+                    render: (value: number) => money(value),
                   },
                 ]}
               />
-            </Card>
-          </Space>
-        )}
-      </Drawer>
+            ),
+          }}
+        />
+      </Card>
 
       <Modal
         title="卖家发货"

@@ -8,6 +8,8 @@ import {
   Input,
   InputNumber,
   Modal,
+  Radio,
+  Select,
   Space,
   Table,
   Tag,
@@ -24,7 +26,13 @@ import {
   updateSellerProduct,
 } from '@/services/commerce/api';
 import type { SellerProductRecord } from '@/services/commerce/types';
-import { labelOf, PRODUCT_STATUS } from '@/utils/labels';
+import {
+  labelOf,
+  OPEN_PRODUCT_TYPES,
+  PRODUCT_STATUS,
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_COLOR,
+} from '@/utils/labels';
 import SellerShell from '../components/SellerShell';
 
 /** 我的商品：商品列表 + 新增/编辑（含富文本详情）。 */
@@ -37,10 +45,11 @@ export default function SellerProductsPage() {
   const [richDesc, setRichDesc] = useState<RichTextValue | null>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [productType, setProductType] = useState<string>();
 
   const products = useQuery({
-    queryKey: ['seller-products'],
-    queryFn: listSellerProducts,
+    queryKey: ['seller-products', productType],
+    queryFn: () => listSellerProducts({ product_type: productType }),
   });
 
   const refresh = () =>
@@ -50,6 +59,8 @@ export default function SellerProductsPage() {
     const values = await createForm.validateFields();
     await createSellerProduct({
       name: values.name,
+      // 类型创建时确定、之后不可改；只有实物可选（其余显示待开发）
+      product_type: values.product_type ?? 'physical',
       price_cents: Math.round(values.price * 100),
       stock: values.stock,
       main_image: values.main_image || undefined,
@@ -144,6 +155,16 @@ export default function SellerProductsPage() {
       ),
     },
     {
+      title: '类型',
+      dataIndex: 'product_type',
+      width: 110,
+      render: (v: string) => (
+        <Tag color={PRODUCT_TYPE_COLOR[v ?? 'physical'] ?? 'default'}>
+          {PRODUCT_TYPE[v ?? 'physical'] ?? v ?? '—'}
+        </Tag>
+      ),
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       width: 110,
@@ -203,14 +224,26 @@ export default function SellerProductsPage() {
   return (
     <SellerShell title="我的商品">
       <Card>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          style={{ marginBottom: 16 }}
-          onClick={() => setCreateOpen(true)}
-        >
-          新增商品
-        </Button>
+        <Space style={{ marginBottom: 16 }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateOpen(true)}
+          >
+            新增商品
+          </Button>
+          <Select
+            allowClear
+            placeholder="类型"
+            style={{ width: 130 }}
+            value={productType}
+            onChange={setProductType}
+            options={Object.entries(PRODUCT_TYPE).map(([value, label]) => ({
+              label,
+              value,
+            }))}
+          />
+        </Space>
         <Table
           rowKey="id"
           loading={products.isLoading}
@@ -228,6 +261,29 @@ export default function SellerProductsPage() {
         destroyOnHidden
       >
         <Form form={createForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            label="商品类型"
+            name="product_type"
+            rules={[{ required: true, message: '请选择商品类型' }]}
+            extra="类型创建后不可修改；实物以外的类型仍在开发中"
+          >
+            <Radio.Group>
+              <Space wrap>
+                {Object.entries(PRODUCT_TYPE).map(([value, label]) => (
+                  <Radio
+                    key={value}
+                    value={value}
+                    disabled={!OPEN_PRODUCT_TYPES.includes(value)}
+                  >
+                    {label}
+                    {OPEN_PRODUCT_TYPES.includes(value) ? null : (
+                      <Tag style={{ marginLeft: 6 }}>待开发</Tag>
+                    )}
+                  </Radio>
+                ))}
+              </Space>
+            </Radio.Group>
+          </Form.Item>
           <Form.Item
             label="商品名称"
             name="name"

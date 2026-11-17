@@ -29,6 +29,7 @@ import {
   getPublicProductDetail,
   removeFavorite,
 } from '@/services/commerce/api';
+import { PRODUCT_TYPE, PRODUCT_TYPE_COLOR } from '@/utils/labels';
 import MallShell from '../components/MallShell';
 import RelatedProducts from './RelatedProducts';
 import ReviewsPanel from './ReviewsPanel';
@@ -246,6 +247,19 @@ export default function ProductDetailPage() {
               </Col>
               <Col xs={24} md={9} lg={10}>
                 <Card>
+                  {/* 类型标签：目前只有实物，但标签先摆上 —— 以后开放虚拟/知识付费时，
+                      买家一眼能看出自己买的是什么性质的东西 */}
+                  <Space size={8} style={{ marginBottom: 4 }}>
+                    <Tag
+                      color={
+                        PRODUCT_TYPE_COLOR[data.product_type ?? 'physical'] ??
+                        'default'
+                      }
+                    >
+                      {PRODUCT_TYPE[data.product_type ?? 'physical'] ??
+                        '实物商品'}
+                    </Tag>
+                  </Space>
                   <Typography.Title
                     level={3}
                     style={{ marginTop: 0 }}

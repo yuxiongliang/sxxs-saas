@@ -27,6 +27,20 @@ test.describe('product editor (admin)', () => {
     const modal = page.getByRole('dialog', { name: /编辑商品/ }).first();
     await expect(modal).toBeVisible({ timeout: 30_000 });
 
+    // 第 1 步是「类型」：只有实物可选，其余三类带「待开发」且禁用。
+    // 类型创建后不可改，所以这里是只读展示。
+    await expect(page.getByTestId('product-type-step')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(modal.getByText('实物商品')).toBeVisible();
+    await expect(modal.getByText('待开发').first()).toBeVisible();
+    const disabledType = modal.locator('.ant-radio-wrapper-disabled').first();
+    await expect(disabledType).toBeVisible();
+
+    // 进「基础信息」
+    await page.getByTestId('product-editor-next').click();
+    await page.waitForTimeout(800);
+
     // 选一张图（附件中心：单击选中 → 使用选中的图片）
     // 已有主图时按钮文案是「更换」，两种都要能点
     await page

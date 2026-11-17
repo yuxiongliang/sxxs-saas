@@ -129,6 +129,7 @@ async def seed_commerce_data(db: AsyncSession) -> None:
             category_id=category.id,
             name="九成新机械键盘",
             description="C2C 演示商品",
+            product_type="physical",
             status="on_sale",
             created_by=owner.id,
         )
@@ -197,6 +198,7 @@ async def seed_commerce_data(db: AsyncSession) -> None:
                 sku_id=sku.id,
                 product_name=product.name,
                 sku_name=sku.name,
+                product_type="physical",
                 price_cents=sku.price_cents,
                 quantity=1,
                 subtotal_cents=sku.price_cents,

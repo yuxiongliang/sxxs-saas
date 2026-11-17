@@ -46,7 +46,7 @@ const SellerPage: React.FC = () => {
   });
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['seller-products'],
-    queryFn: listSellerProducts,
+    queryFn: () => listSellerProducts(),
   });
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ['seller-orders'],

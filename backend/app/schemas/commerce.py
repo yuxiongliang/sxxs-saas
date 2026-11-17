@@ -56,6 +56,10 @@ class SellerProductCreate(BaseModel):
     price_cents: int = Field(gt=0)
     stock: int = Field(ge=0)
     category_id: int | None = None
+    # 商品类型：创建时确定，**之后任何接口都不收**（改类型会让已发生的订单语义断层）。
+    # 只有 physical 开放；其它三类在下单/发货/库存上还没打通，直接拒绝写入，
+    # 否则库里会出现一堆没有配套逻辑的"虚拟商品"。
+    product_type: str = Field(default="physical", max_length=16)
     # 卖家也要能传主图/视频：卖家中心原来根本没收这两个字段，
     # 新建的商品永远没有主图，详情页只剩占位图。
     main_image: str | None = Field(default=None, max_length=512)

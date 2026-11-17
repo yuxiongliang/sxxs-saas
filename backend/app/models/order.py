@@ -58,6 +58,8 @@ class OrderItem(Base):
     sku_id: Mapped[int] = mapped_column(ForeignKey("product_skus.id"))
     product_name: Mapped[str] = mapped_column(String(200))
     sku_name: Mapped[str] = mapped_column(String(128))
+    # 下单时的商品类型快照：商品以后改类型，历史订单仍按当时的语义对账
+    product_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     price_cents: Mapped[int] = mapped_column(Integer)
     quantity: Mapped[int] = mapped_column(Integer)

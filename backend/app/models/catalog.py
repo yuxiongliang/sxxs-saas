@@ -56,6 +56,15 @@ class Product(Base, TimestampMixin):
         String(8), default="text", server_default="text"
     )
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    # 商品类型：physical（实物，唯一已开放）/ virtual / knowledge / event。
+    # **创建后不可修改**：已有订单、库存、发货都按创建时的语义跑，改了会语义断层。
+    # 类 Default 与迁移里的 server_default 必须一致（test_migrations 会校对）。
+    product_type: Mapped[str] = mapped_column(
+        String(16),
+        default="physical",
+        server_default="physical",
+        index=True,
+    )
     main_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     images: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)

@@ -32,6 +32,7 @@ async def platform_products(
     keyword: str | None = Query(default=None, max_length=64),
     status: str | None = Query(default=None, max_length=24),
     tenant_id: int | None = Query(default=None),
+    product_type: str | None = Query(default=None, max_length=16),
     limit: int = Query(default=200, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
@@ -46,6 +47,8 @@ async def platform_products(
         stmt = stmt.where(Product.tenant_id == tenant_id)
     if status:
         stmt = stmt.where(Product.status == status)
+    if product_type:
+        stmt = stmt.where(Product.product_type == product_type)
     if keyword:
         stmt = stmt.where(Product.name.ilike(f"%{keyword.strip()}%"))
 
@@ -63,6 +66,7 @@ async def platform_products(
                 "seller_name": seller.display_name if seller else None,
                 "shop_name": shop.name if shop else None,
                 "name": product.name,
+                "product_type": product.product_type,
                 "main_image": product.main_image,
                 "status": product.status,
                 **stats.get(product.id, catalog_stats.ProductStats()).as_dict(),

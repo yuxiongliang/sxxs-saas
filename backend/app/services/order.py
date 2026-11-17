@@ -105,6 +105,8 @@ async def create_order(
                 sku_id=sku.id,
                 product_name=product.name,
                 sku_name=sku.name,
+                # 类型快照：商品以后改类型也不影响已成交订单的语义
+                product_type=product.product_type,
                 # 订单快照的图要取**选中 SKU 的图**，否则买家收到的图和买的对不上
                 image=sku.image_url or product.main_image,
                 price_cents=sku.price_cents,

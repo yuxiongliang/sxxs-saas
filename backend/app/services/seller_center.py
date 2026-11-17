@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import InventoryLog, Product, ProductSku
-from app.models.order import SellerOrder, Shipment
+from app.models.order import OrderItem, SellerOrder, Shipment
 from app.models.seller import Seller, SellerMember, Shop
 from app.schemas.commerce import (
     SellerProductCreate,
@@ -44,20 +44,17 @@ async def current_seller(db: AsyncSession, context: AuthContext) -> tuple[Seller
     return seller, shop
 
 
-async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
+async def seller_products(
+    db: AsyncSession, context: AuthContext, product_type: str | None = None
+) -> list[dict]:
     seller, _ = await current_seller(db, context)
-    products = list(
-        (
-            await db.scalars(
-                select(Product)
-                .where(
-                    Product.tenant_id == context.tenant.id,
-                    Product.seller_id == seller.id,
-                )
-                .order_by(Product.id.desc())
-            )
-        ).all()
+    stmt = select(Product).where(
+        Product.tenant_id == context.tenant.id,
+        Product.seller_id == seller.id,
     )
+    if product_type:
+        stmt = stmt.where(Product.product_type == product_type)
+    products = list((await db.scalars(stmt.order_by(Product.id.desc()))).all())
     result = []
     # 销量/浏览/收藏/评分：和租户运营端、平台端同一口径（services/catalog_stats.py）
     stats = await catalog_stats.stats_map(
@@ -83,6 +80,8 @@ async def seller_products(db: AsyncSession, context: AuthContext) -> list[dict]:
                 "main_image": product.main_image,
                 "video_url": product.video_url,
                 "status": product.status,
+                # 商品类型：卖家列表也要显示，创建后不可改
+                "product_type": product.product_type,
                 # 驳回原因要给卖家看，否则只能反复重提
                 "reject_reason": product.reject_reason,
                 # 卖家要看得到自己设的佣金比例，以及是否被运营锁住
@@ -282,6 +281,13 @@ async def create_seller_product(
     seller, shop = await current_seller(db, context)
     if shop is None:
         raise HTTPException(status_code=400, detail="卖家店铺不存在")
+    # 只有实物商品已打通下单/库存/发货/退款；其它三类先拒，
+    # 否则库里会出现一堆没有配套逻辑的「虚拟商品」
+    if payload.product_type != "physical":
+        raise HTTPException(
+            status_code=400,
+            detail="该商品类型待开发，目前仅支持实物商品",
+        )
     await category_service.ensure_category_usable(db, payload.category_id)
     product = Product(
         tenant_id=context.tenant.id,
@@ -289,6 +295,7 @@ async def create_seller_product(
         shop_id=shop.id,
         category_id=payload.category_id,
         name=payload.name,
+        product_type=payload.product_type,
         main_image=payload.main_image or None,
         video_url=payload.video_url or None,
         status="pending_review",
@@ -370,6 +377,21 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
             )
         ).all()
     )
+    # 卖家要知道自己到底卖了什么：图片/名称/规格/类型都从订单行快照取，
+    # 原来只回金额，卖家只能靠记性或去问运营。
+    items_map: dict[int, list[OrderItem]] = {}
+    if orders:
+        rows = list(
+            (
+                await db.scalars(
+                    select(OrderItem).where(
+                        OrderItem.seller_order_id.in_([item.id for item in orders])
+                    )
+                )
+            ).all()
+        )
+        for row in rows:
+            items_map.setdefault(row.seller_order_id, []).append(row)
     return [
         {
             "id": item.id,
@@ -379,6 +401,21 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
             "goods_amount_cents": item.goods_amount_cents,
             "commission_amount_cents": item.commission_amount_cents,
             "payable_to_seller_cents": item.payable_to_seller_cents,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "items": [
+                {
+                    "id": row.id,
+                    "product_id": row.product_id,
+                    "product_type": row.product_type or "physical",
+                    "product_name": row.product_name,
+                    "sku_name": row.sku_name,
+                    "image": row.image,
+                    "price_cents": row.price_cents,
+                    "quantity": row.quantity,
+                    "subtotal_cents": row.subtotal_cents,
+                }
+                for row in items_map.get(item.id, [])
+            ],
         }
         for item in orders
     ]

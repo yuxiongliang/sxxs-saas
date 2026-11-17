@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_context, get_db, require_permission
@@ -95,10 +95,11 @@ async def request_payout(
 
 @router.get("/products")
 async def seller_products(
+    product_type: str | None = Query(default=None, max_length=16),
     context: AuthContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return ok(await seller_service.seller_products(db, context))
+    return ok(await seller_service.seller_products(db, context, product_type))
 
 
 @router.put("/products/{product_id}")

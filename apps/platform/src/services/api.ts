@@ -648,6 +648,8 @@ export interface PlatformProductRow {
   seller_name: string | null;
   shop_name: string | null;
   name: string;
+  /** 商品类型：physical / virtual / knowledge / event（仅 physical 已开放） */
+  product_type?: string;
   main_image?: string | null;
   status: string;
   sold_count: number;
@@ -661,6 +663,7 @@ export const listPlatformProducts = (params: {
   keyword?: string;
   status?: string;
   tenant_id?: number;
+  product_type?: string;
 } = {}) => apiGet<PlatformProductRow[]>(`/platform/products${query(params)}`);
 
 /** 全站收藏（跨租户）。人物标识：用户ID + 用户名。 */
