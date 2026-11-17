@@ -1,6 +1,17 @@
+import { ShopOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useModel } from '@umijs/max';
-import { Card, Col, Empty, Row, Statistic, Table, Tag, Typography } from 'antd';
+import {
+  Button,
+  Card,
+  Col,
+  Empty,
+  Row,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { listMyFavorites, listPortalOrders } from '@/services/commerce/api';
 import type { PortalOrder } from '@/services/commerce/types';
@@ -85,6 +96,43 @@ export default function PortalCenterPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* 卖家中心入口：侧栏底部也有，但概览页给一个更显眼的位置（新用户不一定会看底部） */}
+      <Card
+        size="small"
+        style={{ marginBottom: 16 }}
+        data-testid="portal-seller-entry"
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <Typography.Text strong>
+              <ShopOutlined /> 卖家中心
+            </Typography.Text>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                管理店铺、商品、订单与结算
+              </Typography.Text>
+            </div>
+          </div>
+          <Button
+            type="primary"
+            href="/portal/seller"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="portal-go-seller"
+          >
+            进入卖家中心
+          </Button>
+        </div>
+      </Card>
 
       <Card title="最近订单">
         {list.length === 0 && !orders.isLoading ? (

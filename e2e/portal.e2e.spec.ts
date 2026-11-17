@@ -251,9 +251,20 @@ test.describe('portal: buyer journey', () => {
     await loginAs(page, CUSTOMER);
     await page.goto('/portal');
 
-    // 侧栏「消息」入口
+    // 侧栏菜单：「消息」应紧跟在「概览」下面
     const sider = page.locator('.portal-sider');
     await expect(sider).toBeVisible({ timeout: 30_000 });
+    const menuLabels = (
+      await sider.locator('.ant-menu-item').allInnerTexts()
+    ).map((text) => text.trim());
+    expect(menuLabels[0]).toContain('概览');
+    expect(menuLabels[1]).toContain('消息');
+
+    // 概览页有「进入卖家中心」入口，且新窗口打开
+    const goSeller = page.getByTestId('portal-go-seller');
+    await expect(goSeller).toBeVisible();
+    await expect(goSeller).toHaveAttribute('target', '_blank');
+
     await sider.getByText('消息').click();
     await expect(page).toHaveURL(/\/portal\/messages/, { timeout: 20_000 });
 
@@ -262,7 +273,7 @@ test.describe('portal: buyer journey', () => {
     await expect(page.getByTestId('im-emoji')).toBeVisible();
     await expect(page.getByTestId('im-product')).toBeVisible();
 
-    // 有会话时：发一条文本应当出现在列表里
+    // 有会话时：发一条文本应当出现在列表里，且两分钟内可以撤回
     const conversations = page.locator('[data-testid^="im-conversation-"]');
     if ((await conversations.count()) > 0) {
       await conversations.first().click();
@@ -271,6 +282,12 @@ test.describe('portal: buyer journey', () => {
       await page.getByTestId('im-send').click();
       await expect(page.getByText(unique).first()).toBeVisible({
         timeout: 20_000,
+      });
+      // 刚发送的消息还在 2 分钟窗口内 → 撤回/编辑按钮可见
+      await expect(
+        page.locator('[data-testid^="im-recall-"]').first(),
+      ).toBeVisible({
+        timeout: 10_000,
       });
     }
   });

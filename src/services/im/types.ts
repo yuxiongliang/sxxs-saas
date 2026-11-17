@@ -44,6 +44,8 @@ export interface MessageRecord {
   recalled_at?: string | null;
   /** 编辑时间：有值则展示「已编辑」 */
   edited_at?: string | null;
+  /** 发送时间：前端靠它判断 2 分钟撤回 / 15 分钟编辑窗口 */
+  created_at?: string | null;
 }
 
 export interface ReadState {

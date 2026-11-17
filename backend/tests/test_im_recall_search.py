@@ -44,6 +44,28 @@ async def _send(client, token: str, conversation_id: int, content: str, cid: str
     return response.json()["data"]
 
 
+async def test_message_exposes_created_at_for_window_gating(
+    client, customer_token, db_session
+):
+    """前端靠 created_at 判断 2 分钟撤回窗口，接口不能省这个字段。"""
+    seller = await _seller(db_session)
+    conversation_id = await _conversation(client, customer_token, seller.id)
+    await _send(client, customer_token, conversation_id, "窗口字段", "ct-1")
+
+    listed = await client.get(
+        f"/api/v1/im/conversations/{conversation_id}/messages",
+        headers=bearer(customer_token),
+    )
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["data"]
+    assert items, "应该有消息"
+    # 最近一条必须是带 created_at 的完整 ISO 时间
+    latest = items[-1]
+    assert latest["created_at"], "messages 必须返回 created_at"
+    parsed = datetime.fromisoformat(latest["created_at"].replace("Z", "+00:00"))
+    assert (datetime.now(parsed.tzinfo) - parsed).total_seconds() < 120
+
+
 async def test_sender_can_recall_and_content_is_cleared(
     client, customer_token, db_session
 ):

@@ -78,6 +78,8 @@ class MessageOut(BaseModel):
     # 撤回 / 编辑：前端据此显示「已撤回」「已编辑」
     recalled_at: datetime | None = None
     edited_at: datetime | None = None
+    # 发送时间：前端靠它判断「是否还在 2 分钟撤回/15 分钟编辑窗口内」
+    created_at: datetime | None = None
 
 
 class ReadReceiptRequest(BaseModel):

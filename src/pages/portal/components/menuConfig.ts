@@ -21,12 +21,13 @@ export interface PortalMenuItem {
 
 export const BUYER_MENU: PortalMenuItem[] = [
   { key: 'overview', label: '概览', href: '/portal', exact: true },
+  // 「消息」紧跟在概览下面：它是买家最高频的入口之一，放最后一项要滑到底
+  { key: 'messages', label: '消息', href: '/portal/messages' },
   { key: 'orders', label: '我的订单', href: '/portal/orders' },
   { key: 'cart', label: '购物车', href: '/portal/cart' },
   { key: 'favorites', label: '我的收藏', href: '/portal/favorites' },
   { key: 'reviews', label: '我的评价', href: '/portal/reviews' },
   { key: 'addresses', label: '收货地址', href: '/portal/addresses' },
-  { key: 'messages', label: '消息', href: '/portal/messages' },
 ];
 
 export const SELLER_MENU: PortalMenuItem[] = [
@@ -36,6 +37,8 @@ export const SELLER_MENU: PortalMenuItem[] = [
     href: '/portal/seller',
     exact: true,
   },
+  // 与买家中心保持同一顺序：消息紧跟在概览下面
+  { key: 'seller-messages', label: '消息', href: '/portal/seller/messages' },
   {
     key: 'seller-products',
     label: '我的商品',
@@ -48,7 +51,6 @@ export const SELLER_MENU: PortalMenuItem[] = [
     href: '/portal/seller/favorites',
   },
   { key: 'seller-reviews', label: '我的评价', href: '/portal/seller/reviews' },
-  { key: 'seller-messages', label: '消息', href: '/portal/seller/messages' },
 ];
 
 /**

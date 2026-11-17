@@ -48,6 +48,19 @@ import {
 import type { ConversationRecord, MessageRecord } from '@/services/im/types';
 import { uploadAttachment } from '@/services/system/api';
 
+// 与后端 `services/im.py` 的窗口保持一致：撤回 2 分钟、编辑 15 分钟。
+// 前端只负责「超时就不展示按钮」，真正的判定仍以服务端为准。
+const RECALL_WINDOW_MS = 2 * 60 * 1000;
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/** 消息是否还在允许操作的时间窗内；没有 `created_at`（老数据）时保守地当作超时。 */
+function withinWindow(createdAt: string | null | undefined, windowMs: number) {
+  if (!createdAt) return false;
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return false;
+  return Date.now() - created <= windowMs;
+}
+
 const EMOJIS = [
   '😀',
   '😄',
@@ -172,6 +185,16 @@ export default function ImChat({
 
   const unreadOf = (item: ConversationRecord) =>
     mode === 'seller' ? item.seller_unread_count : item.buyer_unread_count;
+
+  /** 2 分钟内才能撤回（超时不显示按钮） */
+  const canRecall = (item: MessageRecord) =>
+    !item.recalled_at && withinWindow(item.created_at, RECALL_WINDOW_MS);
+
+  /** 15 分钟内、且只能编辑文本消息 */
+  const canEdit = (item: MessageRecord) =>
+    item.type === 'text' &&
+    !item.recalled_at &&
+    withinWindow(item.created_at, EDIT_WINDOW_MS);
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['im-messages'] });
@@ -426,7 +449,9 @@ export default function ImChat({
                           {item.content}
                         </div>
                       )}
-                      {mine && !item.recalled_at ? (
+                      {mine &&
+                      !item.recalled_at &&
+                      (canEdit(item) || canRecall(item)) ? (
                         <Space
                           size={4}
                           style={{
@@ -434,7 +459,7 @@ export default function ImChat({
                             display: 'flex',
                           }}
                         >
-                          {item.type === 'text' ? (
+                          {item.type === 'text' && canEdit(item) ? (
                             <Button
                               size="small"
                               type="link"
@@ -448,31 +473,35 @@ export default function ImChat({
                               编辑
                             </Button>
                           ) : null}
-                          <Popconfirm
-                            title="撤回这条消息？"
-                            description="2 分钟内可撤回，撤回后双方都看不到内容"
-                            onConfirm={async () => {
-                              try {
-                                await recallMessage(item.id);
-                                message.success('已撤回');
-                                refreshAll();
-                              } catch (error) {
-                                message.error(
-                                  (error as Error)?.message || '撤回失败',
-                                );
-                              }
-                            }}
-                          >
-                            <Button
-                              size="small"
-                              type="link"
-                              danger
-                              icon={<RollbackOutlined />}
-                              data-testid={`im-recall-${item.id}`}
+                          {/* 撤回只在 2 分钟窗口内出现：超时后不显示按钮，
+                              避免“点了才报错”的交互（服务端仍有同样校验兜底） */}
+                          {canRecall(item) ? (
+                            <Popconfirm
+                              title="撤回这条消息？"
+                              description="2 分钟内可撤回，撤回后双方都看不到内容"
+                              onConfirm={async () => {
+                                try {
+                                  await recallMessage(item.id);
+                                  message.success('已撤回');
+                                  refreshAll();
+                                } catch (error) {
+                                  message.error(
+                                    (error as Error)?.message || '撤回失败',
+                                  );
+                                }
+                              }}
                             >
-                              撤回
-                            </Button>
-                          </Popconfirm>
+                              <Button
+                                size="small"
+                                type="link"
+                                danger
+                                icon={<RollbackOutlined />}
+                                data-testid={`im-recall-${item.id}`}
+                              >
+                                撤回
+                              </Button>
+                            </Popconfirm>
+                          ) : null}
                         </Space>
                       ) : null}
                     </div>
