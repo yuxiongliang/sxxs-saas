@@ -281,9 +281,24 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 
 ---
 
-## 14. 待确认：可清理的历史记忆
+## 14. 记忆库整理记录
 
-记忆库有 186 条，其中相当一部分是「计划稿」或与后来实现冲突（例：多份 masonry 列数、
-多份 push 策略、多份 stale chunk）。**清理属不可逆操作，等你确认后再删**。候选：
-`*_plan_*`、`*_constraints_plan`、重复的 `utoopack_stale_chunk_*`、`masonry_*`（保留一条）、
-`*_decisions_plan` 类被实现覆盖的条目。
+**186 → 132 条**（删 54，均为被实现覆盖的计划稿、重复结论、已修复的缺陷记录）。
+
+删除范围（保留每类最新一条）：
+
+- `*_plan_*` / `*_constraints_plan` / `*_decisions_plan`（已被实现覆盖）
+- `utoopack_stale_chunk_*` ×3 → 保留 `utoopack_dev_server_stale_chunk_loading_forever`
+- `masonry_*` ×3 → 保留 `masonry_fixed_columns_keep_empty_slots_and_detail_tabs_related_rail`
+- `push/commit` 策略 ×4 → 保留 `never_auto_commit_wait_user_then_commit_and_push`（规则本尊在 `CLAUDE.md`）
+- `husky_*` ×3 → 保留 `husky_v9_hook_*`
+- `verify_*` / `green_check_*` ×5 → 保留 `verify_environment_live_and_import_ok_is_not_proof`
+  + `reprobe_ports_and_accounts_same_turn_before_claiming_them`
+- 通知模板/scope ×4 → 保留 `notification_scope_three_tiers_*`
+  + `sxxs_notification_templates_scope_brand_ownership_and_variable_guard`
+- 设置继承 ×3 → 保留 `sxxs_setting_inheritance_four_level_priority_secret_masking`
+- 阶段完成总结（b3/b5/session_handoff/早期模板总结）→ 已被本篇取代
+- 已修复缺陷记录（品牌头未接线、多规格 gap、模拟通知链、假 Tab）→ 删
+
+**保留什么**：跨轮次仍有效的**决策/不变量**、可复用的**判别口诀**、以及容易重犯的**工程坑**。
+新会话先用 `memory_search` 或直接读本篇，不要重复摸索。
