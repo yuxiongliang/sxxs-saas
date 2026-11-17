@@ -369,7 +369,7 @@ const PlatformTenantsPage: React.FC = () => {
             <Input placeholder="Acme Marketplace" />
           </Form.Item>
           <Form.Item
-            label="Slug"
+            label="访问标识（slug）"
             name="slug"
             rules={[
               {

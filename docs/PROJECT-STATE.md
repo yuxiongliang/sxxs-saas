@@ -205,6 +205,10 @@ pm2 start ecosystem.config.js     # sxxs-api + sxxs-jobs
 
 **只服务单页但可能复用的**：抽到该页 `components/` 下，并在 commit 说明里标注「可提升」。
 
+**跨端同一件事必须同一套说法**：配置字段中文名（「运行环境」「App ID」等）以租户控制台
+`src/pages/system/settings/*` 为准；平台端动态表单走 `apps/platform/src/pages/services/configLabels.ts`，
+两边不能各叫一个名字。
+
 ---
 
 ## 10. 测试与验证矩阵
@@ -256,6 +260,7 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | `response_model` 吞字段 | Pydantic 按模型裁字段 | 新字段要么进模型，要么用 `dict` |
 | 迁移里的部分唯一索引 | autogenerate 看不见 | 幂等改应用层"先查后插" |
 | 后端改了变量遮蔽 | `hold_days = await hold_days(...)` | 局部变量别与函数同名 |
+| 后台出现英文标签/菜单 | ① 动态表单直接拿配置 key 当 label；② 平台侧边栏按路由 name 查词表，缺**裸 key** | **动态表单必须过词表**（`apps/platform/src/pages/services/configLabels.ts`）；**平台 locale 里裸 key 与 `menu.*` 两种都要写** |
 
 ---
 

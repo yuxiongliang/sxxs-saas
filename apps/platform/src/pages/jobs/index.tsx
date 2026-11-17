@@ -187,7 +187,7 @@ export default function PlatformJobsPage() {
     >
       <Card>
         <Descriptions column={3} size="small" style={{ marginBottom: 16 }}>
-          <Descriptions.Item label="Worker">
+          <Descriptions.Item label="任务进程（Worker）">
             {alive ? (
               <Tag color="green">在线</Tag>
             ) : (

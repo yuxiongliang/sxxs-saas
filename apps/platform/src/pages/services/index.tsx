@@ -23,6 +23,11 @@ import {
   platformSettingImpact,
   savePlatformSetting,
 } from '@/services/api';
+import {
+  CONFIG_FIELD_HINTS,
+  configFieldLabel,
+  configGroupLabel,
+} from './configLabels';
 
 const CATEGORIES = [
   {
@@ -76,27 +81,31 @@ function isSecret(key: string): boolean {
  *   布尔 → Switch、数字 → InputNumber、密钥类 → 密码框、其余 → Input、对象 → 分组递归。
  */
 function ConfigFields({ path, value }: { path: string[]; value: unknown }) {
-  const label = path[path.length - 1];
+  // key 用来判断"是不是密钥"，label 用来显示 —— 两者不能混：
+  // 拿中文去匹配 secret 关键字，密码框就失效了
+  const key = path[path.length - 1];
+  const label = configFieldLabel(key);
+  const hint = CONFIG_FIELD_HINTS[key];
   const name = ['config', ...path];
 
   if (typeof value === 'boolean') {
     return (
-      <Form.Item name={name} label={label} valuePropName="checked">
+      <Form.Item name={name} label={label} valuePropName="checked" extra={hint}>
         <Switch />
       </Form.Item>
     );
   }
   if (typeof value === 'number') {
     return (
-      <Form.Item name={name} label={label}>
+      <Form.Item name={name} label={label} extra={hint}>
         <InputNumber style={{ width: 200 }} />
       </Form.Item>
     );
   }
   if (typeof value === 'string') {
     return (
-      <Form.Item name={name} label={label}>
-        {isSecret(label) ? (
+      <Form.Item name={name} label={label} extra={hint}>
+        {isSecret(key) ? (
           <Input.Password
             autoComplete="new-password"
             placeholder="密钥类字段"
@@ -109,7 +118,11 @@ function ConfigFields({ path, value }: { path: string[]; value: unknown }) {
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return (
-      <Card size="small" title={label} style={{ marginBottom: 12 }}>
+      <Card
+        size="small"
+        title={configGroupLabel(key)}
+        style={{ marginBottom: 12 }}
+      >
         {Object.entries(value as Record<string, unknown>).map(
           ([key, child]) => (
             <ConfigFields key={key} path={[...path, key]} value={child} />
@@ -119,7 +132,7 @@ function ConfigFields({ path, value }: { path: string[]; value: unknown }) {
     );
   }
   return (
-    <Form.Item name={name} label={label}>
+    <Form.Item name={name} label={label} extra={hint}>
       <Input allowClear />
     </Form.Item>
   );

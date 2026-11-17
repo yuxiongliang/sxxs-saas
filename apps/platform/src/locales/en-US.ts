@@ -1,4 +1,7 @@
 export default {
+  jobs: 'Scheduled jobs',
+  platformSetting: 'Platform profile',
+  uploadSetting: 'Upload limits',
   audit: 'Platform Audit',
   notifications: 'Notifications',
   tenantManage: 'Tenants',

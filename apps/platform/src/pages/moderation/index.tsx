@@ -445,7 +445,7 @@ export default function ModerationPage() {
               render: (v: string) => new Date(v).toLocaleString('zh-CN'),
             },
             { title: '结论', dataIndex: 'decision' },
-            { title: 'provider', dataIndex: 'provider' },
+            { title: '服务商', dataIndex: 'provider' },
             { title: '来源', dataIndex: 'source' },
             { title: '耗时(ms)', dataIndex: 'elapsed_ms' },
             {
