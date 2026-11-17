@@ -33,6 +33,60 @@ test.describe('seller centre', () => {
     ).toBeVisible({ timeout: 30_000 });
   });
 
+  test('publishes a product through the same wizard as the console', async ({
+    page,
+  }) => {
+    /**
+     * 卖家中心的新建商品用的是**跟运营端编辑商品同一套四步向导**
+     * （类型 → 基础信息 → 规格 → 详情）。这条用例锁的就是「两边不要分叉」：
+     * 只要有人把卖家侧改回扁平表单，这里立刻挂。
+     */
+    await loginAs(page, OPERATOR);
+    await page
+      .goto('/portal/seller/products', { waitUntil: 'commit' })
+      .catch(() => undefined);
+    await page.waitForTimeout(4000);
+
+    await page.getByTestId('seller-create-product').click();
+    const modal = page.getByRole('dialog', { name: /新建商品/ }).first();
+    await expect(modal).toBeVisible({ timeout: 30_000 });
+
+    // 第 1 步：类型
+    await expect(modal.locator('.ant-steps-item-title')).toHaveCount(4);
+    await expect(modal.getByTestId('product-type-step')).toBeVisible();
+    await modal.getByTestId('product-editor-next').click();
+    await page.waitForTimeout(700);
+
+    // 第 2 步：基础信息（卖家侧没有「佣金比例」）
+    const name = `向导商品-${Date.now()}`;
+    await modal.locator('input#name').fill(name);
+    await expect(modal.getByText('卖家佣金比例（%）')).toHaveCount(0);
+    await modal.getByTestId('product-editor-next').click();
+    await page.waitForTimeout(700);
+
+    // 第 3 步：规格（默认单 SKU 的价格/库存）
+    await modal.getByTestId('spec-price-__default__').fill('12.5');
+    await modal.getByTestId('spec-stock-__default__').fill('7');
+    await modal.getByTestId('product-editor-next').click();
+    await page.waitForTimeout(900);
+
+    // 第 4 步：详情（富文本）
+    await expect(modal.getByTestId('rich-text-toolbar')).toBeVisible({
+      timeout: 20_000,
+    });
+
+    await page
+      .locator('button:has-text("保 存"), button:has-text("保存")')
+      .first()
+      .click();
+    await expect(modal).toBeHidden({ timeout: 30_000 });
+
+    // 新商品出现在列表里
+    await expect(page.getByText(name).first()).toBeVisible({
+      timeout: 20_000,
+    });
+  });
+
   test('buyer opening the seller centre gets no shop data', async ({
     page,
   }) => {

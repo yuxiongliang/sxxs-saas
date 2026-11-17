@@ -64,6 +64,11 @@ class SellerProductCreate(BaseModel):
     # 新建的商品永远没有主图，详情页只剩占位图。
     main_image: str | None = Field(default=None, max_length=512)
     video_url: str | None = Field(default=None, max_length=512)
+    # 描述：向导第 4 步填的就是这些。原来创建接口没有这三个字段，
+    # 卖家在新建时写的详情会被**静默丢弃**（和之前「选了图不保存」同一类 bug）。
+    description: str | None = None
+    description_doc: dict | None = None
+    description_html: str | None = None
 
 
 class SellerProductUpdate(BaseModel):
@@ -77,6 +82,8 @@ class SellerProductUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
+    # 分类：向导第 2 步「基础信息」里有它，缺了卖家就改不了分类
+    category_id: int | None = None
     main_image: str | None = Field(default=None, max_length=512)
     video_url: str | None = Field(default=None, max_length=512)
     # 卖家也能用富文本描述（卖家是主要填写方）

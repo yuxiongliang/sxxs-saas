@@ -53,9 +53,40 @@ export async function createSellerProduct(data: {
   category_id?: number | null;
   main_image?: string;
   video_url?: string;
+  /** 向导第 4 步「详情」：不传就会被静默丢弃 */
+  description?: string;
+  description_doc?: Record<string, unknown>;
+  description_html?: string;
 }) {
   return unwrap<{ id: number; name: string; status: string }>(
     request('/api/v1/portal/seller/products', { method: 'POST', data }),
+  );
+}
+
+/** 卖家商品详情：编辑向导回显规格树与全部 SKU（与运营端同形状）。 */
+export async function getSellerProduct(id: number) {
+  return unwrap<ProductRecord>(
+    request(`/api/v1/portal/seller/products/${id}`, { method: 'GET' }),
+  );
+}
+
+/** 卖家保存规格树：在售商品改规格会重新过审。 */
+export async function saveSellerProductSpecs(
+  id: number,
+  data: ProductSpecsPayload,
+) {
+  return unwrap<{ id: number; status: string; bounced_to_review: boolean }>(
+    request(`/api/v1/portal/seller/products/${id}/specs`, {
+      method: 'PUT',
+      data,
+    }),
+  );
+}
+
+/** 卖家选分类：平台级分类，卖家只读（与运营端同一份数据）。 */
+export async function listSellerCategories() {
+  return unwrap<CategoryRecord[]>(
+    request('/api/v1/portal/seller/categories', { method: 'GET' }),
   );
 }
 
@@ -67,6 +98,9 @@ export async function updateSellerProduct(
     description?: string;
     main_image?: string;
     video_url?: string;
+    category_id?: number | null;
+    description_doc?: Record<string, unknown>;
+    description_html?: string;
     price_cents?: number;
     stock?: number;
     commission_bps?: number;
@@ -226,27 +260,34 @@ export async function unlockAdminProductCommission(id: number) {
   );
 }
 
+/**
+ * 规格树载荷。运营端和卖家端**必须是同一个形状** ——
+ * 保存规格的是同一个后端函数（catalog_specs.save_specs），
+ * 两边各写一份类型迟早会漂。
+ */
+export interface ProductSpecsPayload {
+  groups: Array<{
+    name: string;
+    values: Array<{
+      value: string;
+      image_url?: string | null;
+      video_url?: string | null;
+    }>;
+  }>;
+  skus: Array<{
+    specs: Record<string, string>;
+    price_cents?: number;
+    stock?: number;
+    image_url?: string | null;
+    video_url?: string | null;
+    status?: string;
+  }>;
+}
+
 /** 保存规格树：规格值做笛卡尔积生成 SKU（后端按组合键匹配，老组合保留价/库存）。 */
 export async function updateAdminProductSpecs(
   id: number,
-  data: {
-    groups: Array<{
-      name: string;
-      values: Array<{
-        value: string;
-        image_url?: string | null;
-        video_url?: string | null;
-      }>;
-    }>;
-    skus: Array<{
-      specs: Record<string, string>;
-      price_cents?: number;
-      stock?: number;
-      image_url?: string | null;
-      video_url?: string | null;
-      status?: string;
-    }>;
-  },
+  data: ProductSpecsPayload,
 ) {
   return unwrap<{ id: number; status: string; skus: ProductSkuRecord[] }>(
     request(`/api/v1/admin/products/${id}/specs`, { method: 'PUT', data }),

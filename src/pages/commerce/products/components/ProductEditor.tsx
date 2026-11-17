@@ -24,6 +24,7 @@ import AttachmentPicker from '@/components/AttachmentPicker';
 import MediaField from '@/components/MediaField';
 import type { RichTextValue } from '@/components/RichTextEditor';
 import RichTextEditor from '@/components/RichTextEditor';
+import type { ProductSpecsPayload } from '@/services/commerce/api';
 import {
   getAdminProduct,
   listAdminCategories,
@@ -33,7 +34,12 @@ import {
 } from '@/services/commerce/api';
 import type { CategoryRecord, ProductRecord } from '@/services/commerce/types';
 import { OPEN_PRODUCT_TYPES, PRODUCT_TYPE } from '@/utils/labels';
-import { buildCombos, comboKey, resolveMedia } from './specUtils';
+import {
+  buildCombos,
+  comboKey,
+  DEFAULT_KEY as DEFAULT_COMBO_KEY,
+  resolveMedia,
+} from './specUtils';
 
 /** 草稿里的规格组/规格值（带本地 key，便于增删） */
 interface DraftValue {
@@ -85,9 +91,59 @@ const STEP_LABELS: Record<string, string> = {
   detail: '详情',
 };
 
+/** 运营端适配器：控制台商品管理用的那一套接口 */
+const adminAdapter: ProductWizardAdapter = {
+  load: getAdminProduct,
+  categories: () => listAdminCategories(),
+  saveBasic: async (id, payload) => {
+    if (!id) throw new Error('运营端不支持在此新建商品');
+    await updateAdminProduct(id, payload);
+    return id;
+  },
+  saveSpecs: async (id, payload) => {
+    await updateAdminProductSpecs(id, payload);
+  },
+  unlockCommission: async (id) => {
+    await unlockAdminProductCommission(id);
+  },
+  showCommission: true,
+};
+
+/**
+ * 「谁能保存什么」的适配层。
+ *
+ * 运营端和卖家中心**共用同一套向导**（类型 → 基础信息 → 规格 → 详情），
+ * 差异只有三处：读哪个详情接口、存哪个接口、有没有佣金/解锁这种运营专属能力。
+ * 硬编码成运营接口的话，卖家中心只能复制 800 行再各自演化 —— 那才是真正的坑。
+ */
+export interface ProductWizardAdapter {
+  /** 编辑：加载详情（含 spec_groups / skus）。新建不需要 */
+  load?: (id: number) => Promise<ProductRecord>;
+  /** 分类下拉（平台级分类，两边同一份数据） */
+  categories: () => Promise<CategoryRecord[]>;
+  /**
+   * 保存基础资料：编辑传 id，新建返回新商品 id。
+   * 新建时返回的 id 会立刻用于保存规格。
+   */
+  saveBasic: (
+    id: number | undefined,
+    payload: Record<string, unknown>,
+  ) => Promise<number | undefined>;
+  /** 保存规格树 */
+  saveSpecs: (id: number, payload: ProductSpecsPayload) => Promise<void>;
+  /** 运营端专属：解除佣金锁定 */
+  unlockCommission?: (id: number) => Promise<void>;
+  /** 是否显示佣金比例（卖家侧没有这个概念） */
+  showCommission?: boolean;
+}
+
 interface ProductEditorProps {
   open: boolean;
   productId?: number;
+  /** create = 新建商品（卖家中心用），edit = 编辑（默认） */
+  mode?: 'create' | 'edit';
+  /** 不传则用运营端适配器 */
+  adapter?: ProductWizardAdapter;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -102,9 +158,15 @@ interface ProductEditorProps {
 export default function ProductEditor({
   open,
   productId,
+  mode = 'edit',
+  adapter,
   onClose,
   onSaved,
 }: ProductEditorProps) {
+  // 不传适配器 = 运营端（保持原来的调用方式不变）
+  const activeAdapter = adapter ?? adminAdapter;
+  const showCommission = activeAdapter.showCommission ?? false;
+  const isCreate = mode === 'create';
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
@@ -128,14 +190,27 @@ export default function ProductEditor({
     setStep(0);
     setProductType('physical');
     setPreviewOverride(undefined);
-    listAdminCategories()
+    // 新建没有商品可加载：必须直接把富文本标成「已就绪」，
+    // 否则第 4 步永远停在「加载中…」，卖家根本没地方写详情。
+    setRichLoaded(isCreate);
+    if (isCreate) {
+      setRichText(null);
+      setDetail(undefined);
+      setGroups([]);
+      setSkuDraft({});
+      form.resetFields();
+    }
+    activeAdapter
+      .categories()
       .then(setCategoryList)
       .catch(() => setCategoryList([]));
   }, [open]);
 
   useEffect(() => {
     if (!open || !productId) return;
-    getAdminProduct(productId)
+    if (!activeAdapter.load) return;
+    activeAdapter
+      .load(productId)
       .then((data) => {
         setDetail(data);
         // 编辑已有商品：类型只读展示（后端也不接受修改）
@@ -188,6 +263,7 @@ export default function ProductEditor({
         );
       })
       .catch((error: Error) => message.error(error.message));
+    // activeAdapter 是模块常量或父级稳定引用，不放进依赖避免每次渲染重拉
   }, [open, productId, form, message]);
 
   const combos = useMemo(() => buildCombos(groups), [groups]);
@@ -278,35 +354,20 @@ export default function ProductEditor({
   const handleUnlock = async () => {
     if (!productId) return;
     try {
-      await unlockAdminProductCommission(productId);
+      if (!activeAdapter.unlockCommission || !activeAdapter.load) return;
+      await activeAdapter.unlockCommission(productId);
       message.success('已解除锁定，卖家可自行修改佣金比例');
-      const data = await getAdminProduct(productId);
-      setDetail(data);
+      setDetail(await activeAdapter.load(productId));
     } catch (error) {
       message.error((error as Error).message);
     }
   };
 
   const handleSave = async () => {
-    if (!productId) return;
     try {
       const values = await form.validateFields();
       setSaving(true);
-      await updateAdminProduct(productId, {
-        name: values.name,
-        description: values.description,
-        category_id: values.category_id ?? null,
-        main_image: values.main_image ?? '',
-        // 视频以前根本没传，选了也白选 —— 现在一并保存
-        video_url: values.video_url ?? '',
-        // 富文本：doc 是真身，html 交给服务端用 nh3 重新清洗后落库
-        ...(richText
-          ? { description_doc: richText.doc, description_html: richText.html }
-          : {}),
-        ...(typeof values.commission_percent === 'number'
-          ? { commission_bps: Math.round(values.commission_percent * 100) }
-          : {}),
-      });
+
       const usableGroups = groups
         .filter(
           (group) =>
@@ -322,7 +383,7 @@ export default function ProductEditor({
               video_url: value.video_url ?? null,
             })),
         }));
-      await updateAdminProductSpecs(productId, {
+      const specsPayload: ProductSpecsPayload = {
         groups: usableGroups,
         skus: combos.map((combo) => {
           const draft = skuDraft[comboKey(combo)];
@@ -336,14 +397,55 @@ export default function ProductEditor({
             video_url: draft?.video_url ?? null,
           };
         }),
-      });
-      message.success('商品已保存');
+      };
+
+      // 新建时后端要求一个"起售价/库存"（先建一条默认 SKU，随后由规格保存覆盖），
+      // 取第一个填了价格的组合；一个都没填说明用户还没走到规格步。
+      const defaultDraft =
+        skuDraft[DEFAULT_COMBO_KEY] ??
+        Object.values(skuDraft).find((draft) => Number(draft?.price_yuan) > 0);
+      if (isCreate && !(Number(defaultDraft?.price_yuan) > 0)) {
+        message.warning('请先在「规格」步骤填写价格');
+        setStep(steps.indexOf('specs'));
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        name: values.name,
+        description: values.description,
+        category_id: values.category_id ?? null,
+        main_image: values.main_image ?? '',
+        // 视频以前根本没传，选了也白选 —— 现在一并保存
+        video_url: values.video_url ?? '',
+        // 富文本：doc 是真身，html 交给服务端用 nh3 重新清洗后落库
+        ...(richText
+          ? { description_doc: richText.doc, description_html: richText.html }
+          : {}),
+        ...(showCommission && typeof values.commission_percent === 'number'
+          ? { commission_bps: Math.round(values.commission_percent * 100) }
+          : {}),
+        ...(isCreate
+          ? {
+              product_type: productType,
+              price_cents: Math.round(Number(defaultDraft?.price_yuan) * 100),
+              stock: Number(defaultDraft?.stock ?? 0),
+            }
+          : {}),
+      };
+
+      // 先落基础资料（新建时拿到 id），再整体保存规格树
+      const savedId = await activeAdapter.saveBasic(productId, payload);
+      const targetId = savedId ?? productId;
+      if (!targetId) throw new Error('商品保存失败：未拿到商品 ID');
+      await activeAdapter.saveSpecs(targetId, specsPayload);
+
+      message.success(isCreate ? '商品已提交审核' : '商品已保存');
       onSaved();
       onClose();
     } catch (error) {
       if ((error as { errorFields?: unknown }).errorFields) {
         // 必填项都在「基础信息」：跳回去，但别跳回类型步
-        setStep(1);
+        setStep(steps.indexOf('basic'));
         return;
       }
       message.error((error as Error).message);
@@ -362,7 +464,7 @@ export default function ProductEditor({
 
   return (
     <Modal
-      title="编辑商品"
+      title={isCreate ? '新建商品' : '编辑商品'}
       open={open}
       onCancel={onClose}
       width={960}
@@ -483,18 +585,26 @@ export default function ProductEditor({
               }))}
             />
           </Form.Item>
-          <Form.Item
-            label="卖家佣金比例（%）"
-            name="commission_percent"
-            extra={
-              detail?.commission_locked
-                ? '该比例已被运营调整并锁定，保存后卖家不自行修改；需要放开请点下方「解除锁定」'
-                : '默认继承分类比例；填了就以这里为准（下限 1%）。卖家自己也能改'
-            }
-          >
-            <InputNumber min={1} max={100} step={0.5} style={{ width: 220 }} />
-          </Form.Item>
-          {detail?.commission_locked ? (
+          {/* 佣金是运营端概念：卖家中心不显示（后端也会忽略这个字段） */}
+          {showCommission ? (
+            <Form.Item
+              label="卖家佣金比例（%）"
+              name="commission_percent"
+              extra={
+                detail?.commission_locked
+                  ? '该比例已被运营调整并锁定，保存后卖家不自行修改；需要放开请点下方「解除锁定」'
+                  : '默认继承分类比例；填了就以这里为准（下限 1%）。卖家自己也能改'
+              }
+            >
+              <InputNumber
+                min={1}
+                max={100}
+                step={0.5}
+                style={{ width: 220 }}
+              />
+            </Form.Item>
+          ) : null}
+          {showCommission && detail?.commission_locked ? (
             <Space style={{ marginBottom: 16 }}>
               <Tag color="orange">已锁定</Tag>
               <Button size="small" onClick={handleUnlock}>
@@ -682,6 +792,7 @@ export default function ProductEditor({
                         min={0.01}
                         step={1}
                         style={{ width: '100%' }}
+                        data-testid={`spec-price-${key}`}
                         value={skuDraft[key]?.price_yuan ?? 0}
                         onChange={(value) =>
                           setSkuDraft((prev) => ({
@@ -707,6 +818,7 @@ export default function ProductEditor({
                       <InputNumber
                         min={0}
                         style={{ width: '100%' }}
+                        data-testid={`spec-stock-${key}`}
                         value={skuDraft[key]?.stock ?? 0}
                         onChange={(value) =>
                           setSkuDraft((prev) => ({

@@ -4,12 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_context, get_db, require_permission
 from app.core.response import ok
 from app.schemas.commerce import (
+    ProductSpecsUpdate,
+    ProductSpecsUpdate,
     SellerApplyRequest,
     SellerProductCreate,
     SellerProductStatusRequest,
     SellerProductUpdate,
     SellerShipRequest,
 )
+from app.services import category as category_service
 from app.services import seller_center as seller_service
 from app.services.auth import AuthContext
 
@@ -100,6 +103,44 @@ async def seller_products(
     db: AsyncSession = Depends(get_db),
 ):
     return ok(await seller_service.seller_products(db, context, product_type))
+
+
+@router.get("/categories")
+async def seller_categories(
+    keyword: str | None = Query(default=None, max_length=64),
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家选分类用：分类是**平台统一定的**，卖家/租户都只读。
+
+    和 `GET /admin/categories` 同一份数据、同一个形状 —— 编辑向导是同一套组件，
+    少一处就要在前端写分支。
+    """
+    return ok(
+        await category_service.list_categories(db, include_archived=False, keyword=keyword)
+    )
+
+
+@router.get("/products/{product_id}")
+async def seller_product_detail(
+    product_id: int,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家商品详情（编辑向导回显：规格树 + 全部 SKU）。"""
+    return ok(await seller_service.seller_product_detail(db, context, product_id))
+
+
+@router.put("/products/{product_id}/specs")
+async def save_seller_product_specs(
+    product_id: int,
+    payload: ProductSpecsUpdate,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家保存规格：笛卡尔积生成 SKU；在售商品改规格会重新过审。"""
+    result = await seller_service.save_seller_product_specs(db, context, product_id, payload)
+    return ok(result, "规格已保存")
 
 
 @router.put("/products/{product_id}")

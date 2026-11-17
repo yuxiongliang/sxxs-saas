@@ -449,6 +449,36 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 第 1 步固定是「类型」，后续步骤由类型决定。以后开放虚拟/知识付费时，只是在这里加一行
 （它们显然不需要「规格/库存」这些步骤），不用重写组件。
 
+## 商品编辑器（一套向导，两端复用）
+
+`ProductEditor` 是**运营端与卖家中心共用的四步向导**：类型 → 基础信息 → 规格 → 详情。
+
+### 适配层：为什么不是各写一份
+
+组件里不直接调接口，而是通过 `ProductWizardAdapter`：
+
+| 能力            | 运营端                           | 卖家中心                                 |
+| --------------- | -------------------------------- | ---------------------------------------- |
+| `load`          | `GET /admin/products/{id}`       | `GET /portal/seller/products/{id}`       |
+| `categories`    | `GET /admin/categories`          | `GET /portal/seller/categories`          |
+| `saveBasic`     | `PUT /admin/products/{id}`       | `POST/PUT /portal/seller/products`       |
+| `saveSpecs`     | `PUT /admin/products/{id}/specs` | `PUT /portal/seller/products/{id}/specs` |
+| 佣金比例 / 解锁 | 有                               | **无**（`showCommission` 不传）          |
+
+卖家详情的返回形状**必须与运营端一致**（含 `spec_groups` + `skus`），少一个字段就要在前端写分支，早晚两边走样。
+
+### 两端的差异真的只有一个
+
+**卖家改规格会重新过审**（`save_seller_product_specs` 把 `on_sale` 打回 `pending_review`），
+运营端保存不回退（那是内部纠错）。
+
+### 新建模式的三11个坑
+
+- 没有商品可加载，`richLoaded` 必须直接置 true，否则第 4 步永远停在「加载中…」
+- 后端建商品要有起售价/库存，取规格步第一个填了价格的组合（随后由规格保存覆盖）
+- 卖家创建接口原来**没有描述字段**，向导第 4 步写了会被静默丢弃 —— 已补 `description/_doc/_html`
+- 页面上同时挂着「新建」与「编辑」两个向导（`forceRender`），e2e 里 testid 必须限定在弹窗内
+
 ## 商品富文本描述（Tiptap v3）
 
 商品编辑弹窗是四步：**类型 → 基础信息 → 规格 → 详情**，详情步骤里是 Tiptap 富文本编辑器。

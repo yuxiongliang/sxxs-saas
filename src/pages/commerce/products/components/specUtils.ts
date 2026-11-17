@@ -20,7 +20,7 @@ export interface SpecGroupLike {
 /** {规格组名: 规格值} */
 export type Combo = Record<string, string>;
 
-const DEFAULT_KEY = '__default__';
+export const DEFAULT_KEY = '__default__';
 
 /** 笛卡尔积：每个组合是一个 SKU。没有可用规格时返回 `[{}]`（单规格商品）。 */
 export function buildCombos(groups: SpecGroupLike[]): Combo[] {

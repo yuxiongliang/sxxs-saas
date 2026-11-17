@@ -9,13 +9,14 @@ from app.models.catalog import InventoryLog, Product, ProductSku
 from app.models.order import OrderItem, SellerOrder, Shipment
 from app.models.seller import Seller, SellerMember, Shop
 from app.schemas.commerce import (
+    ProductSpecsUpdate,
     SellerProductCreate,
     SellerProductStatusRequest,
     SellerProductUpdate,
 )
 from app.services import attachment as attachment_service
 from app.services import audit as audit_service
-from app.services import catalog_stats, rich_text
+from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services.auth import AuthContext
@@ -107,6 +108,110 @@ async def _own_product(db: AsyncSession, context: AuthContext, product_id: int) 
     return product
 
 
+async def seller_product_detail(
+    db: AsyncSession, context: AuthContext, product_id: int
+) -> dict:
+    """卖家看自己商品的详情（含规格树与全部 SKU）。
+
+    与运营端 `GET /admin/products/{id}` **同一个形状**：编辑向导是同一套组件，
+    少一个字段就要在前端写分支，迟早两边走样。
+    """
+    product = await _own_product(db, context, product_id)
+    skus = list(
+        (
+            await db.scalars(
+                select(ProductSku)
+                .where(ProductSku.product_id == product.id)
+                .order_by(ProductSku.id)
+            )
+        ).all()
+    )
+    return {
+        "id": product.id,
+        "seller_id": product.seller_id,
+        "shop_id": product.shop_id,
+        "category_id": product.category_id,
+        "name": product.name,
+        "product_type": product.product_type,
+        "description": product.description,
+        "description_format": product.description_format,
+        "description_doc": product.description_doc,
+        "description_html": product.description_html,
+        "status": product.status,
+        "main_image": product.main_image,
+        "images": product.images or [],
+        "video_url": product.video_url,
+        "reject_reason": product.reject_reason,
+        "commission_bps": product.commission_bps,
+        "commission_locked": bool(product.commission_locked),
+        "spec_groups": await catalog_specs.load_spec_groups(db, product.id),
+        "skus": [
+            {
+                "id": sku.id,
+                "sku_code": sku.sku_code,
+                "name": sku.name,
+                "price_cents": sku.price_cents,
+                "stock": sku.stock,
+                "locked_stock": sku.locked_stock,
+                "status": sku.status,
+                "specs": sku.specs or {},
+                "image_url": sku.image_url,
+                "video_url": sku.video_url,
+            }
+            for sku in skus
+        ],
+    }
+
+
+async def save_seller_product_specs(
+    db: AsyncSession, context: AuthContext, product_id: int, payload: ProductSpecsUpdate
+) -> dict:
+    """卖家改自己的规格树。
+
+    和运营端的差别只有一处，但很关键：**卖家改规格要重新过审**。
+    运营端保存不回退状态（那是内部纠错），卖家保存属于「卖的东西变了」，
+    不退审就等于先过审再换货。
+    """
+    product = await _own_product(db, context, product_id)
+    skus = await catalog_specs.save_specs(db, product, payload, context.tenant.id)
+    bounced = False
+    if product.status == "on_sale":
+        product.status = "pending_review"
+        product.reject_reason = None
+        bounced = True
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_UPDATED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product_specs",
+        target_id=product.id,
+        before=None,
+        after={
+            "groups": ",".join(group.name for group in payload.groups),
+            "sku_count": str(len(skus)),
+            "bounced_to_review": str(bounced),
+        },
+    )
+    await db.commit()
+    await db.refresh(product)
+    return {
+        "id": product.id,
+        "status": product.status,
+        "bounced_to_review": bounced,
+        "skus": [
+            {
+                "id": sku.id,
+                "price_cents": sku.price_cents,
+                "stock": sku.stock,
+                "status": sku.status,
+                "specs": sku.specs or {},
+            }
+            for sku in skus
+        ],
+    }
+
+
 async def update_seller_product(
     db: AsyncSession, context: AuthContext, product_id: int, payload: SellerProductUpdate
 ) -> dict:
@@ -118,7 +223,14 @@ async def update_seller_product(
         if media_key in data and not data[media_key]:
             data[media_key] = None
 
-    content_changed = False
+    # 分类变更也算内容变更（换分类等于换展示位，必须重新过审）
+    category_changed = False
+    if "category_id" in data and data["category_id"] != product.category_id:
+        await category_service.ensure_category_usable(db, data["category_id"])
+        product.category_id = data["category_id"]
+        category_changed = True
+
+    content_changed = category_changed
     for key in ("name", "description", "main_image", "video_url"):
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
@@ -301,6 +413,17 @@ async def create_seller_product(
         status="pending_review",
         created_by=context.user.id,
     )
+    # 描述：纯文本兜底 + 富文本（服务端重新清洗后落库，和运营端同一条口径）
+    if payload.description:
+        product.description = payload.description
+    if payload.description_doc or payload.description_html:
+        doc, html, text = rich_text.prepare_payload(
+            payload.description_doc, payload.description_html
+        )
+        product.description_doc = doc
+        product.description_html = html
+        product.description_text = text
+        product.description_format = "doc"
     db.add(product)
     await db.flush()
     # 主图/视频是给匿名买家看的，引用的附件必须发布
