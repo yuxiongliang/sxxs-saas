@@ -18,7 +18,7 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import { listPortalOrders, mockPayPortalOrder } from '@/services/commerce/api';
-import PortalShell from '../components/PortalShell';
+import PortalPlainShell from '../components/PortalPlainShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 
@@ -87,7 +87,7 @@ const PaymentResultPage: React.FC = () => {
   };
 
   return (
-    <PortalShell title="支付结果" maxWidth={880}>
+    <PortalPlainShell title="支付结果">
       <Spin spinning={isLoading}>
         <Card>
           {!order && !isLoading ? (
@@ -155,7 +155,7 @@ const PaymentResultPage: React.FC = () => {
           )}
         </Card>
       </Spin>
-    </PortalShell>
+    </PortalPlainShell>
   );
 };
 

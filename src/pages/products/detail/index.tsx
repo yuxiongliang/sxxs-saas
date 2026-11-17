@@ -246,7 +246,11 @@ export default function ProductDetailPage() {
               </Col>
               <Col xs={24} md={9} lg={10}>
                 <Card>
-                  <Typography.Title level={3} style={{ marginTop: 0 }}>
+                  <Typography.Title
+                    level={3}
+                    style={{ marginTop: 0 }}
+                    data-testid="product-detail-title"
+                  >
                     {data.name}
                   </Typography.Title>
                   <Space

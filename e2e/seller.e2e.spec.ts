@@ -9,18 +9,28 @@ import { CUSTOMER, loginAs, OPERATOR } from './helpers/auth';
 test.describe('seller centre', () => {
   test('shop owner sees their shop and products', async ({ page }) => {
     await loginAs(page, OPERATOR);
-    await page.goto('/seller');
+    // 卖家中心已改成「侧栏 + 子页面」：概览看店铺，商品列表在 /products
+    await page.goto('/portal/seller');
 
-    // The seller centre is a standalone page (layout:false) with a header.
-    await expect(page.getByText(/我的商品/).first()).toBeVisible({
+    // 侧栏导航（买家中心/卖家中心是两套独立侧栏）
+    const sider = page.locator('.portal-sider');
+    await expect(sider).toBeVisible({ timeout: 30_000 });
+    await expect(sider.getByText('我的商品')).toBeVisible();
+    await expect(sider.getByText('我的评价')).toBeVisible();
+
+    // 概览页：店铺信息
+    await expect(page.getByText(/店铺：/).first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText(/我的店铺|店铺/).first()).toBeVisible({
-      timeout: 30_000,
+
+    // 商品子页：新增商品入口（从概览不能断言它，已经拆成独立页面）
+    await sider.getByText('我的商品').click();
+    await expect(page).toHaveURL(/\/portal\/seller\/products/, {
+      timeout: 20_000,
     });
     await expect(
       page.getByRole('button', { name: /发布商品|新增商品/ }).first(),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test('buyer opening the seller centre gets no shop data', async ({

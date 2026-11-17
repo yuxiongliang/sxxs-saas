@@ -500,6 +500,33 @@ covered by `test_users_management.py::test_role_change_invalidates_cached_permis
 否则上层 `onChange → setValue → useEffect` 会误判为外部变化并 `setContent`，
 表现为「打一个字就被重置」，doc 会被切成好几段（e2e 就是这发现的）。
 
+### 用户中心：两套独立侧栏（买家中心 / 卖家中心）
+
+买家中心与卖家中心是**两个独立页面**，各自一整套左侧导航；但**共用一个布局组件**：
+
+| 组件                                       | 作用                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `portal/components/PortalLayout.tsx`       | 纯布局：顶栏（Logo / 购物车 / 用户名）+ 侧栏 + 内容区；小屏侧栏收进 Drawer                   |
+| `portal/components/menuConfig.ts`          | `BUYER_MENU` / `SELLER_MENU` + `activeMenuKey()`（**最长路径前缀**匹配，`exact` 标记概览页） |
+| `portal/components/PortalShell.tsx`        | **买家中心外壳**（保留旧名字，7 个买家页面一行未改）                                         |
+| `portal/seller/components/SellerShell.tsx` | **卖家中心外壳**：侧栏 + 开店态守卫（未开店/审核中时侧栏只剩一项）                           |
+| `portal/components/PortalPlainShell.tsx`   | 精简壳（无侧栏），给 `payment-result` —— 流程结束页不该挂侧栏                                |
+
+路由：
+
+```
+/portal                    概览       /portal/seller            店铺概览
+/portal/orders             我的订单    /portal/seller/products   我的商品
+/portal/cart               购物车      /portal/seller/orders     我的订单
+/portal/favorites          我的收藏    /portal/seller/favorites  商品收藏
+/portal/reviews            我的评价    /portal/seller/reviews    我的评价
+/portal/addresses          收货地址
+/portal/payment-result     支付结果（无侧栏）
+```
+
+**卖家中心从「单页 4 Tabs」拆成 5 个真实路由**：侧栏要高亮/可深链，Tabs 与侧栏并存会出现两套导航。
+跨中心入口：买家侧栏底部「卖家中心」→ `/portal/seller`；卖家侧栏底部「返回买家中心」→ `/portal`。
+
 ## 买家 shopping (portal)
 
 ### 商品列表筛选与排序（`/products`）

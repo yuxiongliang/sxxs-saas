@@ -1,95 +1,107 @@
-import {
-  CommentOutlined,
-  EnvironmentOutlined,
-  ProfileOutlined,
-  ShopOutlined,
-  ShoppingCartOutlined,
-  StarOutlined,
-} from '@ant-design/icons';
-import { Card, Col, Row, Typography } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useModel } from '@umijs/max';
+import { Card, Col, Empty, Row, Statistic, Table, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { listMyFavorites, listPortalOrders } from '@/services/commerce/api';
+import type { PortalOrder } from '@/services/commerce/types';
 import PortalShell from './components/PortalShell';
 
-const { Text } = Typography;
-
 /**
- * 买家个人中心首页。
+ * 买家中心 · 概览。
  *
- * 按需求：这里只做「个人中心 + 卖家管理」的入口聚合，**不再提供商品浏览入口**；
- * 逛商品与商品详情已迁到站点前台 /products。
+ * 侧栏已经能把人带到每个页面，所以这里**不再放 6 张重复的入口卡**，
+ * 只给「一眼看清账号状态」的三样东西：数字块、最近订单、待评价提醒。
  */
-const ENTRIES = [
-  {
-    key: 'orders',
-    title: '我的订单',
-    desc: '查看订单状态、支付与确认收货',
-    href: '/portal/orders',
-    icon: <ProfileOutlined />,
-  },
-  {
-    key: 'cart',
-    title: '购物车',
-    desc: '结算已挑选的商品',
-    href: '/portal/cart',
-    icon: <ShoppingCartOutlined />,
-  },
-  {
-    key: 'addresses',
-    title: '收货地址',
-    desc: '管理常用收货地址',
-    href: '/portal/addresses',
-    icon: <EnvironmentOutlined />,
-  },
-  {
-    key: 'favorites',
-    title: '我的收藏',
-    desc: '收藏过的商品，随时回头看',
-    href: '/portal/favorites',
-    icon: <StarOutlined />,
-  },
-  {
-    key: 'reviews',
-    title: '我的评价',
-    desc: '评价买过的商品，查看卖家回复',
-    href: '/portal/reviews',
-    icon: <CommentOutlined />,
-  },
-  {
-    key: 'seller',
-    title: '卖家中心',
-    desc: '店铺、商品、订单与结算',
-    href: '/portal/seller',
-    icon: <ShopOutlined />,
-  },
-];
-
 export default function PortalCenterPage() {
+  const { initialState } = useModel('@@initialState');
+  const orders = useQuery({
+    queryKey: ['portal-orders'],
+    queryFn: listPortalOrders,
+  });
+  const favorites = useQuery({
+    queryKey: ['my-favorites'],
+    queryFn: listMyFavorites,
+  });
+
+  const list = orders.data ?? [];
+  const toPay = list.filter((item) => item.status === 'pending_payment').length;
+  const toReview = list.filter((item) => item.status === 'completed').length;
+
+  const columns: ColumnsType<PortalOrder> = [
+    { title: '订单号', dataIndex: 'order_no' },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (v: string) => <Tag>{v}</Tag>,
+    },
+    {
+      title: '金额',
+      dataIndex: 'total_amount_cents',
+      render: (v: number) => `¥${(v / 100).toFixed(2)}`,
+    },
+  ];
+
   return (
-    <PortalShell title="个人中心">
-      <Row gutter={[16, 16]}>
-        {ENTRIES.map((entry) => (
-          <Col xs={24} sm={12} xl={6} key={entry.key}>
-            <a href={entry.href}>
-              <Card hoverable styles={{ body: { padding: 20 } }}>
-                <div
-                  style={{
-                    fontSize: 24,
-                    color: 'var(--ant-color-primary)',
-                    marginBottom: 8,
-                  }}
-                >
-                  {entry.icon}
-                </div>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                  {entry.title}
-                </div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {entry.desc}
-                </Text>
-              </Card>
-            </a>
-          </Col>
-        ))}
+    <PortalShell title="概览">
+      <Typography.Title level={5} style={{ marginTop: 0 }}>
+        你好，{initialState?.currentUser?.name || '买家'}
+      </Typography.Title>
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="订单总数"
+              value={list.length}
+              suffix={<Link to="/portal/orders">查看</Link>}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="待付款"
+              value={toPay}
+              suffix={<Link to="/portal/orders">去支付</Link>}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="待评价"
+              value={toReview}
+              suffix={<Link to="/portal/reviews">去评价</Link>}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="我的收藏"
+              value={favorites.data?.length ?? 0}
+              suffix={<Link to="/portal/favorites">查看</Link>}
+            />
+          </Card>
+        </Col>
       </Row>
+
+      <Card title="最近订单">
+        {list.length === 0 && !orders.isLoading ? (
+          <Empty description="还没有订单">
+            <Link to="/products">去逛逛</Link>
+          </Empty>
+        ) : (
+          <Table
+            rowKey="id"
+            size="small"
+            loading={orders.isLoading}
+            columns={columns}
+            dataSource={list.slice(0, 5)}
+            pagination={false}
+          />
+        )}
+      </Card>
     </PortalShell>
   );
 }

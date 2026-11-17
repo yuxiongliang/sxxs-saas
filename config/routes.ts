@@ -530,6 +530,27 @@ export default [
     layout: false,
     component: './portal/seller',
   },
+  // 卖家中心：从原来的单页 Tabs 拆成真实子页面（侧栏要高亮/可深链）
+  {
+    path: '/portal/seller/products',
+    layout: false,
+    component: './portal/seller/products',
+  },
+  {
+    path: '/portal/seller/orders',
+    layout: false,
+    component: './portal/seller/orders',
+  },
+  {
+    path: '/portal/seller/favorites',
+    layout: false,
+    component: './portal/seller/favorites',
+  },
+  {
+    path: '/portal/seller/reviews',
+    layout: false,
+    component: './portal/seller/reviews',
+  },
   // 旧链接兼容：店主中心已并入买家外壳（同一个入口，不再单独一个端口）
   {
     path: '/seller',

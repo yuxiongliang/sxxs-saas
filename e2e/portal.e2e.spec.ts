@@ -16,7 +16,12 @@ async function addAnyProductToCart(page: Page): Promise<string> {
   await page.getByTestId('product-card-title').first().click();
   await expect(page).toHaveURL(/\/products\/\d+/, { timeout: 30_000 });
 
-  const title = ((await page.locator('h3').first().textContent()) ?? '').trim();
+  // 等标题真的渲染出来再读：刚 toHaveURL 成功时详情接口可能还没回，
+  // 直接 textContent 会拿到空串，后面 getByText('') 会原地挂 30 秒。
+  const titleEl = page.getByTestId('product-detail-title');
+  await expect(titleEl).toBeVisible({ timeout: 30_000 });
+  await expect(titleEl).not.toBeEmpty();
+  const title = ((await titleEl.textContent()) ?? '').trim();
 
   // 多规格：每组选第一个可用值；单规格没有规格组，循环自然跳过。
   //

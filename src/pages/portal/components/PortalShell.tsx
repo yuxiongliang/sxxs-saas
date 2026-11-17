@@ -1,130 +1,33 @@
-import {
-  HomeOutlined,
-  ProfileOutlined,
-  ShopOutlined,
-  ShoppingCartOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
-import { Link, useModel } from '@umijs/max';
-import { Badge, Space } from 'antd';
-import React from 'react';
-import { getSellerApplication } from '@/services/commerce/api';
+import type React from 'react';
+import { BUYER_MENU } from './menuConfig';
+import PortalLayout from './PortalLayout';
 
-interface PortalShellProps {
+/**
+ * 买家中心外壳：**左侧边栏导航 + 右内容页**。
+ *
+ * 保留原来的 `PortalShell` 名字与 `title` 用法，这样 7 个买家页面一行都不用改
+ * （它们本来就写成 `<PortalShell title="我的订单">`）。真正决定布局的是 `PortalLayout`。
+ *
+ * 卖家中心是**另一个独立页面**，用 `seller/components/SellerShell`，
+ * 但它和这里共享同一个 `PortalLayout`，所以不存在两套外壳。
+ *
+ * 支付结果页走 `PortalPlainShell`（流程结束页不该挂侧栏）。
+ */
+const PortalShell: React.FC<{
   children: React.ReactNode;
   title?: string;
   cartCount?: number;
   maxWidth?: number;
-}
-
-/**
- * Shared chrome for the standalone C-end portal pages.
- *
- * Portal pages are declared with `layout: false` in `config/routes.ts`, so they
- * must render their own header instead of relying on ProLayout.
- */
-const PortalShell: React.FC<PortalShellProps> = ({
-  children,
-  title,
-  cartCount = 0,
-  maxWidth = 1280,
-}) => {
-  const { initialState } = useModel('@@initialState');
-  // 买家中心也跟租户品牌走：原来写死「C2C 商城」，换了站名这里不变很割裂
-  const brand = initialState?.brand;
-  // 开店状态决定导航文案：未开店引导申请、审核中打标、通过后直接进店管理
-  const { data: application } = useQuery({
-    queryKey: ['seller-application'],
-    queryFn: getSellerApplication,
-    retry: false,
-  });
-  const sellerNavLabel = !application?.has_seller
-    ? '申请开店'
-    : application.status === 'pending'
-      ? '我的店铺（审核中）'
-      : '我的店铺';
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
-      <div
-        style={{
-          background: '#1677ff',
-          color: '#fff',
-          padding: '20px 48px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          {/* 站名 + 站点描述：描述是品牌页填的一句话，没填就不占位 */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <Link
-              to="/products"
-              style={{
-                color: '#fff',
-                fontSize: 24,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              {brand?.logo_url ? (
-                <img
-                  src={brand.logo_url}
-                  alt={brand.display_name}
-                  style={{ height: 28, objectFit: 'contain' }}
-                />
-              ) : (
-                <ShopOutlined />
-              )}
-              {brand?.display_name || 'C2C 商城'}
-            </Link>
-            {brand?.site_description ? (
-              <span
-                style={{
-                  color: 'rgba(255,255,255,0.75)',
-                  fontSize: 12,
-                  marginTop: 4,
-                  whiteSpace: 'pre-line',
-                  maxWidth: 520,
-                }}
-              >
-                {brand.site_description}
-              </span>
-            ) : null}
-          </div>
-          {title ? <span style={{ opacity: 0.85 }}>/ {title}</span> : null}
-        </div>
-        <Space size={20}>
-          <Link to="/portal" style={{ color: '#fff' }}>
-            <HomeOutlined /> 个人中心
-          </Link>
-          <Link to="/portal/orders" style={{ color: '#fff' }}>
-            <ProfileOutlined /> 我的订单
-          </Link>
-          <Link to="/portal/cart" style={{ color: '#fff' }}>
-            <Badge count={cartCount} size="small" offset={[6, -2]}>
-              <ShoppingCartOutlined style={{ color: '#fff' }} /> 购物车
-            </Badge>
-          </Link>
-          <Link to="/portal/addresses" style={{ color: '#fff' }}>
-            收货地址
-          </Link>
-          {/* 买家与店主同一个入口：没开店引导申请，审核中打标，通过后直接管理 */}
-          <Link to="/portal/seller" style={{ color: '#fff' }}>
-            <ShopOutlined style={{ color: '#fff' }} /> {sellerNavLabel}
-          </Link>
-          <span>
-            <UserOutlined /> {initialState?.currentUser?.name || '买家'}
-          </span>
-        </Space>
-      </div>
-      <div style={{ maxWidth, margin: '0 auto', padding: 24 }}>{children}</div>
-    </div>
-  );
-};
+}> = ({ children, title, cartCount = 0 }) => (
+  <PortalLayout
+    menu={BUYER_MENU}
+    sectionLabel="买家中心"
+    title={title}
+    cartCount={cartCount}
+    switchLink={{ label: '卖家中心', href: '/portal/seller' }}
+  >
+    {children}
+  </PortalLayout>
+);
 
 export default PortalShell;
