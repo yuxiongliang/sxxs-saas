@@ -24,14 +24,3 @@ export function columnsForWidth(width: number): number {
   if (width >= 768) return 3;
   return 2;
 }
-
-/**
- * 实际列数：**不能多于商品数**，否则会多出空列把已有卡片挤成半宽。
- *
- * 典型场景：详情页「猜你喜欢」只有 1 个推荐商品，两列布局下右半就空了，
- * 卡片只占左半边——看起来像布局坏了。
- */
-export function effectiveColumns(desired: number, itemCount: number): number {
-  if (itemCount <= 0) return 1;
-  return Math.max(1, Math.min(Math.floor(desired), itemCount));
-}

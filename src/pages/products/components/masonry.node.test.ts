@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { columnsForWidth, effectiveColumns, splitIntoColumns } from './masonry';
+import { columnsForWidth, splitIntoColumns } from './masonry';
 
 describe('splitIntoColumns', () => {
   it('横向优先分配，保证综合排序的阅读顺序', () => {
@@ -34,20 +34,16 @@ describe('columnsForWidth', () => {
   });
 });
 
-describe('effectiveColumns', () => {
-  it('商品数少于期望列数时，不制造空列', () => {
-    // 详情页「猜你喜欢」只剩 1 个推荐时，两列会把卡片挤成半宽
-    expect(effectiveColumns(2, 1)).toBe(1);
-    expect(effectiveColumns(5, 2)).toBe(2);
+describe('商品不足时的空列', () => {
+  it('列数固定，空位保留而不是把卡片拉宽', () => {
+    // 2 个商品 + 5 列：前 2 列有卡，后 3 列是空的（列宽不变）
+    const cols = splitIntoColumns([1, 2], 5);
+    expect(cols.length).toBe(5);
+    expect(cols.map((col) => col.length)).toEqual([1, 1, 0, 0, 0]);
   });
 
-  it('商品足够多时按期望列数', () => {
-    expect(effectiveColumns(5, 40)).toBe(5);
-    expect(effectiveColumns(2, 12)).toBe(2);
-  });
-
-  it('空列表与非法列数都不炸', () => {
-    expect(effectiveColumns(5, 0)).toBe(1);
-    expect(effectiveColumns(0, 10)).toBe(1);
+  it('只有 1 个商品时也保留另一列空列', () => {
+    const cols = splitIntoColumns(['a'], 2);
+    expect(cols.map((col) => col.length)).toEqual([1, 0]);
   });
 });

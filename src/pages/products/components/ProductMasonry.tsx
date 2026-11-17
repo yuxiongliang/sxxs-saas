@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PublicProduct } from '@/services/commerce/api';
-import { columnsForWidth, effectiveColumns, splitIntoColumns } from './masonry';
+import { columnsForWidth, splitIntoColumns } from './masonry';
 import ProductCard from './ProductCard';
 
 /** 监听视口宽度（列数按断点算，不用 antd 栅格——栅格天生对齐，做不出错开）。 */
@@ -35,11 +35,9 @@ export default function ProductMasonry({
   testId?: string;
 }) {
   const width = useViewportWidth();
-  // 列数不能多于商品数：否则会多出空列，把已有卡片挤成半宽
-  const columnCount = effectiveColumns(
-    columns ?? columnsForWidth(width),
-    products.length,
-  );
+  // **列数固定按断点走，不因商品数收缩**：商品不够就让空位列空着，
+  // 不要为了“填满”把列数减掉——那样卡片会被拉宽，和列表的列宽就不一致了。
+  const columnCount = columns ?? columnsForWidth(width);
   const buckets = splitIntoColumns(products, columnCount);
 
   return (

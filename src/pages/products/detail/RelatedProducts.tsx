@@ -2,7 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Empty, Spin, Typography } from 'antd';
 import { useEffect, useRef } from 'react';
 import { listRelatedProducts } from '@/services/commerce/api';
-import { effectiveColumns, splitIntoColumns } from '../components/masonry';
+import { splitIntoColumns } from '../components/masonry';
 import ProductCard from '../components/ProductCard';
 
 const PAGE_SIZE = 12;
@@ -44,8 +44,8 @@ export default function RelatedProducts({
   });
 
   const items = query.data?.pages.flatMap((page) => page.list) ?? [];
-  // 只有 1 个推荐时单列占满，不然右半列空白、卡片被挤成半宽
-  const columns = splitIntoColumns(items, effectiveColumns(2, items.length));
+  // 固定两列：商品不够就留空列，不把单张卡片拉满整行
+  const columns = splitIntoColumns(items, 2);
 
   // 哨兵进入可视区域就加载下一页；root 用区块自己的滚动容器
   useEffect(() => {
