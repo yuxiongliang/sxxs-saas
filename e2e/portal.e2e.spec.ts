@@ -245,6 +245,36 @@ test.describe('portal: buyer journey', () => {
     expect(aspect).toBe('');
   });
 
+  test('buyer centre has an IM entry and can send a message', async ({
+    page,
+  }) => {
+    await loginAs(page, CUSTOMER);
+    await page.goto('/portal');
+
+    // 侧栏「消息」入口
+    const sider = page.locator('.portal-sider');
+    await expect(sider).toBeVisible({ timeout: 30_000 });
+    await sider.getByText('消息').click();
+    await expect(page).toHaveURL(/\/portal\/messages/, { timeout: 20_000 });
+
+    // ImChat 渲染（会话列表 + 输入区）
+    await expect(page.getByTestId('im-chat')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('im-emoji')).toBeVisible();
+    await expect(page.getByTestId('im-product')).toBeVisible();
+
+    // 有会话时：发一条文本应当出现在列表里
+    const conversations = page.locator('[data-testid^="im-conversation-"]');
+    if ((await conversations.count()) > 0) {
+      await conversations.first().click();
+      const unique = `e2e-im-${Date.now()}`;
+      await page.locator('textarea').last().fill(unique);
+      await page.getByTestId('im-send').click();
+      await expect(page.getByText(unique).first()).toBeVisible({
+        timeout: 20_000,
+      });
+    }
+  });
+
   test('detail page has tabs and a related-products rail', async ({ page }) => {
     await loginAs(page, CUSTOMER);
     await page.goto('/products');

@@ -2,6 +2,8 @@ import { ShopOutlined, UserOutlined } from '@ant-design/icons';
 import { Link, useModel } from '@umijs/max';
 import { Space } from 'antd';
 import type React from 'react';
+import { LangDropdown } from '@/components/RightContent/LangDropdown';
+import ThemeSwitch from '@/components/RightContent/ThemeSwitch';
 
 /**
  * 精简外壳：只有顶栏，**不带侧栏**。
@@ -60,11 +62,15 @@ const PortalPlainShell: React.FC<{
             </span>
           ) : null}
         </Space>
-        <span
-          style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}
-        >
-          <UserOutlined /> {initialState?.currentUser?.name || '买家'}
-        </span>
+        <Space size={12}>
+          <LangDropdown />
+          <ThemeSwitch />
+          <span
+            style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}
+          >
+            <UserOutlined /> {initialState?.currentUser?.name || '买家'}
+          </span>
+        </Space>
       </div>
       <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
         {children}

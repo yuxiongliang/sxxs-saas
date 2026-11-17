@@ -49,7 +49,20 @@ export default function ShopCard({ product }: { product: PublicProduct }) {
   };
 
   return (
-    <Card data-testid="shop-card" size="small">
+    <Card
+      data-testid="shop-card"
+      size="small"
+      // 店铺卡是一个**独立悬浮块**：白底 + 阴影，不再和父级卡片融成一片
+      style={{
+        background: 'var(--ant-color-bg-container)',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+        transition: 'box-shadow .2s ease, transform .2s ease',
+      }}
+      styles={{
+        body: { padding: 12 },
+      }}
+      hoverable
+    >
       <Space size={12} align="start" style={{ width: '100%' }}>
         <Avatar
           size={56}

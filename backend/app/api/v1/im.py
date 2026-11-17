@@ -17,6 +17,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.im import (
     ConversationCreate,
     MessageCreate,
+    MessageEditRequest,
     MessageOut,
     ReadReceiptRequest,
     ReadStateOut,
@@ -310,3 +311,56 @@ async def handle_report(
         ReportOut.model_validate(report),
         "举报已受理，消息已下架" if payload.action == "accept" else "举报已驳回",
     )
+
+
+@router.delete("/conversations/{conversation_id}", response_model=ApiResponse[None])
+async def hide_conversation(
+    conversation_id: int,
+    context: AuthContext = Depends(require_permission("im:conversation:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """软删会话：只从**当前用户**的列表里移除；对方照常能看到。
+
+    收到新消息时自动恢复（`send_message` 会清掉双方的 `hidden_at`）。
+    """
+    await im_service.hide_conversation(db, context, conversation_id)
+    return ok(None, "会话已删除")
+
+
+@router.get("/search", response_model=ApiResponse[dict])
+async def search_im(
+    keyword: str = Query(min_length=1, max_length=64),
+    context: AuthContext = Depends(require_permission("im:conversation:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """搜会话（对端用户名/店铺名）与消息内容，只搜自己参与的会话。"""
+    return ok(await im_service.search(db, context, keyword))
+
+
+@router.post("/messages/{message_id}/recall", response_model=ApiResponse[MessageOut])
+async def recall_message(
+    message_id: int,
+    context: AuthContext = Depends(require_permission("im:message:send")),
+    db: AsyncSession = Depends(get_db),
+):
+    """撤回自己 2 分钟内的消息（行保留，内容清空）。"""
+    message = await im_service.recall_message(db, context, message_id)
+    conversation = await db.get(Conversation, message.conversation_id)
+    if conversation is not None:
+        await publish_message(message, conversation, message.sender_id)
+    return ok(MessageOut.model_validate(message), "消息已撤回")
+
+
+@router.patch("/messages/{message_id}", response_model=ApiResponse[MessageOut])
+async def edit_message(
+    message_id: int,
+    payload: MessageEditRequest,
+    context: AuthContext = Depends(require_permission("im:message:send")),
+    db: AsyncSession = Depends(get_db),
+):
+    """编辑自己 15 分钟内的**文字**消息。"""
+    message = await im_service.edit_message(db, context, message_id, payload.content)
+    conversation = await db.get(Conversation, message.conversation_id)
+    if conversation is not None:
+        await publish_message(message, conversation, message.sender_id)
+    return ok(MessageOut.model_validate(message), "消息已更新")

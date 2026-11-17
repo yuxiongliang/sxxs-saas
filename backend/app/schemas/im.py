@@ -1,8 +1,9 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-MessageType = Literal["text", "image"]
+MessageType = Literal["text", "image", "video", "product"]
 ReportAction = Literal["accept", "reject"]
 
 
@@ -12,16 +13,18 @@ class ConversationCreate(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    """A chat message is either free text or an uploaded image.
+    """一条聊天消息。
 
-    * ``type="text"``  -> ``content`` is required, whitespace-only is rejected.
-    * ``type="image"`` -> ``attachment_id`` is required and ``content`` becomes an
-      optional caption.
+    * ``type="text"``    -> ``content`` 必填
+    * ``type="image"`` / ``"video"`` -> ``attachment_id`` 必填（校验归属与类型）
+    * ``type="product"`` -> ``product_id`` 必填（**必须属于该会话的卖家**且仍在售）
     """
 
     type: MessageType = "text"
     content: str = Field(default="", max_length=5000)
     attachment_id: int | None = None
+    # 商品卡片消息要引用的商品
+    product_id: int | None = None
     client_msg_id: str = Field(min_length=1, max_length=64)
 
     @field_validator("content")
@@ -41,8 +44,10 @@ class MessageCreate(BaseModel):
     def _validate_payload(self) -> "MessageCreate":
         if self.type == "text" and not self.content:
             raise ValueError("消息内容不能为空")
-        if self.type == "image" and self.attachment_id is None:
-            raise ValueError("图片消息必须提供 attachment_id")
+        if self.type in ("image", "video") and self.attachment_id is None:
+            raise ValueError("媒体消息必须提供 attachment_id")
+        if self.type == "product" and self.product_id is None:
+            raise ValueError("商品卡片必须提供 product_id")
         return self
 
 
@@ -70,6 +75,9 @@ class MessageOut(BaseModel):
     content: str
     payload: dict | None = None
     status: str
+    # 撤回 / 编辑：前端据此显示「已撤回」「已编辑」
+    recalled_at: datetime | None = None
+    edited_at: datetime | None = None
 
 
 class ReadReceiptRequest(BaseModel):
@@ -111,3 +119,17 @@ class ReportOut(BaseModel):
     reason: str
     status: str
     note: str
+
+
+class MessageEditRequest(BaseModel):
+    """编辑消息（仅文本，且只能改自己的）。"""
+
+    content: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("content")
+    @classmethod
+    def _strip_content(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("消息内容不能为空")
+        return stripped

@@ -5,8 +5,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attachment import Attachment
+from app.models.catalog import Product, ProductSku
 from app.models.im import Conversation, ConversationMember, ImReport, Message
 from app.models.seller import Seller, SellerMember, Shop
+from app.models.user import User
 from app.schemas.im import ConversationCreate, MessageCreate
 from app.services import audit as audit_service
 from app.services.auth import AuthContext, context_from_payload
@@ -103,19 +105,31 @@ async def create_conversation(
 
 
 async def list_conversations(db: AsyncSession, context: AuthContext) -> list[Conversation]:
+    """我的会话：**过滤掉自己软删过的**（对方删了不影响我）。"""
     seller_ids = await _seller_ids(db, context.tenant.id, context.user.id)
     conditions = [Conversation.buyer_id == context.user.id]
     if seller_ids:
         conditions.append(Conversation.seller_id.in_(seller_ids))
-    return list(
+
+    hidden_ids = set(
         (
             await db.scalars(
-                select(Conversation)
-                .where(Conversation.tenant_id == context.tenant.id, or_(*conditions))
-                .order_by(Conversation.id.desc())
+                select(ConversationMember.conversation_id).where(
+                    ConversationMember.tenant_id == context.tenant.id,
+                    ConversationMember.user_id == context.user.id,
+                    ConversationMember.hidden_at.is_not(None),
+                )
             )
         ).all()
     )
+    rows = (
+        await db.scalars(
+            select(Conversation)
+            .where(Conversation.tenant_id == context.tenant.id, or_(*conditions))
+            .order_by(Conversation.id.desc())
+        )
+    ).all()
+    return [row for row in rows if row.id not in hidden_ids]
 
 
 async def list_messages(
@@ -171,12 +185,24 @@ async def send_message(
     ) or 0
 
     message_payload: dict | None = None
-    if payload.type == "image":
+    if payload.type in ("image", "video"):
         attachment = await db.get(Attachment, payload.attachment_id)
         if attachment is None or attachment.tenant_id != context.tenant.id:
             raise HTTPException(status_code=404, detail="附件不存在")
-        if attachment.category != "image" and not attachment.mime_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="只能发送图片附件")
+        is_video = attachment.category == "video" or attachment.mime_type.startswith(
+            "video/"
+        )
+        if payload.type == "video":
+            if not is_video:
+                raise HTTPException(status_code=400, detail="只能发送视频附件")
+        else:
+            if is_video:
+                raise HTTPException(status_code=400, detail="视频请用视频消息发送")
+            is_image = attachment.category == "image" or attachment.mime_type.startswith(
+                "image/"
+            )
+            if not is_image:
+                raise HTTPException(status_code=400, detail="只能发送图片附件")
         if attachment.uploader != context.user.username:
             raise HTTPException(status_code=403, detail="不能发送他人的附件")
         message_payload = {
@@ -184,6 +210,30 @@ async def send_message(
             "url": attachment.url,
             "mime_type": attachment.mime_type,
             "size": attachment.size,
+        }
+    elif payload.type == "product":
+        # 商品卡片：**必须属于本会话的卖家**，否则 A 店能往 B 店会话里塞自己的商品
+        product = await db.get(Product, payload.product_id)
+        if product is None or product.tenant_id != context.tenant.id:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        if product.seller_id != conversation.seller_id:
+            raise HTTPException(status_code=400, detail="只能发送本会话卖家的商品")
+        if product.status != "on_sale":
+            raise HTTPException(status_code=400, detail="该商品已下架，无法发送")
+        # 价格在 SKU 上（多规格取在售 SKU 的最低价），与列表卡片同一口径
+        price_cents = await db.scalar(
+            select(func.min(ProductSku.price_cents)).where(
+                ProductSku.product_id == product.id, ProductSku.status == "active"
+            )
+        )
+        message_payload = {
+            "product_id": product.id,
+            "snapshot": {
+                "name": product.name,
+                "price_cents": price_cents,
+                "image": product.main_image,
+                "status": product.status,
+            },
         }
 
     message = Message(
@@ -205,6 +255,16 @@ async def send_message(
         conversation.seller_unread_count += 1
     else:
         conversation.buyer_unread_count += 1
+    # 新消息到达 → 双方的「软删」都失效：
+    # 否则会出现「列表里看不到这个会话，但未读在涨」的诡异状态。
+    for member in (
+        await db.scalars(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation.id
+            )
+        )
+    ).all():
+        member.hidden_at = None
     await db.commit()
     await db.refresh(message)
     return message
@@ -383,3 +443,163 @@ async def handle_report(
     await db.commit()
     await db.refresh(report)
     return report
+
+
+# ---------------------------------------------------------------- 软删 / 撤回 / 编辑
+
+# 撤回窗口：2 分钟。超过只能走举报/客服流程。
+RECALL_WINDOW_SECONDS = 120
+# 编辑窗口：15 分钟，且只允许文本消息。
+EDIT_WINDOW_SECONDS = 900
+
+
+async def hide_conversation(
+    db: AsyncSession, context: AuthContext, conversation_id: int
+) -> None:
+    """软删会话：**只影响当前用户**，对方列表里还在。
+
+    `hidden_at` 会在收到新消息时被清空（见 `send_message`）。
+    """
+    conversation = await db.get(Conversation, conversation_id)
+    if conversation is None or conversation.tenant_id != context.tenant.id:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    member = await _member_row(db, conversation.id, context.user.id)
+    if member is None:
+        raise HTTPException(status_code=403, detail="无权操作该会话")
+    member.hidden_at = datetime.now(UTC)
+    await db.commit()
+
+
+async def _own_message(db: AsyncSession, context: AuthContext, message_id: int) -> Message:
+    message = await db.get(Message, message_id)
+    if message is None or message.tenant_id != context.tenant.id:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    conversation = await db.get(Conversation, message.conversation_id)
+    if conversation is None or not await _is_member(db, conversation, context.user.id):
+        raise HTTPException(status_code=403, detail="无权操作该消息")
+    return message
+
+
+def _age_seconds(message: Message) -> float:
+    created = message.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - created).total_seconds()
+
+
+async def recall_message(db: AsyncSession, context: AuthContext, message_id: int) -> Message:
+    """撤回自己发的消息：行保留（审计/举报要能追溯），内容清空。"""
+    message = await _own_message(db, context, message_id)
+    if message.sender_id != context.user.id:
+        raise HTTPException(status_code=403, detail="只能撤回自己的消息")
+    if message.recalled_at is not None:
+        return message
+    if _age_seconds(message) > RECALL_WINDOW_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"超过 {RECALL_WINDOW_SECONDS // 60} 分钟的消息不能撤回，请联系客服处理",
+        )
+    message.recalled_at = datetime.now(UTC)
+    message.content = ""
+    message.payload = None
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+async def edit_message(
+    db: AsyncSession, context: AuthContext, message_id: int, content: str
+) -> Message:
+    """编辑自己发的**文本**消息（媒体/商品卡只能撤回重发）。"""
+    message = await _own_message(db, context, message_id)
+    if message.sender_id != context.user.id:
+        raise HTTPException(status_code=403, detail="只能编辑自己的消息")
+    if message.recalled_at is not None:
+        raise HTTPException(status_code=400, detail="已撤回的消息不能编辑")
+    if message.type != "text":
+        raise HTTPException(status_code=400, detail="只有文字消息可以编辑")
+    if _age_seconds(message) > EDIT_WINDOW_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"超过 {EDIT_WINDOW_SECONDS // 60} 分钟的消息不能编辑",
+        )
+    message.content = content
+    message.edited_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+async def search(
+    db: AsyncSession, context: AuthContext, keyword: str, limit: int = 20
+) -> dict:
+    """搜索：命中**会话**（对端用户名/店铺名）与**消息内容**。
+
+    只在自己参与的会话里搜，绝不跨会话。
+    """
+    needle = keyword.strip()
+    if not needle:
+        return {"conversations": [], "messages": []}
+    pattern = f"%{needle}%"
+    seller_ids = await _seller_ids(db, context.tenant.id, context.user.id)
+    conditions = [Conversation.buyer_id == context.user.id]
+    if seller_ids:
+        conditions.append(Conversation.seller_id.in_(seller_ids))
+    conversation_ids = list(
+        (
+            await db.scalars(
+                select(Conversation.id).where(
+                    Conversation.tenant_id == context.tenant.id, or_(*conditions)
+                )
+            )
+        ).all()
+    )
+    if not conversation_ids:
+        return {"conversations": [], "messages": []}
+
+    # ① 会话命中：对端用户名 / 店铺名
+    conversation_hits = list(
+        (
+            await db.scalars(
+                select(Conversation)
+                .join(Seller, Seller.id == Conversation.seller_id)
+                .join(Shop, Shop.id == Conversation.shop_id, isouter=True)
+                .join(User, User.id == Conversation.buyer_id)
+                .where(
+                    Conversation.id.in_(conversation_ids),
+                    or_(
+                        Seller.display_name.ilike(pattern),
+                        Shop.name.ilike(pattern),
+                        User.username.ilike(pattern),
+                    ),
+                )
+                .limit(limit)
+            )
+        ).all()
+    )
+
+    # ② 消息命中：内容匹配（撤回的消息 content 已清空，自然不会命中）
+    message_rows = (
+        await db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id.in_(conversation_ids),
+                Message.content.ilike(pattern),
+            )
+            .order_by(Message.id.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    return {
+        "conversations": [item.id for item in conversation_hits],
+        "messages": [
+            {
+                "id": item.id,
+                "conversation_id": item.conversation_id,
+                "content": item.content,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in message_rows
+        ],
+    }

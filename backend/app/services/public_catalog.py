@@ -109,6 +109,7 @@ def _product_filters(
     category_ids: list[int] | None,
     min_price_cents: int | None,
     max_price_cents: int | None,
+    seller_id: int | None = None,
 ):
     """列表与 count 共用的过滤条件（两处必须一模一样，否则总数对不上）。"""
     filters = [
@@ -116,6 +117,9 @@ def _product_filters(
         Product.status == "on_sale",
         Seller.status == "active",
     ]
+    if seller_id is not None:
+        # 买家在会话里只能挑「这个卖家」的商品（发消息时服务端会再校验一次）
+        filters.append(Product.seller_id == seller_id)
     if category_ids is not None:
         filters.append(Product.category_id.in_(category_ids))
     if keyword:
@@ -222,6 +226,7 @@ async def list_public_products(
     sort: str = SORT_DEFAULT,
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
+    seller_id: int | None = None,
 ) -> dict:
     """在售商品列表（公开）：搜索 + 分类 + 价格区间 + 排序 + 分页。
 
@@ -242,6 +247,7 @@ async def list_public_products(
         category_ids=category_ids,
         min_price_cents=min_price_cents,
         max_price_cents=max_price_cents,
+        seller_id=seller_id,
     )
 
     base = (

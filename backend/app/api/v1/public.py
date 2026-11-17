@@ -38,6 +38,7 @@ async def public_products(
     category_id: int | None = Query(default=None),
     min_price_cents: int | None = Query(default=None, ge=0),
     max_price_cents: int | None = Query(default=None, ge=0),
+    seller_id: int | None = Query(default=None),
     sort: str = Query(default=public_catalog_service.SORT_DEFAULT, max_length=16),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=public_catalog_service.DEFAULT_PAGE_SIZE, ge=1, le=60),
@@ -59,6 +60,7 @@ async def public_products(
             sort=sort,
             page=page,
             page_size=page_size,
+            seller_id=seller_id,
         )
     )
 

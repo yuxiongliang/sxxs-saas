@@ -515,6 +515,12 @@ export default [
     component: './portal/favorites',
   },
   {
+    // 消息（买家）：与卖家即时沟通
+    path: '/portal/messages',
+    layout: false,
+    component: './portal/messages',
+  },
+  {
     // 我的评价（买家）：待评价 + 已评价
     path: '/portal/reviews',
     layout: false,
@@ -550,6 +556,11 @@ export default [
     path: '/portal/seller/reviews',
     layout: false,
     component: './portal/seller/reviews',
+  },
+  {
+    path: '/portal/seller/messages',
+    layout: false,
+    component: './portal/seller/messages',
   },
   // 旧链接兼容：店主中心已并入买家外壳（同一个入口，不再单独一个端口）
   {

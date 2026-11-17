@@ -26,6 +26,7 @@ export const BUYER_MENU: PortalMenuItem[] = [
   { key: 'favorites', label: '我的收藏', href: '/portal/favorites' },
   { key: 'reviews', label: '我的评价', href: '/portal/reviews' },
   { key: 'addresses', label: '收货地址', href: '/portal/addresses' },
+  { key: 'messages', label: '消息', href: '/portal/messages' },
 ];
 
 export const SELLER_MENU: PortalMenuItem[] = [
@@ -47,6 +48,7 @@ export const SELLER_MENU: PortalMenuItem[] = [
     href: '/portal/seller/favorites',
   },
   { key: 'seller-reviews', label: '我的评价', href: '/portal/seller/reviews' },
+  { key: 'seller-messages', label: '消息', href: '/portal/seller/messages' },
 ];
 
 /**

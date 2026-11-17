@@ -65,17 +65,79 @@ export async function sendImageMessage(
   clientMsgId: string,
   caption = '',
 ) {
+  return sendMediaMessage(conversationId, 'image', attachmentId, clientMsgId, caption);
+}
+
+/** 图片 / 视频共用：只是 type 不同，服务端会校验附件类型匹配。 */
+export async function sendMediaMessage(
+  conversationId: number,
+  type: 'image' | 'video',
+  attachmentId: number,
+  clientMsgId: string,
+  caption = '',
+) {
   return unwrap<MessageRecord>(
     request(`/api/v1/im/conversations/${conversationId}/messages`, {
       method: 'POST',
       data: {
-        type: 'image',
+        type,
         attachment_id: attachmentId,
         content: caption,
         client_msg_id: clientMsgId,
       },
     }),
   );
+}
+
+/** 发商品卡片（必须属于本会话的卖家，服务端会校验）。 */
+export async function sendProductMessage(
+  conversationId: number,
+  productId: number,
+  clientMsgId: string,
+) {
+  return unwrap<MessageRecord>(
+    request(`/api/v1/im/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      data: { type: 'product', product_id: productId, client_msg_id: clientMsgId },
+    }),
+  );
+}
+
+/** 撤回自己的消息（2 分钟窗口，服务端校验）。 */
+export async function recallMessage(messageId: number) {
+  return unwrap<MessageRecord>(
+    request(`/api/v1/im/messages/${messageId}/recall`, { method: 'POST' }),
+  );
+}
+
+/** 编辑自己的文本消息（15 分钟窗口，服务端校验）。 */
+export async function editMessage(messageId: number, content: string) {
+  return unwrap<MessageRecord>(
+    request(`/api/v1/im/messages/${messageId}`, {
+      method: 'PATCH',
+      data: { content },
+    }),
+  );
+}
+
+/** 软删会话（只影响自己）。 */
+export async function hideConversation(conversationId: number) {
+  return unwrap<null>(
+    request(`/api/v1/im/conversations/${conversationId}`, { method: 'DELETE' }),
+  );
+}
+
+/** 搜会话（对端名/店铺名）与消息内容，只搜自己参与的会话。 */
+export async function searchIm(keyword: string) {
+  return unwrap<{
+    conversations: number[];
+    messages: Array<{
+      id: number;
+      conversation_id: number;
+      content: string;
+      created_at: string | null;
+    }>;
+  }>(request('/api/v1/im/search', { method: 'GET', params: { keyword } }));
 }
 
 export async function markConversationRead(conversationId: number, seq: number) {

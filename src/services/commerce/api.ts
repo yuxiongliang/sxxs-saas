@@ -562,6 +562,8 @@ export interface PublicProductQuery {
   keyword?: string;
   /** 只支持一级分类（平台级分类，全租户共用） */
   category_id?: number;
+  /** 只看某个卖家的商品（IM 里发商品卡片时按会话卖家限定） */
+  seller_id?: number;
   /** 价格区间（分）：按在售 SKU 的最低价筛 */
   min_price_cents?: number;
   max_price_cents?: number;

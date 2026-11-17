@@ -20,6 +20,14 @@ export interface MessagePayload {
   url?: string;
   mime_type?: string;
   size?: number;
+  /** 商品卡片消息 */
+  product_id?: number;
+  snapshot?: {
+    name: string;
+    price_cents?: number | null;
+    image?: string | null;
+    status?: string;
+  };
 }
 
 export interface MessageRecord {
@@ -32,6 +40,10 @@ export interface MessageRecord {
   content: string;
   payload?: MessagePayload | null;
   status: string;
+  /** 撤回时间：有值则展示「该消息已撤回」 */
+  recalled_at?: string | null;
+  /** 编辑时间：有值则展示「已编辑」 */
+  edited_at?: string | null;
 }
 
 export interface ReadState {

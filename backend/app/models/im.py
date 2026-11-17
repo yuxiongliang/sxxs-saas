@@ -38,6 +38,11 @@ class ConversationMember(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(16), default="buyer")
     last_read_seq: Mapped[int] = mapped_column(Integer, default=0)
+    # 按成员软删会话：本人置上就只在自己列表里隐藏，对方不受影响；
+    # 收到新消息时清空，避免「有未读但列表里看不见」。
+    hidden_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Message(Base):
@@ -57,6 +62,14 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="sent")
+    # 撤回：行保留（审计/举报要能回溯），content 与 payload 清空
+    recalled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # 编辑（仅文本消息）
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
