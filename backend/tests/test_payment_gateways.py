@@ -721,3 +721,18 @@ async def test_broken_certificate_surfaces_config_error_not_missing_fields(
     assert "配置有误" in message
     assert "证书无法解析" in message
     assert "补齐" not in message
+
+def test_sign_includes_sign_type_by_default():
+    """**实测结论**：网关按「含 sign_type」的串验签。
+
+    同一应用、同一参数：
+      不含 sign_type → invalid-signature
+      含 sign_type   → 通过（进入收银台）
+    官方文档写"剔除 sign 与 sign_type"，与真实网关行为不符，这里把结论锁进测试，
+    免得以后有人"按文档修正"又把它改回去。
+    """
+    from app.services.payment.alipay import build_sign_content
+
+    params = {"app_id": "1", "sign_type": "RSA2", "method": "alipay.trade.page.pay"}
+    assert "sign_type=RSA2" in build_sign_content(params, with_sign_type=True)
+    assert "sign_type" not in build_sign_content(params, with_sign_type=False)

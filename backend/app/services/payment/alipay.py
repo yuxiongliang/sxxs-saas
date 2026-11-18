@@ -107,8 +107,18 @@ def build_sign_content(params: dict[str, str], *, with_sign_type: bool = False) 
     return "&".join(f"{key}={value}" for key, value in items)
 
 
-def sign(params: dict[str, str], private_key_pem: str) -> str:
-    content = build_sign_content(params)
+def sign(
+    params: dict[str, str], private_key_pem: str, *, with_sign_type: bool = True
+) -> str:
+    """RSA2 签名。
+
+    **默认把 `sign_type` 也纳入待签名字符串** —— 这是实测结论，不是笔误：
+    同一个应用、同一套参数，不含 `sign_type` 会被网关判 `invalid-signature`，
+    含 `sign_type` 才被接受（2026-11 用真实证书对 openapi.alipay.com 实测）。
+    官方文档写的是"剔除 sign 与 sign_type"，与实际网关行为不一致；
+    验签侧因此两种拼法都试（见 `verify`），签名侧必须选网关认的那一种。
+    """
+    content = build_sign_content(params, with_sign_type=with_sign_type)
     signature = _private_key(private_key_pem).sign(
         content.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256()
     )

@@ -261,7 +261,7 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | `response_model` 吞字段 | Pydantic 按模型裁字段 | 新字段要么进模型，要么用 `dict` |
 | 迁移里的部分唯一索引 | autogenerate 看不见 | 幂等改应用层"先查后插" |
 | 后端改了变量遮蔽 | `hold_days = await hold_days(...)` | 局部变量别与函数同名 |
-| 支付宝报 `invalid-signature`（密钥看着没问题） | ①应用是**证书模式**却按公钥模式请求（缺 `app_cert_sn`/`alipay_root_cert_sn`）；②私钥与控制台「应用公钥」不是一对 | 用「支付诊断」页：它从私钥**推导出应用公钥**供逐字比对，并展示从证书算出的两个 SN |
+| 支付宝报 `invalid-signature` | ①证书模式缺 `app_cert_sn`/`alipay_root_cert_sn`；②私钥与控制台「应用公钥」不是一对；③**待签名字符串漏了 `sign_type`**（实测网关要含它，官方文档写的是剔除——以实测为准） | 诊断页给推导公钥 + 两个 SN；`sign()` 默认 `with_sign_type=True`，有测试锁死 |
 | 微信回调一直验签失败（密钥正确） | 回调签名串与「我方请求」不同：回调只有 `timestamp\nnonce\nbody\n`，**不含 method 与 URL** | 两种串分开写（`build_notify_message` vs `build_message`） |
 | 多租户只有一个回调地址 | 回调不带租户信息 | `payments.out_trade_no = T{tenant_id}-{order_no}`，回调据此反查租户配置再验签 |
 | 买家"点一下就支付成功" | 模拟支付后门 | 模拟支付**仅运营 + 非生产**放行；微信/支付宝必须走 `POST /portal/orders/{id}/payments` |
