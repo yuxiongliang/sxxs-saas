@@ -206,6 +206,13 @@ async def payment_health(
             "「支付宝公钥」和应用私钥贴成了同一段：支付宝公钥在控制台「接口加签方式」里"
         )
 
+    # 证书解析失败这类"内容错误"与"缺字段"分开报，运营才知道该做什么
+    from app.services.payment.config import load_payment_config
+
+    loaded = await load_payment_config(db, context.tenant.id)
+    if loaded.errors.get("alipay"):
+        issues.append(loaded.errors["alipay"])
+
     return ok(
         {
             "enabled": row.enabled,

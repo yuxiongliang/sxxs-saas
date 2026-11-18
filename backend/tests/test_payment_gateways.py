@@ -631,3 +631,93 @@ async def test_certificate_mode_reports_missing_certificates(
     assert data["alipay"]["mode"] == "certificate"
     assert "alipayPublicCert" in data["alipay"]["missing"]
     assert "alipayRootCert" in data["alipay"]["missing"]
+
+# ---------------------------------------------------------------- 证书粘贴形态
+
+
+def _cert_der_b64(cert_pem: str) -> str:
+    """把 PEM 转成"纯 base64 主体"（运营最常粘的形态）。"""
+    import base64
+
+    body = "".join(
+        line for line in cert_pem.splitlines() if "-----" not in line
+    )
+    return base64.b64decode(body).hex()
+
+
+def test_certificate_accepts_concatenated_der_without_headers():
+    """把多张证书的 base64 主体直接拼在一起粘进来，也要能解析。
+
+    这正是 `ExtraData ... tbs_cert.signature_alg` 报错的来源：
+    cryptography 只读第一段 DER，剩下的字节就成了"多余数据"。
+    """
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+
+    from app.services.payment.alipay_cert import root_cert_sn
+
+    private_pem, _ = _keypair()
+    key = serialization.load_pem_private_key(private_pem.encode(), password=None)
+    first = _make_cert(key, "root-a", serial=101)
+    second = _make_cert(key, "root-b", serial=102)
+
+    def der(pem: str) -> bytes:
+        from cryptography import x509
+
+        return x509.load_pem_x509_certificate(pem.encode()).public_bytes(
+            serialization.Encoding.DER
+        )
+
+    joined = base64.b64encode(der(first) + der(second)).decode()
+    sn = root_cert_sn(joined)
+    assert len(sn.split("_")) == 2
+
+
+def test_certificate_rejects_garbage_with_readable_message():
+    """粘错内容要给中文原因，不能把 Rust 的 asn1 报错原样甩给运营。"""
+    import pytest
+
+    from app.services.payment.alipay_cert import app_cert_sn
+
+    with pytest.raises(ValueError) as err:
+        app_cert_sn("这不是证书")
+    message = str(err.value)
+    assert "证书无法解析" in message
+    assert "BEGIN/END" in message
+    assert "ExtraData" not in message
+    assert "ParseError" not in message
+
+
+async def test_broken_certificate_surfaces_config_error_not_missing_fields(
+    client, customer_token, db_session
+):
+    """证书内容不对时，报的是"配置有误 + 原因"，不是让运营去补齐一个字段名。"""
+    await _set_payment_config(
+        db_session,
+        1,
+        {
+            "alipay": {
+                "enabled": True,
+                "environment": "sandbox",
+                "appId": "2021007108682567",
+                "privateKey": "x",
+                "appCertPublicKey": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----",
+                "alipayPublicCert": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----",
+                "alipayRootCert": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----",
+                "notifyUrl": "https://example.com/api/v1/public/payments/alipay/notify",
+                "returnUrl": "https://example.com/portal/payment-result",
+            }
+        },
+    )
+    order = await _place_order(client, customer_token, db_session)
+    response = await client.post(
+        f"/api/v1/portal/orders/{order['id']}/payments",
+        headers=bearer(customer_token),
+        json={"provider": "alipay"},
+    )
+    assert response.status_code == 400
+    message = response.json()["message"]
+    assert "配置有误" in message
+    assert "证书无法解析" in message
+    assert "补齐" not in message

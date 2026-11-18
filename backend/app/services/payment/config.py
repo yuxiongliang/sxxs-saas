@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +52,10 @@ class WechatConfig:
 class PaymentConfig:
     alipay: AlipayConfig | None
     wechat: WechatConfig | None
+    #: 缺哪些**字段**（字段名），给运营看「补齐 ⬜」用
     problems: dict[str, list[str]]
+    #: 配置**内容**错误（证书解析失败等），直接展示中文原因，不要混进"缺字段"里
+    errors: dict[str, str] = field(default_factory=dict)
 
 
 ALIPAY_PROD = "https://openapi.alipay.com/gateway.do"
@@ -79,6 +82,7 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
     alipay_raw = config.get("alipay") or {}
     wechat_raw = config.get("wechat") or {}
     problems: dict[str, list[str]] = {}
+    errors: dict[str, str] = {}
 
     alipay: AlipayConfig | None = None
     # 证书模式三件套：应用公钥证书 / 支付宝公钥证书 / 支付宝根证书
@@ -119,8 +123,11 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
                 root_sn = derive_root_sn(root_cert)
                 verify_key = public_key_from_certificate(alipay_cert)
             except ValueError as exc:
-                problems["alipay"] = [str(exc)]
-                return PaymentConfig(alipay=None, wechat=None, problems=problems)
+                # 证书内容不对 ≠ 缺字段：直接给中文原因，别让运营去"补齐"一个不存在的字段
+                errors["alipay"] = str(exc)
+                return PaymentConfig(
+                    alipay=None, wechat=None, problems=problems, errors=errors
+                )
         alipay = AlipayConfig(
             app_id=_clean(alipay_raw.get("appId")),
             private_key=_clean(alipay_raw.get("privateKey")),
@@ -150,11 +157,17 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
             platform_public_key=_clean(wechat_raw.get("platformPublicKey")),
         )
 
-    return PaymentConfig(alipay=alipay, wechat=wechat, problems=problems)
+    return PaymentConfig(
+        alipay=alipay, wechat=wechat, problems=problems, errors=errors
+    )
 
 
 def require_alipay(config: PaymentConfig) -> AlipayConfig:
     if config.alipay is None:
+        error = config.errors.get("alipay")
+        if error:
+            # 内容是错的（证书解析失败）——直接说原因，不要让运营去"补齐"
+            raise PaymentConfigError(f"支付宝支付配置有误：{error}")
         missing = config.problems.get("alipay", [])
         raise PaymentConfigError(
             "支付宝未配置完整，请联系运营在「支付设置」补齐：" + "、".join(missing or ["已停用"]),
