@@ -103,6 +103,36 @@ test.describe('portal: buyer journey', () => {
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 30_000 });
   });
 
+  /**
+   * 保证当前买家至少有一条收货地址（走真实接口，避免在弹窗里手点级联）。
+   * 地址现在只能在地址簿里维护，确认订单弹窗只负责"选"。
+   */
+  async function ensureAddress(page: import('@playwright/test').Page) {
+    // token 的存储键在 packages/shared 里定义，不要猜
+    const token = await page.evaluate(
+      // token 存在 **sessionStorage**（见 packages/shared/src/auth/token.ts）
+      () => sessionStorage.getItem('antd_pro_access_token') ?? '',
+    );
+    const created = await page.request.post('/api/v1/portal/addresses', {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      data: {
+        receiver_name: 'E2E 收货人',
+        receiver_phone: '13900001111',
+        province: '广东省',
+        city: '深圳市',
+        district: '南山区',
+        detail: 'E2E 自动化路 1 号',
+        is_default: true,
+      },
+    });
+    // 200 = 新建成功；422 = 已存在/字段校验（用现有地址继续）；
+    // 401 = 登录态没带上，属用例问题，必须暴露而不是静默跳过
+    if (created.status() === 401) {
+      throw new Error('ensureAddress: 未带上登录态，无法创建收货地址');
+    }
+    return created.status();
+  }
+
   test('checks out the cart and completes the mock payment', async ({
     page,
   }) => {
@@ -111,15 +141,27 @@ test.describe('portal: buyer journey', () => {
     // Make sure there is at least one line to settle.
     await addAnyProductToCart(page);
 
+    // 确认订单弹窗只保留「收货地址 + 备注」：地址必须先在地址簿里存在。
+    // 走真实接口建一条（比在弹窗里手点级联快且稳定），再打开弹窗。
+    await ensureAddress(page);
+
     await page.goto('/portal/cart');
     await page.getByRole('button', { name: '去结算' }).click();
     await expect(page.getByText('确认订单').first()).toBeVisible({
       timeout: 20_000,
     });
+    await page.waitForTimeout(800);
 
-    await page.getByLabel('收货人').fill('E2E 收货人');
-    await page.getByLabel('联系电话').fill('13900001111');
-    await page.getByLabel('详细地址').fill('E2E 自动化路 1 号');
+    const addressSelect = page
+      .getByRole('dialog')
+      .locator('.ant-select')
+      .first();
+    await addressSelect.click();
+    await page.waitForTimeout(600);
+    await page
+      .locator('.ant-select-dropdown:visible .ant-select-item-option')
+      .first()
+      .click();
     await page.getByRole('button', { name: '提交订单' }).click();
 
     // Order created -> the app navigates to the payment result page.
@@ -138,6 +180,36 @@ test.describe('portal: buyer journey', () => {
     await expect(page.getByText(/订单号/).first()).toBeVisible({
       timeout: 30_000,
     });
+  });
+
+  test('checkout modal only asks for an address and a remark', async ({
+    page,
+  }) => {
+    /**
+     * 确认订单弹窗**只保留「收货地址 + 备注」**：
+     * 手填的姓名/电话/省市区/门牌已经删掉 —— 地址统一在地址簿里维护，
+     * 两边各填一套就会出现"下单用的是手填值，地址簿里却是另一套"。
+     */
+    await loginAs(page, CUSTOMER);
+    await addAnyProductToCart(page);
+    await ensureAddress(page);
+
+    await page.goto('/portal/cart');
+    await expect(page.getByText('确认订单').first()).not.toBeVisible();
+    await page.getByRole('button', { name: '去结算' }).click();
+
+    const modal = page.getByRole('dialog').first();
+    await expect(modal.getByText('确认订单').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(modal.getByText('收货地址').first()).toBeVisible();
+    await expect(modal.getByText('备注').first()).toBeVisible();
+    await expect(modal.getByText(/管理收货地址/).first()).toBeVisible();
+    // 手填控件必须不存在
+    await expect(modal.locator('input#receiver_name')).toHaveCount(0);
+    await expect(modal.locator('input#receiver_phone')).toHaveCount(0);
+    await expect(modal.locator('input#receiver_address')).toHaveCount(0);
+    await expect(modal.locator('.ant-cascader')).toHaveCount(0);
   });
 
   test('favorites a product and sees it in the portal list', async ({

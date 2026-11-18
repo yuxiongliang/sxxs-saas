@@ -17,6 +17,7 @@ import type { ColumnsType } from 'antd/es/table';
 import React, { useState } from 'react';
 import type { AuditLogRecord } from '@/services/system/audit';
 import { listAuditActions, listAuditLogs } from '@/services/system/audit';
+import { formatDateTime } from '@/utils/datetime';
 import SettingPage from '../components/SettingPage';
 
 const actionColor = (action: string) =>
@@ -116,7 +117,7 @@ const AuditPage: React.FC = () => {
       title: '时间',
       dataIndex: 'created_at',
       width: 190,
-      render: (value: string) => new Date(value).toLocaleString(),
+      render: (value: string) => formatDateTime(value),
     },
     // 租户列已删除：这个页面本来就是当前租户自己的审计，一列相同的值没信息量
     {
@@ -234,7 +235,7 @@ const AuditPage: React.FC = () => {
                 {detail.trace_id ?? '-'}
               </Descriptions.Item>
               <Descriptions.Item label="时间">
-                {new Date(detail.created_at).toLocaleString()}
+                {formatDateTime(detail.created_at)}
               </Descriptions.Item>
             </Descriptions>
             <Typography.Title level={5} style={{ marginTop: 16 }}>

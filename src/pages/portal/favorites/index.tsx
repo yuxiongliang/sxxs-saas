@@ -3,6 +3,7 @@ import { Link } from '@umijs/max';
 import { App, Button, Card, Empty, List, Space, Spin, Typography } from 'antd';
 import PortalShell from '@/pages/portal/components/PortalShell';
 import { listMyFavorites, removeFavorite } from '@/services/commerce/api';
+import { formatDateTime } from '@/utils/datetime';
 
 const _yuan = (cents?: number | null) =>
   cents == null ? '-' : `¥${(cents / 100).toFixed(2)}`;
@@ -95,9 +96,7 @@ export default function PortalFavoritesPage() {
                   description={
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {item.seller_shop_name || '—'} · 收藏于{' '}
-                      {item.created_at
-                        ? new Date(item.created_at).toLocaleString()
-                        : '-'}
+                      {item.created_at ? formatDateTime(item.created_at) : '-'}
                     </Typography.Text>
                   }
                 />

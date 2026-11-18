@@ -19,8 +19,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import React, { useMemo, useState } from 'react';
-import RegionCascader from '@/components/RegionCascader';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   checkoutCart,
   clearPortalCart,
@@ -40,8 +39,6 @@ const CartPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   // 一个订单可拆多个卖家单，交付方式按卖家各选一个（默认快递）
-  // 手动填地址时的省市区前缀（选了已保存地址就不用它）
-  const [manualRegion, setManualRegion] = useState('');
   const [deliveryBySeller, setDeliveryBySeller] = useState<
     Record<number, 'express' | 'pickup'>
   >({});
@@ -60,6 +57,15 @@ const CartPage: React.FC = () => {
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['portal-cart'] });
   };
+
+  // 「管理收货地址」在新窗口打开：用户回来自动刷新，弹窗里立刻能看到新地址
+  useEffect(() => {
+    const onFocus = () => {
+      queryClient.invalidateQueries({ queryKey: ['portal-addresses'] });
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [queryClient]);
 
   const selectedIds = useMemo(
     () =>
@@ -136,6 +142,10 @@ const CartPage: React.FC = () => {
   const submitCheckout = async () => {
     const values = await form.validateFields();
     const address = addresses?.find((item) => item.id === values.address_id);
+    if (!address) {
+      message.warning('请选择收货地址');
+      return;
+    }
     setSubmitting(true);
     try {
       const order = await checkoutCart({
@@ -143,21 +153,16 @@ const CartPage: React.FC = () => {
           seller_id: item.seller_id,
           delivery_method: deliveryBySeller[item.seller_id] ?? 'express',
         })),
-        receiver_name: address?.receiver_name ?? values.receiver_name,
-        receiver_phone: address?.receiver_phone ?? values.receiver_phone,
-        receiver_address: address
-          ? {
-              province: address.province,
-              city: address.city,
-              district: address.district,
-              detail: address.detail,
-            }
-          : {
-              detail: [manualRegion, values.receiver_address]
-                .filter(Boolean)
-                .join(' '),
-            },
-        address_id: values.address_id,
+        // 收货人/电话/地址全部来自地址簿，不再有手填字段
+        receiver_name: address.receiver_name,
+        receiver_phone: address.receiver_phone,
+        receiver_address: {
+          province: address.province,
+          city: address.city,
+          district: address.district,
+          detail: address.detail,
+        },
+        address_id: address.id,
         remark: values.remark,
       });
       await invalidate();
@@ -351,57 +356,39 @@ const CartPage: React.FC = () => {
               ) : null}
             </Form.Item>
           ))}
-          {needsAddress ? (
-            <>
-              <Form.Item label="收货地址" name="address_id">
-                <Select
-                  allowClear
-                  placeholder="选择已保存的地址（也可直接填写下方信息）"
-                  options={(addresses ?? []).map((item) => ({
-                    value: item.id,
-                    label: `${item.is_default ? '[默认] ' : ''}${item.receiver_name} ${item.receiver_phone} ${item.province}${item.city}${item.detail}`,
-                  }))}
-                />
-              </Form.Item>
-              <Form.Item label="收货人" name="receiver_name">
-                <Input placeholder="收货人姓名" />
-              </Form.Item>
-              <Form.Item label="联系电话" name="receiver_phone">
-                <Input placeholder="手机号" />
-              </Form.Item>
-              <Form.Item label="省 / 市 / 区">
-                <RegionCascader
-                  onChange={(picked) => {
-                    // 手动填地址时把省市区拼在 detail 前面（后端 receiver_address 只存 detail）
-                    setManualRegion((picked ?? []).filter(Boolean).join(' '));
-                  }}
-                />
-              </Form.Item>
-              <Form.Item label="详细地址" name="receiver_address">
-                <Input placeholder="街道、门牌号（未选择已保存地址时填写）" />
-              </Form.Item>
-            </>
-          ) : (
+          {/* 只保留「收货地址」与「备注」：地址统一在地址簿里维护，
+              这里不再手填姓名/电话/省市区/门牌——手填会造出和地址簿不一样的一套脏数据。
+              自提单也用地址簿里的联系人+手机号作为到店联系信息。 */}
+          <Form.Item
+            label="收货地址"
+            name="address_id"
+            rules={[{ required: true, message: '请选择收货地址' }]}
+            extra="地址在「收货地址」页面维护，保存后回来自动出现在这里"
+          >
+            <Select
+              allowClear
+              placeholder="选择已保存的地址"
+              options={(addresses ?? []).map((item) => ({
+                value: item.id,
+                label: `${item.is_default ? '[默认] ' : ''}${item.receiver_name} ${item.receiver_phone} ${item.province}${item.city}${item.district}${item.detail}`,
+              }))}
+              notFoundContent="还没有收货地址，点下方「管理收货地址」新增"
+            />
+          </Form.Item>
+          {needsAddress ? null : (
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-              全部商品为自提，无需填写收货地址；请留下联系人姓名与手机号。
+              本单全部为自提，用地址簿里的联系人/手机号作为到店联系方式。
             </Typography.Paragraph>
           )}
-          {!needsAddress ? (
-            <>
-              <Form.Item label="联系人" name="receiver_name">
-                <Input placeholder="到店自提的联系人" />
-              </Form.Item>
-              <Form.Item label="联系电话" name="receiver_phone">
-                <Input placeholder="手机号" />
-              </Form.Item>
-            </>
-          ) : null}
           <Form.Item label="备注" name="remark">
             <Input.TextArea rows={2} placeholder="选填" />
           </Form.Item>
         </Form>
-        <Button type="link" onClick={() => navigate('/portal/addresses')}>
-          管理收货地址
+        <Button
+          type="link"
+          onClick={() => window.open('/portal/addresses', '_blank', 'noopener')}
+        >
+          管理收货地址（新窗口）
         </Button>
         <div style={{ marginTop: 8 }}>
           <Typography.Text type="secondary">

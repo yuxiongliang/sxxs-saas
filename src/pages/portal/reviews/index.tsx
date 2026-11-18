@@ -19,6 +19,7 @@ import ReviewFormModal from '@/components/ReviewFormModal';
 import PortalShell from '@/pages/portal/components/PortalShell';
 import { listMyReviews, listReviewableItems } from '@/services/commerce/api';
 import type { ReviewRecord } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 
 /**
  * 我的评价（买家）。
@@ -119,8 +120,7 @@ export default function PortalReviewsPage() {
       title: '时间',
       dataIndex: 'created_at',
       width: 170,
-      render: (value: string | null) =>
-        value ? new Date(value).toLocaleString() : '-',
+      render: (value: string | null) => (value ? formatDateTime(value) : '-'),
     },
   ];
 

@@ -268,10 +268,13 @@ export async function queryOrderPayment(
   );
 }
 
-export async function mockPayPortalOrder(
-  id: number,
-  method: 'wallet' | 'wechat' | 'alipay' = 'wallet',
-) {
+/**
+ * 余额支付（即时扣款，不需要渠道回调）。
+ *
+ * 名字曾叫 `mockPayPortalOrder`，但微信/支付宝早就改走真实下单了，
+ * 这个接口**只做余额支付**——继续叫 mock 会让下一个人以为它还能"假装付款"。
+ */
+export async function payWithWallet(id: number) {
   return unwrap<{
     id: number;
     payment_status: string;
@@ -280,7 +283,7 @@ export async function mockPayPortalOrder(
   }>(
     request(`/api/v1/portal/orders/${id}/mock-pay`, {
       method: 'POST',
-      data: { method },
+      data: { method: 'wallet' },
     }),
   );
 }

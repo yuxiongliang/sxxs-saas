@@ -12,6 +12,7 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 import { getProductReviews } from '@/services/commerce/api';
+import { formatDateTime } from '@/utils/datetime';
 
 const PAGE_SIZE = 5;
 
@@ -89,9 +90,7 @@ export default function ReviewsPanel({
                       style={{ fontSize: 13 }}
                     />
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {item.created_at
-                        ? new Date(item.created_at).toLocaleString()
-                        : ''}
+                      {item.created_at ? formatDateTime(item.created_at) : ''}
                     </Typography.Text>
                   </Space>
                   {item.content ? (

@@ -21,9 +21,10 @@ import React, { useState } from 'react';
 import {
   createOrderPayment,
   listPortalOrders,
-  mockPayPortalOrder,
+  payWithWallet,
   queryOrderPayment,
 } from '@/services/commerce/api';
+import { formatDateTime } from '@/utils/datetime';
 import { FULFILLMENT_STATUS, labelOf, PAYMENT_STATUS } from '@/utils/labels';
 import PortalPlainShell from '../components/PortalPlainShell';
 
@@ -107,7 +108,7 @@ const PaymentResultPage: React.FC = () => {
     setPaying(true);
     try {
       if (method === 'wallet') {
-        await mockPayPortalOrder(order.id, 'wallet');
+        await payWithWallet(order.id);
         message.success('支付成功');
         await refetch();
         return;
@@ -273,7 +274,7 @@ const PaymentResultPage: React.FC = () => {
                   </Descriptions.Item>
                   {order.created_at ? (
                     <Descriptions.Item label="下单时间">
-                      {order.created_at}
+                      {formatDateTime(order.created_at)}
                     </Descriptions.Item>
                   ) : null}
                 </Descriptions>

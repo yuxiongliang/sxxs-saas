@@ -30,6 +30,7 @@ import {
   listAdminProducts,
 } from '@/services/commerce/api';
 import type { ProductRecord } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 import {
   labelOf,
   PRODUCT_STATUS,
@@ -50,9 +51,6 @@ const statusColor = (status: string) =>
 
 const formatMoney = (cents?: number | null) =>
   typeof cents === 'number' ? `¥${(cents / 100).toFixed(2)}` : '—';
-
-const formatTime = (value?: string | null) =>
-  value ? value.replace('T', ' ').slice(0, 16) : '—';
 
 /** 每种状态下允许做的动作（与后端 PRODUCT_STATUS_FLOW 对应）。 */
 type Action = {
@@ -313,7 +311,7 @@ const ProductManagementPage: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updated_at',
       width: 150,
-      render: (value: string | null) => formatTime(value),
+      render: (value: string | null) => formatDateTime(value),
     },
     {
       title: '操作',

@@ -11,9 +11,10 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { PersonCell } from '@/components/IdentityText';
 import type { ReviewRecord } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 
 function formatTime(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : '-';
+  return value ? formatDateTime(value) : '-';
 }
 
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {

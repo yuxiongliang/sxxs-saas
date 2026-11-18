@@ -17,10 +17,10 @@ import {
   cancelPortalRefund,
   confirmPortalOrder,
   listPortalOrders,
-  mockPayPortalOrder,
   requestPortalRefund,
 } from '@/services/commerce/api';
 import type { OrderItemRecord, PortalOrder } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 import {
   DELIVERY_METHOD,
   FULFILLMENT_STATUS,
@@ -34,15 +34,6 @@ import {
 import PortalShell from '../components/PortalShell';
 
 const yuan = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
-
-/** 后端存 UTC，必须按浏览器本地时区渲染（截字符串会少 8 小时）。 */
-const formatTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const pad = (input: number) => String(input).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
 
 // 状态配色已统一到 utils/labels（PAYMENT_STATUS_COLOR / FULFILLMENT_STATUS_COLOR）
 
@@ -258,7 +249,7 @@ export default function PortalOrdersPage() {
       title: '下单时间',
       width: 150,
       onCell: merge,
-      render: (_, record) => formatTime(record.order.created_at),
+      render: (_, record) => formatDateTime(record.order.created_at),
     },
     {
       title: '备注',
@@ -273,17 +264,18 @@ export default function PortalOrdersPage() {
       fixed: 'right',
       render: (_, record) => (
         <Space>
+          {/* 真实支付：跳到支付页选「余额 / 微信 / 支付宝」，
+              结果以渠道回调/对账为准，列表里不再有"点一下就成功" */}
           {record.first && record.order.payment_status === 'unpaid' ? (
             <Button
               size="small"
               type="primary"
-              onClick={async () => {
-                await mockPayPortalOrder(record.order.id);
-                message.success('支付成功');
-                refetch();
-              }}
+              data-testid={`go-pay-${record.order.id}`}
+              onClick={() =>
+                navigate(`/portal/payment-result?orderId=${record.order.id}`)
+              }
             >
-              模拟支付
+              去支付
             </Button>
           ) : null}
           {record.first &&
