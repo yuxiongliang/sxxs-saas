@@ -1,11 +1,11 @@
-"""支付宝：电脑网站支付（alipay.trade.page.pay）+ 异步通知验签 + 主动查询。
+"""支付宝：补证书模式 + 验签容错 + 诊断（从私钥推导应用公钥）。
 
-不引第三方 SDK：用 `cryptography` 直接做 RSA2（SHA256withRSA）。
-好处是签名/验签逻辑完全可控、可单测（用自签密钥对构造真报文），
-不依赖 SDK 版本行为。
+## 为什么加这些
 
-签名规则（官方）：参数按 key 升序、去掉空值与 `sign`/`sign_type`，
-用 `k=v&k=v` 拼串，RSA2 私钥签名后 URL-safe base64。
+线上报 `invalid-signature`，网关给的验签字符串里同时缺 `app_cert_sn`：
+现代支付宝应用默认是**证书模式**，按公钥模式请求会被判签名无效。
+同时提供"从私钥推导应用公钥"——90% 的 invalid-signature 是
+**私钥与控制台里的应用公钥不是一对**，让运营能直接对比。
 """
 
 from __future__ import annotations
@@ -23,6 +23,14 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from app.services.payment.config import AlipayConfig
 
+# PEM 头/尾模板（不含密钥）；拆开拼接以避开 pre-commit 私钥扫描误报
+_PUB_HEAD = "-----BEGIN " + "PUBLIC KEY-----"
+_PUB_TAIL = "-----END " + "PUBLIC KEY-----"
+_RSA_HEAD = "-----BEGIN " + "RSA PRIVATE KEY-----"
+_RSA_TAIL = "-----END " + "RSA PRIVATE KEY-----"
+_PKCS8_HEAD = "-----BEGIN " + "PRIVATE KEY-----"
+_PKCS8_TAIL = "-----END " + "PRIVATE KEY-----"
+
 
 class AlipayError(Exception):
     pass
@@ -37,19 +45,9 @@ class NotifyResult:
     raw: dict
 
 
-# PEM 头/尾只是"给运维漏贴的密钥补壳"用的模板，不含任何密钥材料。
-# 这里拆开拼接是为了躲开 pre-commit 的私钥扫描误报（见 scripts/check-secrets.mjs）。
-_PUB_HEAD = "-----BEGIN " + "PUBLIC KEY-----"
-_PUB_TAIL = "-----END " + "PUBLIC KEY-----"
-_RSA_HEAD = "-----BEGIN " + "RSA PRIVATE KEY-----"
-_RSA_TAIL = "-----END " + "RSA PRIVATE KEY-----"
-_PKCS8_HEAD = "-----BEGIN " + "PRIVATE KEY-----"
-_PKCS8_TAIL = "-----END " + "PRIVATE KEY-----"
-
-
 def _normalize_key(key: str) -> str:
     """PEM 头尾可能被运维漏贴/带空格，这里兜一下。"""
-    value = (key or "").strip()
+    value = (key or "").strip().replace("\\n", "\n")
     if "BEGIN" in value:
         return value
     body = "\n".join(value[i : i + 64] for i in range(0, len(value), 64))
@@ -57,14 +55,14 @@ def _normalize_key(key: str) -> str:
 
 
 def _private_key(pem: str):
-    text = (pem or "").strip()
+    text = (pem or "").strip().replace("\\n", "\n")
     if "BEGIN" not in text:
         text = (
-            _RSA_HEAD
+            _PKCS8_HEAD
             + "\n"
             + "\n".join(text[i : i + 64] for i in range(0, len(text), 64))
             + "\n"
-            + _RSA_TAIL
+            + _PKCS8_TAIL
         )
     try:
         return serialization.load_pem_private_key(text.encode(), password=None)
@@ -79,11 +77,31 @@ def _public_key(pem: str):
     return serialization.load_pem_public_key(_normalize_key(pem).encode())
 
 
-def build_sign_content(params: dict[str, str]) -> str:
+def derive_public_key(private_key_pem: str) -> str:
+    """从应用私钥推导出**应用公钥**（PEM body）。
+
+    这是排查 `invalid-signature` 的关键工具：把这段贴进支付宝控制台的
+    「应用公钥」，或与那里已有的内容逐字对比 —— 不一致就说明密钥对不匹配。
+    """
+    public_key = _private_key(private_key_pem).public_key()
+    pem = public_key.public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    return "".join(line for line in pem.splitlines() if "BEGIN" not in line and "END" not in line)
+
+
+def build_sign_content(params: dict[str, str], *, with_sign_type: bool = False) -> str:
+    """待签名字符串。
+
+    官方规则：剔除 `sign` 与 `sign_type`，其余按 key 升序拼 `k=v&k=v`。
+    网关报错时打印的"验签字符串"里**带** `sign_type` —— 正是这个差异让人反复怀疑签名算法。
+    这里保留 `with_sign_type` 开关，验签时两种都试（见 `verify`）。
+    """
+    excluded = {"sign"} if with_sign_type else {"sign", "sign_type"}
     items = [
         (key, value)
         for key, value in params.items()
-        if key not in ("sign", "sign_type") and value not in (None, "")
+        if key not in excluded and value not in (None, "")
     ]
     items.sort(key=lambda item: item[0])
     return "&".join(f"{key}={value}" for key, value in items)
@@ -98,20 +116,26 @@ def sign(params: dict[str, str], private_key_pem: str) -> str:
 
 
 def verify(params: dict[str, str], alipay_public_key_pem: str) -> bool:
+    """验签。**两种字符串都试**（含/不含 sign_type）。
+
+    只信"签名能验过"这一件事，不猜渠道用的是哪种拼法 —— 猜错就会把真实回调判成伪造。
+    """
     signature = params.get("sign")
     if not signature:
         return False
-    content = build_sign_content(params)
     try:
-        _public_key(alipay_public_key_pem).verify(
-            base64.b64decode(signature),
-            content.encode("utf-8"),
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
-        return True
-    except (InvalidSignature, ValueError):
+        raw = base64.b64decode(signature)
+    except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
         return False
+    key = _public_key(alipay_public_key_pem)
+    for with_sign_type in (False, True):
+        content = build_sign_content(params, with_sign_type=with_sign_type)
+        try:
+            key.verify(raw, content.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+            return True
+        except InvalidSignature:
+            continue
+    return False
 
 
 class AlipayGateway:
@@ -120,20 +144,32 @@ class AlipayGateway:
         self.timeout = timeout
 
     # ---------------- 下单 ----------------
-    def page_pay_url(
-        self, *, out_trade_no: str, amount_cents: int, subject: str
-    ) -> str:
-        """返回可直接 302 的跳转地址（PC 网页支付）。"""
+    def _base_params(self) -> dict[str, str]:
         params = {
             "app_id": self.config.app_id,
-            "method": "alipay.trade.page.pay",
             "format": "JSON",
             "charset": "utf-8",
             "sign_type": "RSA2",
             "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
             "version": "1.0",
             "notify_url": self.config.notify_url,
-            "return_url": self.config.return_url,
+        }
+        if self.config.return_url:
+            params["return_url"] = self.config.return_url
+        # 证书模式：应用是证书模式却按公钥模式请求，会被判 invalid-signature
+        if self.config.app_cert_sn:
+            params["app_cert_sn"] = self.config.app_cert_sn
+        if self.config.alipay_root_cert_sn:
+            params["alipay_root_cert_sn"] = self.config.alipay_root_cert_sn
+        return params
+
+    def page_pay_url(
+        self, *, out_trade_no: str, amount_cents: int, subject: str
+    ) -> str:
+        """返回可直接 302 的跳转地址（PC 网页支付）。"""
+        params = {
+            **self._base_params(),
+            "method": "alipay.trade.page.pay",
             "biz_content": json.dumps(
                 {
                     "out_trade_no": out_trade_no,
@@ -170,13 +206,8 @@ class AlipayGateway:
     # ---------------- 主动查询（回调丢了兜底） ----------------
     async def query(self, *, out_trade_no: str) -> NotifyResult:
         params = {
-            "app_id": self.config.app_id,
+            **self._base_params(),
             "method": "alipay.trade.query",
-            "format": "JSON",
-            "charset": "utf-8",
-            "sign_type": "RSA2",
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-            "version": "1.0",
             "biz_content": json.dumps(
                 {"out_trade_no": out_trade_no}, separators=(",", ":")
             ),

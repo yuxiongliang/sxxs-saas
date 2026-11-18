@@ -415,3 +415,61 @@ def test_alipay_signature_requires_pem_normalization():
     params = {"a": "1"}
     params["sign"] = sign(params, private_pem)
     assert verify(params, body_only) is True
+
+def test_alipay_verify_accepts_both_sign_content_variants():
+    """网关报错时打印的"验签字符串"里带 sign_type，而官方规则要求剔除。
+
+    两种拼法都可能是对的（取决于渠道版本/实现），验签因此**两种都试**：
+    只认"签名能验过"，不猜渠道用哪种 —— 猜错会把真实回调判成伪造。
+    """
+    private_pem, public_pem = _keypair()
+    params = {
+        "app_id": "2021000000000000",
+        "out_trade_no": "T1-1",
+        "trade_status": "TRADE_SUCCESS",
+    }
+    signed = dict(params)
+    signed["sign"] = sign(params, private_pem)
+    signed["sign_type"] = "RSA2"
+    assert verify(signed, public_pem) is True
+
+    # 去掉 sign_type 也要能验过（渠道实现差异）
+    without = {k: v for k, v in signed.items() if k != "sign_type"}
+    assert verify(without, public_pem) is True
+
+    # 篡改必须失败
+    tampered = dict(signed)
+    tampered["out_trade_no"] = "T1-2"
+    assert verify(tampered, public_pem) is False
+
+
+def test_alipay_certificate_mode_params_and_derived_public_key():
+    """证书模式：填了 cert SN 就随请求下发；能从应用私钥推导出应用公钥。"""
+    from app.services.payment.alipay import AlipayGateway, derive_public_key
+    from app.services.payment.config import AlipayConfig
+
+    private_pem, public_pem = _keypair()
+    config = AlipayConfig(
+        app_id="2021007108682567",
+        private_key=private_pem,
+        alipay_public_key=public_pem,
+        notify_url="https://example.com/api/v1/public/payments/alipay/notify",
+        return_url="https://example.com/portal/payment-result",
+        gateway="https://openapi-sandbox.dl.alipaydev.com/gateway.do",
+        app_cert_sn="APPCERTSN",
+        alipay_root_cert_sn="ROOTCERTSN",
+    )
+    url = AlipayGateway(config).page_pay_url(
+        out_trade_no="T1-ORD1", amount_cents=1, subject="测试"
+    )
+    assert "app_cert_sn=APPCERTSN" in url
+    assert "alipay_root_cert_sn=ROOTCERTSN" in url
+    assert "sign=" in url
+
+    derived = derive_public_key(private_pem)
+    expected = "".join(
+        line
+        for line in public_pem.splitlines()
+        if "BEGIN" not in line and "END" not in line
+    )
+    assert derived == expected

@@ -29,6 +29,10 @@ class AlipayConfig:
     notify_url: str
     return_url: str
     gateway: str
+    # 证书模式（支付宝新应用默认）：两者都填才会在请求里带 cert SN。
+    # 应用是证书模式却按公钥模式请求 → 支付宝直接回 invalid-signature。
+    app_cert_sn: str = ""
+    alipay_root_cert_sn: str = ""
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,8 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
             notify_url=_clean(alipay_raw.get("notifyUrl")),
             return_url=_clean(alipay_raw.get("returnUrl")),
             gateway=gateway,
+            app_cert_sn=_clean(alipay_raw.get("appCertSn")),
+            alipay_root_cert_sn=_clean(alipay_raw.get("alipayRootCertSn")),
         )
 
     wechat: WechatConfig | None = None

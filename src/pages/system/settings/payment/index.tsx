@@ -30,13 +30,22 @@ import React, { useEffect, useState } from 'react';
 import InheritSwitch, {
   type SettingSource,
 } from '@/pages/system/components/InheritSwitch';
-import { getSetting, saveSetting, testSetting } from '@/services/system/api';
+import {
+  getPaymentHealth,
+  getSetting,
+  saveSetting,
+  testSetting,
+} from '@/services/system/api';
 import type { SettingTestResult } from '@/services/system/types';
 import SettingPage from '../../components/SettingPage';
 import TestResultAlert from '../../components/TestResultAlert';
 
 const PaymentSettings: React.FC = () => {
   const [form] = Form.useForm();
+  const health = useQuery({
+    queryKey: ['payment-health'],
+    queryFn: getPaymentHealth,
+  });
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -156,8 +165,8 @@ const PaymentSettings: React.FC = () => {
       <Alert
         showIcon
         type="info"
-        title="演示模式"
-        description="当前保存的是支付网关配置，测试连接与二维码为本地模拟结果。真实收款需要服务端接入支付宝/微信官方 SDK、商户证书和异步回调验签。"
+        title="真实支付已接入"
+        description="支付宝走「电脑网站支付」，微信走 Native 扫码；支付结果只认渠道异步通知/主动查询。保存后请先看右侧「支付诊断」确认密钥与回调地址无误。"
         style={{ marginBottom: 16 }}
       />
       <Row gutter={[16, 16]}>
@@ -268,16 +277,38 @@ const PaymentSettings: React.FC = () => {
                             <Form.Item
                               label="异步通知地址"
                               name={['alipay', 'notifyUrl']}
+                              extra="必须是公网可达的本系统回调：/api/v1/public/payments/alipay/notify"
                             >
-                              <Input placeholder="https://api.example.com/api/v1/payments/alipay/notify" />
+                              <Input placeholder="https://your-domain.com/api/v1/public/payments/alipay/notify" />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
                             <Form.Item
                               label="同步返回地址"
                               name={['alipay', 'returnUrl']}
+                              extra="用户付完跳回的前台页面"
                             >
-                              <Input placeholder="https://admin.example.com/payment/result" />
+                              <Input placeholder="https://your-domain.com/portal/payment-result" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                        <Row gutter={16}>
+                          <Col span={12}>
+                            <Form.Item
+                              label="应用公钥证书 SN（证书模式）"
+                              name={['alipay', 'appCertSn']}
+                              extra="应用是证书模式才填；与根证书 SN 必须同时填"
+                            >
+                              <Input placeholder="687218e0b6f5c1a2…" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={12}>
+                            <Form.Item
+                              label="支付宝根证书 SN（证书模式）"
+                              name={['alipay', 'alipayRootCertSn']}
+                              extra="不填则按公钥模式请求"
+                            >
+                              <Input placeholder="687218e0b6f5c1a2…" />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -368,7 +399,7 @@ const PaymentSettings: React.FC = () => {
                           label="支付回调地址"
                           name={['wechat', 'notifyUrl']}
                         >
-                          <Input placeholder="https://api.example.com/api/v1/payments/wechat/notify" />
+                          <Input placeholder="https://your-domain.com/api/v1/public/payments/wechat/notify" />
                         </Form.Item>
                       </>
                     ),
@@ -380,22 +411,93 @@ const PaymentSettings: React.FC = () => {
         </Col>
         <Col xs={24} xl={8}>
           <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
-            <Card title="接入状态">
-              <Descriptions column={1} size="small">
-                <Descriptions.Item label="支付宝">
-                  <Tag icon={<CheckCircleOutlined />} color="success">
-                    已配置
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="微信支付">
-                  <Tag icon={<CheckCircleOutlined />} color="success">
-                    已配置
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="回调验签">
-                  <Tag color="gold">待服务端实现</Tag>
-                </Descriptions.Item>
-              </Descriptions>
+            <Card
+              title="支付诊断"
+              extra={
+                <Button
+                  type="link"
+                  size="small"
+                  loading={health.isFetching}
+                  onClick={() => health.refetch()}
+                >
+                  重新检测
+                </Button>
+              }
+            >
+              <Space
+                orientation="vertical"
+                size={12}
+                style={{ display: 'flex' }}
+              >
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="支付宝">
+                    {health.data?.alipay.missing.length ? (
+                      <Tag color="red">
+                        缺 {health.data.alipay.missing.join('、')}
+                      </Tag>
+                    ) : (
+                      <Tag icon={<CheckCircleOutlined />} color="success">
+                        已配置（
+                        {health.data?.alipay.mode === 'certificate'
+                          ? '证书模式'
+                          : '公钥模式'}
+                        ／{health.data?.alipay.environment}）
+                      </Tag>
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="微信支付">
+                    {health.data?.wechat.missing.length ? (
+                      <Tag color="red">
+                        缺 {health.data.wechat.missing.join('、')}
+                      </Tag>
+                    ) : (
+                      <Tag icon={<CheckCircleOutlined />} color="success">
+                        已配置
+                      </Tag>
+                    )}
+                  </Descriptions.Item>
+                </Descriptions>
+                {(health.data?.issues ?? []).map((issue) => (
+                  <Alert key={issue} type="warning" showIcon title={issue} />
+                ))}
+                {health.data?.alipay.derivedPublicKey ? (
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#8c8c8c',
+                        marginBottom: 4,
+                      }}
+                    >
+                      从应用私钥推导出的应用公钥：贴到支付宝控制台「应用公钥」，
+                      或与现有内容逐字对比 —— 不一致就是 invalid-signature
+                      的原因
+                    </div>
+                    <Input.TextArea
+                      readOnly
+                      rows={3}
+                      value={health.data.alipay.derivedPublicKey}
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                    <Button
+                      size="small"
+                      type="link"
+                      onClick={() => {
+                        navigator.clipboard
+                          ?.writeText(
+                            health.data?.alipay.derivedPublicKey ?? '',
+                          )
+                          .then(() => message.success('已复制'))
+                          .catch(() =>
+                            message.warning('复制失败，请手动选中复制'),
+                          );
+                      }}
+                    >
+                      复制应用公钥
+                    </Button>
+                  </div>
+                ) : null}
+              </Space>
             </Card>
             <Card
               title="官方组件"
@@ -418,13 +520,13 @@ const PaymentSettings: React.FC = () => {
                   showIcon
                   type="info"
                   title="支付宝"
-                  description="Alipay Global / 手机网站支付 / 当面付"
+                  description="已接入「电脑网站支付」（alipay.trade.page.pay），异步通知 RSA2 验签"
                 />
                 <Alert
                   showIcon
                   type="success"
                   title="微信支付"
-                  description="JSAPI / Native / H5 支付"
+                  description="已接入「Native 扫码」，回调平台证书验签 + APIv3 解密"
                 />
               </Space>
             </Card>

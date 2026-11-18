@@ -180,6 +180,22 @@ export async function getSetting(category: string) {
  * `config` 不传表示**只切换来源**（跟随系统/自定义），后端会保留原有配置；
  * 否则「跟随系统」时提交的是平台脱敏值（******），会把自己的配置毁掉。
  */
+/** 支付配置诊断：缺哪些字段、公钥/证书模式、以及从私钥推导出的应用公钥。 */
+export async function getPaymentHealth() {
+  return unwrap<{
+    enabled: boolean;
+    alipay: {
+      enabled: boolean;
+      environment: string;
+      mode: 'public_key' | 'certificate';
+      missing: string[];
+      derivedPublicKey: string;
+    };
+    wechat: { enabled: boolean; missing: string[] };
+    issues: string[];
+  }>(request(`${API_PREFIX}/settings/payment/health`, { method: 'GET' }));
+}
+
 export async function saveSetting(
   category: string,
   data: {

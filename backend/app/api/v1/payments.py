@@ -115,31 +115,81 @@ async def wechat_notify(request: Request, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------- 配置自检
 
 
-@router.get("/admin/settings/payment/health")
+@router.get("/settings/payment/health")
 async def payment_health(
     context: AuthContext = Depends(require_permission("setting:payment")),
     db: AsyncSession = Depends(get_db),
 ):
-    """支付配置自检：告诉运营每个渠道**还缺什么**、当前是沙箱还是生产。
+    """支付配置诊断。
 
-    不做"测试连接"（支付宝/微信都没有安全的 ping 接口，真下单才算验证），
-    但把必填项与网关环境暴露出来，能挡掉绝大多数配一半就上线的情况。
+    除了"缺哪些字段"，还做三件真能救命的事：
+
+    1. **从应用私钥推导应用公钥** —— `invalid-signature` 十有八九是私钥与控制台里的
+       应用公钥不是一对；把这段贴进支付宝控制台即可对齐。
+    2. **回调地址路径体检** —— 配成旧路径 `/api/v1/payments/*` 时签名再对也收不到通知；
+       指向 `localhost:8000` 这类预览端口同理。
+    3. **证书模式一致性** —— 应用是证书模式却按公钥模式请求，支付宝直接判签名无效。
     """
     from app.services import setting as setting_service
+    from app.services.payment.alipay import AlipayError as _AlipayError
+    from app.services.payment.alipay import derive_public_key
 
     row = await setting_service.get_setting(db, "payment", context.tenant.id)
     config = row.config or {}
     alipay_raw = config.get("alipay") or {}
     wechat_raw = config.get("wechat") or {}
+
+    issues: list[str] = []
+    derived_public_key = ""
+    private_key = str(alipay_raw.get("privateKey") or "").strip()
+    if private_key:
+        try:
+            derived_public_key = derive_public_key(private_key)
+        except Exception:  # noqa: BLE001 - 任何解析失败都归为"私钥格式不对"
+            issues.append("应用私钥无法解析：请粘贴完整的 PEM（含 BEGIN/END 行）或纯 base64 串")
+    else:
+        issues.append("应用私钥为空")
+
+    alipay_notify = str(alipay_raw.get("notifyUrl") or "")
+    if "/public/payments/alipay/notify" not in alipay_notify:
+        issues.append(
+            "支付宝异步通知地址不是本系统回调路径，应为 "
+            "https://<你的域名>/api/v1/public/payments/alipay/notify"
+        )
+    return_url = str(alipay_raw.get("returnUrl") or "")
+    if not return_url:
+        issues.append("支付宝同步返回地址为空：付完款用户会停在渠道页面回不来")
+    elif ":8000" in return_url or "/payment/result" in return_url:
+        issues.append("同步返回地址指向旧的预览/模板路径，应为前台 /portal/payment-result")
+
+    wechat_notify = str(wechat_raw.get("notifyUrl") or "")
+    if wechat_notify and "/public/payments/wechat/notify" not in wechat_notify:
+        issues.append(
+            "微信支付回调地址不是本系统回调路径，应为 "
+            "https://<你的域名>/api/v1/public/payments/wechat/notify"
+        )
+
+    app_cert_sn = str(alipay_raw.get("appCertSn") or "").strip()
+    root_cert_sn = str(alipay_raw.get("alipayRootCertSn") or "").strip()
+    if bool(app_cert_sn) != bool(root_cert_sn):
+        issues.append(
+            "证书模式两个 SN 必须同时填：应用公钥证书 SN（app_cert_sn）与支付宝根证书 SN"
+        )
+    if str(alipay_raw.get("publicKey") or "").strip() == private_key and private_key:
+        issues.append("「支付宝公钥」和应用私钥贴成了同一段：支付宝公钥在控制台「接口加签方式」里")
+
     return ok(
         {
             "enabled": row.enabled,
             "alipay": {
                 "enabled": bool(alipay_raw.get("enabled", True)),
                 "environment": alipay_raw.get("environment") or "sandbox",
+                "mode": "certificate" if app_cert_sn else "public_key",
                 "missing": missing_fields(
                     alipay_raw, ("appId", "privateKey", "publicKey", "notifyUrl")
                 ),
+                # 让运营能把它贴进支付宝控制台的「应用公钥」，或与现有内容逐字对比
+                "derivedPublicKey": derived_public_key,
             },
             "wechat": {
                 "enabled": bool(wechat_raw.get("enabled", True)),
@@ -148,5 +198,6 @@ async def payment_health(
                     ("mchId", "appId", "apiV3Key", "serialNo", "privateKey", "notifyUrl"),
                 ),
             },
+            "issues": issues,
         }
     )
