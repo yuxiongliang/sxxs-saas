@@ -30,8 +30,9 @@ const GENDER_LABEL: Record<string, string> = {
   unknown: '不便透露',
 };
 
+// 全站时间精确到秒（登录时间只到分钟会看不出两次登录的先后）
 const formatTime = (value?: string | null) =>
-  value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—';
+  value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '—';
 
 /**
  * 基本设置：身份只读展示 + 可改资料实际保存。

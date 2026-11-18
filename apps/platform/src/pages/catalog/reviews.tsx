@@ -25,6 +25,7 @@ import {
   replyPlatformReview,
   setPlatformReviewStatus,
 } from '@/services/api';
+import { formatDateTime } from '@/utils/datetime';
 
 /** 大模型审核状态。接口已预留但**未接入模型**，界面上如实标注「未接入」。 */
 const MODERATION: Record<string, { text: string; color: string }> = {
@@ -171,8 +172,7 @@ export default function PlatformReviewsPage() {
       title: '时间',
       dataIndex: 'created_at',
       width: 170,
-      render: (value: string | null | undefined) =>
-        value ? new Date(value).toLocaleString() : '—',
+      render: (value: string | null | undefined) => formatDateTime(value),
     },
     {
       title: '操作',

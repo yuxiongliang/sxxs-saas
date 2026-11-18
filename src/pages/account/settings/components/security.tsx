@@ -17,8 +17,9 @@ import React, { useState } from 'react';
 import { changePassword, logout, me } from '@/services/auth/api';
 import { clearAccessToken } from '@/utils/authToken';
 
+// 全站时间精确到秒（登录时间只到分钟会看不出两次登录的先后）
 const formatTime = (value?: string | null) =>
-  value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—';
+  value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '—';
 
 type PasswordForm = {
   old_password: string;

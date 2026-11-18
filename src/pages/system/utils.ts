@@ -64,7 +64,7 @@ export function formatBytes(bytes: number) {
 }
 
 export function formatDateTime(value?: string) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-';
+  return value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-';
 }
 
 export function formatDate(value?: string) {

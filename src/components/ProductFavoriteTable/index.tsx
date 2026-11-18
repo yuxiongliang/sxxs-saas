@@ -4,10 +4,6 @@ import { CopyableText } from '@/components/IdentityText';
 import type { FavoriteRecord } from '@/services/commerce/types';
 import { formatDateTime } from '@/utils/datetime';
 
-function formatTime(value?: string | null) {
-  return value ? formatDateTime(value) : '-';
-}
-
 /**
  * 商品收藏表格（运营 / 卖家 / 平台共用一套列）。
  *
@@ -89,7 +85,7 @@ export default function ProductFavoriteTable({
       title: '收藏时间',
       dataIndex: 'created_at',
       width: 170,
-      render: (value: string | null) => formatTime(value),
+      render: (value: string | null) => formatDateTime(value),
     },
     ...(onRemove
       ? [

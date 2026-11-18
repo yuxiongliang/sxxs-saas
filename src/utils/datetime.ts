@@ -14,18 +14,20 @@ const parse = (value?: string | null): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-/** `2026-11-18 18:15` —— 列表/详情默认用它 */
+/**
+ * `2026-11-18 18:15:10` —— **全站默认**（产品要求：时间一律精确到秒）。
+ *
+ * 只到分钟的展示会导致「一分钟内两笔操作看不出先后」，排查问题时很致命。
+ */
 export function formatDateTime(value?: string | null): string {
   const date = parse(value);
   if (!date) return '—';
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** `2026-11-18 18:15:10` —— 审计这类需要精确到秒的地方 */
+/** 与 `formatDateTime` 同义（保留旧名字，避免调用方大改） */
 export function formatDateTimeFull(value?: string | null): string {
-  const date = parse(value);
-  if (!date) return '—';
-  return `${formatDateTime(value)}:${pad(date.getSeconds())}`;
+  return formatDateTime(value);
 }
 
 /** `2026-11-18` —— 只到日 */

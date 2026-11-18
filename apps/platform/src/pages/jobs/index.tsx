@@ -23,6 +23,7 @@ import {
   runScheduledJob,
   type ScheduledJobRow,
 } from '@/services/api';
+import { formatDateTime } from '@/utils/datetime';
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '待执行',
@@ -45,13 +46,6 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /** 时间按浏览器本地时区展示（后端存 UTC，直接截字符串会差 8 小时）。 */
-const formatTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const pad = (input: number) => String(input).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
 
 /**
  * 定时任务（延时任务队列）。
@@ -92,7 +86,7 @@ export default function PlatformJobsPage() {
       title: '计划执行时间',
       dataIndex: 'run_at',
       width: 170,
-      render: (value: string) => formatTime(value),
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: '状态',
@@ -115,7 +109,7 @@ export default function PlatformJobsPage() {
       title: '完成时间',
       dataIndex: 'finished_at',
       width: 170,
-      render: (value: string | null) => formatTime(value),
+      render: (value: string | null) => formatDateTime(value),
     },
     {
       title: '操作',

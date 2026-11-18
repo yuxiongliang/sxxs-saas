@@ -30,6 +30,7 @@ import type {
   OrderRecord,
   SellerOrderRecord,
 } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 import {
   DELIVERY_METHOD,
   FULFILLMENT_STATUS,
@@ -51,13 +52,6 @@ const money = (cents?: number | null) =>
  * 之前是 `value.replace('T',' ').slice(0,16)` —— 后端返回的是带 `+00:00` 的 UTC，
  * 直接截字符串会让显示时间比北京时间少 8 小时；倒计时/计划时间照抄就更离谱。
  */
-const formatTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const pad = (input: number) => String(input).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
 
 /**
  * 一行 = 一个商品行（`order_items`），不是一个订单。
@@ -315,7 +309,7 @@ const OrderManagementPage: React.FC = () => {
       title: '下单时间',
       width: 150,
       onCell: merge,
-      render: (_, record) => formatTime(record.order.created_at),
+      render: (_, record) => formatDateTime(record.order.created_at),
     },
     {
       title: '操作',

@@ -56,7 +56,7 @@ const ListContent = ({
       </div>
       <div className={styles.listContentItem}>
         <span>开始时间</span>
-        <p>{dayjs(createdAt).format('YYYY-MM-DD HH:mm')}</p>
+        <p>{dayjs(createdAt).format('YYYY-MM-DD HH:mm:ss')}</p>
       </div>
       <div className={styles.listContentItem}>
         <Progress

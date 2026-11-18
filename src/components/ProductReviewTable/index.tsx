@@ -13,10 +13,6 @@ import { PersonCell } from '@/components/IdentityText';
 import type { ReviewRecord } from '@/services/commerce/types';
 import { formatDateTime } from '@/utils/datetime';
 
-function formatTime(value?: string | null) {
-  return value ? formatDateTime(value) : '-';
-}
-
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
   visible: { text: '已展示', color: 'green' },
   hidden: { text: '已隐藏', color: 'red' },
@@ -211,7 +207,7 @@ export default function ProductReviewTable({
       title: '时间',
       dataIndex: 'created_at',
       width: 170,
-      render: (value: string | null) => formatTime(value),
+      render: (value: string | null) => formatDateTime(value),
     },
     ...(canModerate || canReply
       ? [

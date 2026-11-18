@@ -8,6 +8,7 @@ import {
   listPlatformFavorites,
   type PlatformFavoriteRow,
 } from '@/services/api';
+import { formatDateTime } from '@/utils/datetime';
 
 /**
  * 全站商品收藏（跨租户只读）。
@@ -61,8 +62,7 @@ export default function PlatformFavoritesPage() {
       title: '收藏时间',
       dataIndex: 'created_at',
       width: 180,
-      render: (value: string | null | undefined) =>
-        value ? new Date(value).toLocaleString() : '—',
+      render: (value: string | null | undefined) => formatDateTime(value),
     },
   ];
 

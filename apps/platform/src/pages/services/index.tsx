@@ -23,6 +23,7 @@ import {
   platformSettingImpact,
   savePlatformSetting,
 } from '@/services/api';
+import { formatDateTime } from '@/utils/datetime';
 import {
   CONFIG_FIELD_HINTS,
   configFieldLabel,
@@ -246,8 +247,7 @@ function CategoryPanel({ category }: { category: string }) {
               <Space>
                 <Tag color="geekblue">v{setting.data.version ?? 1}</Tag>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  后两位：
-                  {setting.data.updated_at?.slice(0, 19).replace('T', ' ')}
+                  更新时间：{formatDateTime(setting.data.updated_at)}
                 </Typography.Text>
               </Space>
             </Form.Item>
