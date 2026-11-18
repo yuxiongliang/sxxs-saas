@@ -93,7 +93,17 @@ const AddressesPage: React.FC = () => {
     setSaving(true);
     try {
       if (editing) {
-        await updateAddress(editing.id, payload);
+        const saved = await updateAddress(editing.id, payload);
+        // 保存后核对一次：省市区没落库就不算成功（这类"静默无效"最难发现）
+        if (
+          saved.province !== province ||
+          saved.city !== city ||
+          saved.district !== district
+        ) {
+          message.error('保存后省市区没有生效，请重试或联系管理员');
+          await refresh();
+          return;
+        }
         message.success('地址已更新');
       } else {
         await createAddress(payload);
@@ -127,8 +137,19 @@ const AddressesPage: React.FC = () => {
     {
       title: '地址',
       key: 'detail',
-      render: (_, record) =>
-        `${record.province}${record.city}${record.district}${record.detail}`,
+      render: (_, record) => {
+        const region = `${record.province}${record.city}${record.district}`;
+        return (
+          <>
+            {region ? (
+              region
+            ) : (
+              <Typography.Text type="danger">未设置省市区</Typography.Text>
+            )}
+            {record.detail}
+          </>
+        );
+      },
     },
     {
       title: '操作',

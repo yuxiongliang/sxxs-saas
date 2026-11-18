@@ -69,9 +69,11 @@ class PortalProductDetail(BaseModel):
 class AddressCreate(BaseModel):
     receiver_name: str = Field(min_length=1, max_length=64)
     receiver_phone: str = Field(min_length=1, max_length=32)
-    province: str = Field(default="", max_length=64)
-    city: str = Field(default="", max_length=64)
-    district: str = Field(default="", max_length=64)
+    # 省市区**不能为空**：之前默认空串，前端没传上来也照样 200，
+    # 结果就是"选了省市区但保存下来是空的"——必须让后端明确拒绝。
+    province: str = Field(min_length=1, max_length=64)
+    city: str = Field(min_length=1, max_length=64)
+    district: str = Field(min_length=1, max_length=64)
     detail: str = Field(min_length=1, max_length=255)
     is_default: bool = False
 
@@ -79,9 +81,10 @@ class AddressCreate(BaseModel):
 class AddressUpdate(BaseModel):
     receiver_name: str | None = Field(default=None, min_length=1, max_length=64)
     receiver_phone: str | None = Field(default=None, min_length=1, max_length=32)
-    province: str | None = Field(default=None, max_length=64)
-    city: str | None = Field(default=None, max_length=64)
-    district: str | None = Field(default=None, max_length=64)
+    # 传了就不能是空串（不传 = 不改这一项，由 exclude_unset 控制）
+    province: str | None = Field(default=None, min_length=1, max_length=64)
+    city: str | None = Field(default=None, min_length=1, max_length=64)
+    district: str | None = Field(default=None, min_length=1, max_length=64)
     detail: str | None = Field(default=None, min_length=1, max_length=255)
     is_default: bool | None = None
 

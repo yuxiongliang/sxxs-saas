@@ -480,3 +480,36 @@ async def test_seller_cannot_use_the_cart(client, operator_token):
     """Back-office roles have no cart permissions."""
     response = await client.get("/api/v1/portal/cart", headers=bearer(operator_token))
     assert response.status_code == 403
+
+async def test_address_requires_region_fields(client, customer_token):
+    """省市区不能为空。
+
+    这条防的是"选了省市区但保存下来是空的"那类**静默无效**：
+    以前 schema 允许空串，前端漏传也返回 200，用户以为保存了。
+    """
+    headers = bearer(customer_token)
+    for field in ("province", "city", "district"):
+        body = _address_body(**{field: ""})
+        response = await client.post(
+            "/api/v1/portal/addresses", headers=headers, json=body
+        )
+        assert response.status_code == 422, f"{field} 为空必须拒绝：{response.text}"
+
+    # 修改时传空串同样拒绝（不传 = 不改，仍然允许）
+    created = await client.post(
+        "/api/v1/portal/addresses", headers=headers, json=_address_body()
+    )
+    address_id = created.json()["data"]["id"]
+    rejected = await client.put(
+        f"/api/v1/portal/addresses/{address_id}",
+        headers=headers,
+        json={"province": ""},
+    )
+    assert rejected.status_code == 422
+    allowed = await client.put(
+        f"/api/v1/portal/addresses/{address_id}",
+        headers=headers,
+        json={"detail": "只改门牌号"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["data"]["province"] == "广东省"
