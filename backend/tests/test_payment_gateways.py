@@ -829,3 +829,73 @@ async def test_buyer_can_cancel_refund_request(
         headers=bearer(customer_token),
     )
     assert again.status_code == 400
+
+# ---------------------------------------------------------------- 查询响应兼容
+
+
+class _FakeResponse:
+    """模拟支付宝查询响应（GBK 编码的 JSON，content-type 是 text/html）。"""
+
+    def __init__(self, payload: str, encoding: str = "gbk") -> None:
+        self.content = payload.encode(encoding)
+        self.status_code = 200
+        self.headers = {"content-type": "text/html;charset=GBK"}
+
+    def json(self):  # noqa: D401 - 故意模拟 httpx 在 GBK 上抛 UnicodeDecodeError
+        raise ValueError("'utf-8' codec can't decode byte 0xd1")
+
+
+def test_alipay_query_decodes_gbk_json_and_treats_not_exist_as_unpaid():
+    """两个真实踩过的坑：
+
+    1. 支付宝查询出错时返回 **GBK** 编码的 JSON（content-type 还是 text/html），
+       `response.json()` 直接抛 UnicodeDecodeError；
+    2. `ACQ.TRADE_NOT_EXIST` 是"这单还没付"，属于未支付，**不能当任务失败**，
+       否则对账任务白重试 3 次并在管理页飘红。
+    """
+    from app.services.payment.alipay import NotifyResult, _decode_json_body
+
+    payload = (
+        '{"alipay_trade_query_response":{"code":"40004","msg":"Business Failed",'
+        '"sub_code":"ACQ.TRADE_NOT_EXIST","sub_msg":"交易不存在"}}'
+    )
+    body = _decode_json_body(_FakeResponse(payload))
+    assert body["alipay_trade_query_response"]["sub_code"] == "ACQ.TRADE_NOT_EXIST"
+
+    # 真实网关返回 40004 时，query() 应该给出"未支付"的结果而不是抛异常
+    import asyncio
+
+    from app.services.payment.alipay import AlipayGateway
+    from app.services.payment.config import AlipayConfig
+
+    private_pem, public_pem = _keypair()
+    config = AlipayConfig(
+        app_id="2021000000000000",
+        private_key=private_pem,
+        alipay_public_key=public_pem,
+        notify_url="https://example.com/notify",
+        return_url="https://example.com/return",
+        gateway="https://example.com/gateway.do",
+    )
+    gateway = AlipayGateway(config)
+    import httpx
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return _FakeResponse(payload)
+
+    original = httpx.AsyncClient
+    httpx.AsyncClient = lambda *a, **k: _Client()  # type: ignore[assignment]
+    try:
+        result = asyncio.run(gateway.query(out_trade_no="T1-ORD"))
+    finally:
+        httpx.AsyncClient = original  # type: ignore[assignment]
+    assert isinstance(result, NotifyResult)
+    assert result.trade_status == "WAIT_BUYER_PAY"
+    assert result.total_amount_cents == 0

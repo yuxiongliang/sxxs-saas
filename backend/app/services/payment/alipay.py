@@ -148,6 +148,26 @@ def verify(params: dict[str, str], alipay_public_key_pem: str) -> bool:
     return False
 
 
+def _decode_json_body(response) -> dict:
+    """解 JSON 响应：支付宝出错时返回 **GBK** 编码的 JSON/HTML。
+
+    `response.json()` 在 GBK 内容上会抛 UnicodeDecodeError；先按 utf-8、再按 gbk 解字节。
+    """
+    import json as _json
+
+    try:
+        return response.json()
+    except ValueError:
+        raw = response.content
+        for encoding in ("utf-8", "gbk"):
+            try:
+                return _json.loads(raw.decode(encoding))
+            except (UnicodeDecodeError, ValueError):
+                continue
+        snippet = " ".join(raw.decode("gbk", "ignore").split())[:160]
+        raise AlipayError(f"支付宝查询返回了非 JSON 响应：{snippet}")
+
+
 class AlipayGateway:
     def __init__(self, config: AlipayConfig, *, timeout: float = 10.0):
         self.config = config
@@ -227,17 +247,20 @@ class AlipayGateway:
             response = await client.post(self.config.gateway, data=params)
         if response.status_code >= 400:
             raise AlipayError(f"支付宝查询失败：HTTP {response.status_code}")
-        # 出错时网关返回的是 **GBK** 的错误页，直接 response.json() 会抛 UnicodeDecodeError
-        try:
-            body = response.json()
-        except ValueError as exc:
-            text = response.content.decode("utf-8", "ignore") or response.content.decode(
-                "gbk", "ignore"
-            )
-            snippet = " ".join(text.split())[:160]
-            raise AlipayError(f"支付宝查询返回了非 JSON 响应：{snippet}") from exc
+        body = _decode_json_body(response)
         node = body.get("alipay_trade_query_response") or {}
         if node.get("code") != "10000":
+            sub_code = str(node.get("sub_code") or "")
+            # ACQ.TRADE_NOT_EXIST：这笔单在支付宝侧还没建立/还没付 —— 属于"未支付"，
+            # 当成任务失败会让对账任务白白重试 3 次并在管理页飘红。
+            if sub_code == "ACQ.TRADE_NOT_EXIST":
+                return NotifyResult(
+                    out_trade_no=out_trade_no,
+                    trade_no="",
+                    total_amount_cents=0,
+                    trade_status="WAIT_BUYER_PAY",
+                    raw=node,
+                )
             raise AlipayError(
                 f"支付宝查询未成功：{node.get('sub_msg') or node.get('msg')}"
             )

@@ -27,6 +27,7 @@ from app.services.payment.service import (  # noqa: E402
     out_trade_no,
     query_and_sync,
     settle_paid_order,
+    sync_pending_payment,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "out_trade_no",
     "query_and_sync",
     "settle_paid_order",
+    "sync_pending_payment",
 ]

@@ -50,20 +50,32 @@ async def payment_sync(db: AsyncSession, job: ScheduledJob) -> str:
         return "skipped:no_order"
     if order.payment_status != "unpaid":
         return "skipped:already_final"
+    provider = await _payment_provider_of(db, order.id)
     result = await payment_service.sync_pending_payment(
         db,
         tenant_id=job.tenant_id or 0,
         order_id=order.id,
-        provider=_payment_provider_of(order.id, db),
+        provider=provider,
     )
     if result == "pending":
         raise RuntimeError("渠道仍未支付成功，稍后重试")
     return result
 
 
-def _payment_provider_of(_order_id: int, _db: AsyncSession) -> str:
-    """对账按支付宝查（当前只接了支付宝的主动查询；微信可照同样方式扩）。"""
-    return "alipay"
+async def _payment_provider_of(db: AsyncSession, order_id: int) -> str:
+    """对账要按**订单实际用的渠道**查：订单上挂着哪条 pending 支付记录就查哪个。"""
+    from sqlalchemy import select as sa_select
+
+    from app.models.order import Payment
+
+    row = (
+        await db.scalars(
+            sa_select(Payment)
+            .where(Payment.order_id == order_id, Payment.status == "pending")
+            .order_by(Payment.id.desc())
+        )
+    ).first()
+    return row.provider if row is not None else "alipay"
 
 
 HANDLERS: dict[str, Callable[[AsyncSession, ScheduledJob], Awaitable[str]]] = {

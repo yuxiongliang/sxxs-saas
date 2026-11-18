@@ -88,7 +88,11 @@ async def _claim_batch(db: AsyncSession) -> list[ScheduledJob]:
 
 
 async def _run_one(db: AsyncSession, job: ScheduledJob) -> bool:
-    handler = HANDLERS.get(job.kind)
+    # 先取出标量：失败分支里会 rollback，ORM 对象的属性届时已过期，
+    # 再去 job.id 会触发一次隐式 IO（MissingGreenlet），直接把 worker 弄崩。
+    job_id = job.id
+    kind = job.kind
+    handler = HANDLERS.get(kind)
     if handler is None:
         job.status = jobs_service.STATUS_FAILED
         job.last_error = f"未知任务类型 {job.kind}"
@@ -102,24 +106,32 @@ async def _run_one(db: AsyncSession, job: ScheduledJob) -> bool:
         job.finished_at = datetime.now(UTC)
         job.last_error = note if note.startswith("skipped") else None
         await db.commit()
-        logger.info("job.done", job_id=job.id, kind=job.kind, note=note)
+        logger.info("job.done", job_id=job_id, kind=kind, note=note)
         return True
     except Exception as exc:  # noqa: BLE001 —— 单条任务失败不能拖垮整批
-        await db.rollback()
-        job = await db.get(ScheduledJob, job.id)
-        if job is None:
+        # 记账失败也不能让整个 worker 挂掉：这一层必须自己 try 住
+        try:
+            await db.rollback()
+            fresh = await db.get(ScheduledJob, job_id)
+            if fresh is None:
+                return False
+            fresh.attempts += 1
+            fresh.last_error = str(exc)[:2000]
+            if fresh.attempts >= jobs_service.MAX_ATTEMPTS:
+                fresh.status = jobs_service.STATUS_FAILED
+                fresh.finished_at = datetime.now(UTC)
+            else:
+                fresh.status = jobs_service.STATUS_PENDING
+                fresh.run_at = datetime.now(UTC) + jobs_service.backoff_delay(
+                    fresh.attempts
+                )
+            await db.commit()
+            attempts = fresh.attempts
+        except Exception:  # noqa: BLE001 - 记账再失败就只留日志
+            logger.exception("job.record_failure_failed", job_id=job_id, kind=kind)
             return False
-        job.attempts += 1
-        job.last_error = str(exc)[:2000]
-        if job.attempts >= jobs_service.MAX_ATTEMPTS:
-            job.status = jobs_service.STATUS_FAILED
-            job.finished_at = datetime.now(UTC)
-        else:
-            job.status = jobs_service.STATUS_PENDING
-            job.run_at = datetime.now(UTC) + jobs_service.backoff_delay(job.attempts)
-        await db.commit()
         logger.warning(
-            "job.failed", job_id=job.id, kind=job.kind, attempts=job.attempts, error=str(exc)
+            "job.failed", job_id=job_id, kind=kind, attempts=attempts, error=str(exc)
         )
         return False
 
