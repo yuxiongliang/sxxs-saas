@@ -1,4 +1,10 @@
-import { LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
+import {
+  LeftOutlined,
+  PlusOutlined,
+  QuestionCircleOutlined,
+  RightOutlined,
+  VideoCameraOutlined,
+} from '@ant-design/icons';
 import {
   App,
   Button,
@@ -18,6 +24,7 @@ import {
   Steps,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -41,6 +48,7 @@ import {
 } from '@/utils/labels';
 import {
   buildCombos,
+  type Combo,
   comboKey,
   DEFAULT_KEY as DEFAULT_COMBO_KEY,
   resolveMedia,
@@ -71,12 +79,7 @@ const MAX_GROUPS = 3;
 
 type PickerTarget =
   | { kind: 'sku_image'; comboKey: string }
-  | {
-      kind: 'spec';
-      groupKey: string;
-      valueKey: string;
-      media: 'image' | 'video';
-    };
+  | { kind: 'spec'; groupKey: string; valueKey: string };
 
 /**
  * 商品类型 → 后续步骤。
@@ -280,6 +283,15 @@ export default function ProductEditor({
   }, [open, productId, form, message]);
 
   const combos = useMemo(() => buildCombos(groups), [groups]);
+  /** 是否真的有多规格（有组名 + 至少一个值）。只有多规格才有"按组合换图"的意义。 */
+  const hasSpecs = useMemo(
+    () =>
+      groups.some(
+        (group) =>
+          group.name.trim() && group.values.some((value) => value.value.trim()),
+      ),
+    [groups],
+  );
   const activeCombo = useMemo(
     () => combos.find((combo) => comboKey(combo) === activeKey) ?? combos[0],
     [combos, activeKey],
@@ -319,11 +331,21 @@ export default function ProductEditor({
     setPreviewOverride(undefined);
   };
 
-  const applyPicked = (url: string, _asVideo: boolean) => {
+  /**
+   * 规格值的媒体**一个入口**：附件选的是图就存 image_url、是视频就存 video_url。
+   * 以前是「图」「视频」两个按钮，运营要先想"我该点哪个"，选错还得再点一次；
+   * 现在由附件本身的类型决定，且两个字段互斥（展示时图优先于视频）。
+   */
+  const applyPicked = (url: string, isVideo: boolean) => {
     if (!picker) return;
     const target = picker;
     setPicker(undefined);
     if (target.kind === 'sku_image') {
+      if (isVideo) {
+        // 覆盖图只放图片：视频静默丢掉会让运营以为设上了
+        message.warning('覆盖图只能选图片');
+        return;
+      }
       setSkuDraft((prev) => ({
         ...prev,
         [target.comboKey]: {
@@ -344,13 +366,44 @@ export default function ProductEditor({
               values: group.values.map((value) =>
                 value.key !== target.valueKey
                   ? value
-                  : target.media === 'image'
-                    ? { ...value, image_url: url, video_url: null }
-                    : { ...value, video_url: url, image_url: null },
+                  : isVideo
+                    ? { ...value, video_url: url, image_url: null }
+                    : { ...value, image_url: url, video_url: null },
               ),
             },
       ),
     );
+  };
+
+  /** 清空某个规格值的媒体（回到"继承主图"），与下面的覆盖图清除同一套语义。 */
+  const clearSpecMedia = (groupKey: string, valueKey: string) => {
+    setGroups((prev) =>
+      prev.map((group) =>
+        group.key !== groupKey
+          ? group
+          : {
+              ...group,
+              values: group.values.map((value) =>
+                value.key !== valueKey
+                  ? value
+                  : { ...value, image_url: null, video_url: null },
+              ),
+            },
+      ),
+    );
+  };
+
+  /** 清空某个组合的覆盖图（回到"按规格值图/主图展示"）。 */
+  const clearSkuImage = (key: string) => {
+    setSkuDraft((prev) => ({
+      ...prev,
+      [key]: {
+        price_yuan: prev[key]?.price_yuan ?? 0,
+        stock: prev[key]?.stock ?? 0,
+        image_url: null,
+        video_url: null,
+      },
+    }));
   };
 
   const addGroup = () => {
@@ -726,6 +779,25 @@ export default function ProductEditor({
                             )
                           }
                         />
+                        {value.image_url ? (
+                          <img
+                            src={value.image_url}
+                            alt={value.value || '规格值图'}
+                            style={{
+                              width: 22,
+                              height: 22,
+                              objectFit: 'cover',
+                              borderRadius: 4,
+                              verticalAlign: 'middle',
+                            }}
+                          />
+                        ) : null}
+                        {value.video_url ? (
+                          <VideoCameraOutlined
+                            title="已挂视频"
+                            style={{ color: '#1677ff' }}
+                          />
+                        ) : null}
                         <Button
                           size="small"
                           type="link"
@@ -734,26 +806,23 @@ export default function ProductEditor({
                               kind: 'spec',
                               groupKey: group.key,
                               valueKey: value.key,
-                              media: 'image',
                             })
                           }
                         >
-                          {value.image_url ? '换图' : '图'}
+                          {value.image_url || value.video_url
+                            ? '更换'
+                            : '图/视频'}
                         </Button>
-                        <Button
-                          size="small"
-                          type="link"
-                          onClick={() =>
-                            setPicker({
-                              kind: 'spec',
-                              groupKey: group.key,
-                              valueKey: value.key,
-                              media: 'video',
-                            })
-                          }
-                        >
-                          {value.video_url ? '换视频' : '视频'}
-                        </Button>
+                        {value.image_url || value.video_url ? (
+                          <Button
+                            size="small"
+                            type="link"
+                            danger
+                            onClick={() => clearSpecMedia(group.key, value.key)}
+                          >
+                            清除
+                          </Button>
+                        ) : null}
                       </Tag>
                     ))}
                     <Button
@@ -855,25 +924,65 @@ export default function ProductEditor({
                     );
                   },
                 },
-                {
-                  title: '覆盖图',
-                  width: 110,
-                  render: (_, combo) => {
-                    const key = comboKey(combo);
-                    return (
-                      <Button
-                        size="small"
-                        type={skuDraft[key]?.image_url ? 'link' : 'dashed'}
-                        onClick={() => {
-                          setActiveKey(key);
-                          setPicker({ kind: 'sku_image', comboKey: key });
-                        }}
-                      >
-                        {skuDraft[key]?.image_url ? '已设置' : '未设置'}
-                      </Button>
-                    );
-                  },
-                },
+                // 单规格商品没有"按组合换图"的语义，这一列只会和主图打架，直接不渲染
+                ...(hasSpecs
+                  ? [
+                      {
+                        title: (
+                          <Tooltip title="只对这个组合生效，优先级：覆盖图 > 规格值图 > 主图。只有「同一规格值也要不同图」时才需要设置。">
+                            <Space size={4}>
+                              覆盖图
+                              <QuestionCircleOutlined />
+                            </Space>
+                          </Tooltip>
+                        ),
+                        width: 150,
+                        render: (_: unknown, combo: Combo) => {
+                          const key = comboKey(combo);
+                          const image = skuDraft[key]?.image_url;
+                          return (
+                            <Space size={2}>
+                              {image ? (
+                                <img
+                                  src={image}
+                                  alt="覆盖图"
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    objectFit: 'cover',
+                                    borderRadius: 4,
+                                  }}
+                                />
+                              ) : null}
+                              <Button
+                                size="small"
+                                type={image ? 'link' : 'dashed'}
+                                onClick={() => {
+                                  setActiveKey(key);
+                                  setPicker({
+                                    kind: 'sku_image',
+                                    comboKey: key,
+                                  });
+                                }}
+                              >
+                                {image ? '更换' : '设置'}
+                              </Button>
+                              {image ? (
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  danger
+                                  onClick={() => clearSkuImage(key)}
+                                >
+                                  清除
+                                </Button>
+                              ) : null}
+                            </Space>
+                          );
+                        },
+                      },
+                    ]
+                  : []),
               ]}
             />
             {detail?.inactive_sku_count ? (
@@ -1053,21 +1162,17 @@ export default function ProductEditor({
 
       <AttachmentPicker
         open={Boolean(picker)}
-        category={
-          picker?.kind === 'spec' && picker.media === 'video'
-            ? 'video'
-            : 'image'
-        }
-        title={
-          picker?.kind === 'spec' && picker.media === 'video'
-            ? '选择视频'
-            : '选择图片'
-        }
+        // 规格值：图或视频都收（拉全部附件）；覆盖图：只收图片
+        category={picker?.kind === 'spec' ? '' : 'image'}
+        accept={picker?.kind === 'spec' ? 'image/*,video/*' : 'image/*'}
+        uploadText={picker?.kind === 'spec' ? '上传图片或视频' : '上传图片'}
+        title={picker?.kind === 'spec' ? '选择规格值图片或视频' : '选择覆盖图'}
         onCancel={() => setPicker(undefined)}
         onSelect={(record) =>
           applyPicked(
             `/api/v1/attachments/public/${record.id}`,
-            record.category === 'video',
+            record.category === 'video' ||
+              Boolean(record.mime_type?.startsWith('video')),
           )
         }
       />

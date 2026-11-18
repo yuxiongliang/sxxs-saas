@@ -137,6 +137,14 @@ export async function updateSellerProduct(
 }
 
 /** 卖家只能：自己下架（on_sale→off_sale）、被驳回后重新提交（→pending_review）。 */
+/** 卖家软删除自己的商品：列表/商城不再展示，历史订单与审计保留。 */
+export async function deleteSellerProduct(productId: number) {
+  return request<{ id: number; status: string }>(
+    `/api/v1/portal/seller/products/${productId}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function changeSellerProductStatus(
   id: number,
   status: 'off_sale' | 'pending_review',

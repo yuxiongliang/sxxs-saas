@@ -343,11 +343,11 @@ async def review_seller(
 
 # 商品状态机：每一步只允许这些迁移，不能让 review 端点任意跳。
 PRODUCT_STATUS_FLOW: dict[str, set[str]] = {
-    "draft": {"pending_review"},
-    "pending_review": {"on_sale", "rejected"},
-    "rejected": {"pending_review"},
-    "on_sale": {"off_sale"},
-    "off_sale": {"on_sale"},
+    "draft": {"pending_review", "deleted"},
+    "pending_review": {"on_sale", "rejected", "deleted"},
+    "rejected": {"pending_review", "deleted"},
+    "on_sale": {"off_sale", "deleted"},
+    "off_sale": {"on_sale", "deleted"},
 }
 # 审核类迁移需要 product:moderate；上下架类需要 product:manage。
 # 否则「有 manage 就能自行上架」= 审核形同虚设。
@@ -363,6 +363,7 @@ STATUS_LABEL = {
     "on_sale": "在售",
     "off_sale": "已下架",
     "rejected": "已驳回",
+    "deleted": "已删除",
 }
 
 
@@ -447,6 +448,9 @@ async def admin_products(
     )
     if status:
         stmt = stmt.where(Product.status == status)
+    else:
+        # 软删除的商品默认不出现（显式筛"已删除"时才会看到，便于追溯）
+        stmt = stmt.where(Product.status != "deleted")
     if category_id is not None:
         stmt = stmt.where(Product.category_id == category_id)
     if product_type:

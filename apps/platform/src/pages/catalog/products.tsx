@@ -20,6 +20,17 @@ const STATUS_COLOR: Record<string, string> = {
   off_sale: 'default',
   rejected: 'red',
   draft: 'default',
+  deleted: 'default',
+};
+
+/** 状态中文名：平台端不能直接显示 `on_sale` 这种机器值 */
+const STATUS_LABEL: Record<string, string> = {
+  on_sale: '在售',
+  pending_review: '待审核',
+  off_sale: '已下架',
+  rejected: '已驳回',
+  draft: '草稿',
+  deleted: '已删除',
 };
 
 /**
@@ -91,7 +102,9 @@ export default function PlatformProductsPage() {
       dataIndex: 'status',
       width: 110,
       render: (value: string) => (
-        <Tag color={STATUS_COLOR[value] ?? 'default'}>{value}</Tag>
+        <Tag color={STATUS_COLOR[value] ?? 'default'}>
+          {STATUS_LABEL[value] ?? value}
+        </Tag>
       ),
     },
     { title: '销量', dataIndex: 'sold_count', width: 90, align: 'right' },
@@ -143,6 +156,7 @@ export default function PlatformProductsPage() {
               { label: '已下架', value: 'off_sale' },
               { label: '已驳回', value: 'rejected' },
               { label: '草稿', value: 'draft' },
+              { label: '已删除', value: 'deleted' },
             ]}
           />
           <Select

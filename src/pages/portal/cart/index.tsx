@@ -94,10 +94,37 @@ const CartPage: React.FC = () => {
       title: '商品',
       key: 'product',
       render: (_, record) => (
-        <Space orientation="vertical" size={2}>
-          <Typography.Text strong>{record.product_name}</Typography.Text>
-          <Typography.Text type="secondary">{record.sku_name}</Typography.Text>
-          {!record.available ? <Tag color="red">已失效或库存不足</Tag> : null}
+        <Space size={10} align="start">
+          {record.main_image ? (
+            <img
+              src={record.main_image}
+              alt={record.product_name}
+              style={{
+                width: 48,
+                height: 48,
+                objectFit: 'cover',
+                borderRadius: 6,
+                flex: 'none',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 6,
+                background: 'rgba(0,0,0,0.04)',
+                flex: 'none',
+              }}
+            />
+          )}
+          <Space orientation="vertical" size={2}>
+            <Typography.Text strong>{record.product_name}</Typography.Text>
+            <Typography.Text type="secondary">
+              {record.sku_name}
+            </Typography.Text>
+            {!record.available ? <Tag color="red">已失效或库存不足</Tag> : null}
+          </Space>
         </Space>
       ),
     },

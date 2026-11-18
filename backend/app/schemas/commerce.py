@@ -9,7 +9,9 @@ class SellerReviewRequest(BaseModel):
 
 
 class ProductReviewRequest(BaseModel):
-    status: str = Field(pattern="^(draft|pending_review|on_sale|off_sale|rejected)$")
+    status: str = Field(
+        pattern="^(draft|pending_review|on_sale|off_sale|rejected|deleted)$"
+    )
 
 
 class ShipmentCreateRequest(BaseModel):
@@ -43,7 +45,10 @@ class ProductUpdate(BaseModel):
 
 
 class ProductStatusRequest(BaseModel):
-    status: str = Field(pattern="^(draft|pending_review|on_sale|off_sale|rejected)$")
+    # deleted = 软删除（运营端也能删，走同一个状态机）
+    status: str = Field(
+        pattern="^(draft|pending_review|on_sale|off_sale|rejected|deleted)$"
+    )
     # 驳回时给卖家的原因（卖家中心会展示）
     reason: str | None = Field(default=None, max_length=255)
 

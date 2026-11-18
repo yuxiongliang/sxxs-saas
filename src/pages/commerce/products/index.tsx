@@ -62,6 +62,16 @@ type Action = {
   confirm: string;
 };
 
+const DELETE_ACTION: Action = {
+  key: 'delete',
+  label: '删除',
+  target: 'deleted',
+  danger: true,
+  need: 'edit',
+  confirm:
+    '确定删除该商品？删除后商城与列表都不再展示（软删除，历史订单与审计仍保留）。',
+};
+
 const actionsFor = (status: string): Action[] => {
   switch (status) {
     case 'on_sale':
@@ -75,6 +85,7 @@ const actionsFor = (status: string): Action[] => {
           confirm:
             '确定下架该商品？下架后买家商城不再展示，已生成的订单不受影响。',
         },
+        DELETE_ACTION,
       ];
     case 'off_sale':
       return [
@@ -85,6 +96,7 @@ const actionsFor = (status: string): Action[] => {
           need: 'edit',
           confirm: '确定重新上架？',
         },
+        DELETE_ACTION,
       ];
     case 'pending_review':
       return [
@@ -103,6 +115,7 @@ const actionsFor = (status: string): Action[] => {
           need: 'moderate',
           confirm: '确定驳回该商品？卖家需要重新提交。',
         },
+        DELETE_ACTION,
       ];
     case 'rejected':
     case 'draft':
@@ -114,6 +127,7 @@ const actionsFor = (status: string): Action[] => {
           need: 'moderate',
           confirm: '将该商品提交待审核？',
         },
+        DELETE_ACTION,
       ];
     default:
       return [];
@@ -397,6 +411,7 @@ const ProductManagementPage: React.FC = () => {
                   { label: '已下架', value: 'off_sale' },
                   { label: '已驳回', value: 'rejected' },
                   { label: '草稿', value: 'draft' },
+                  { label: '已删除', value: 'deleted' },
                 ]}
               />
               <Select

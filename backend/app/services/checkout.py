@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import Product, ProductSku
 from app.models.seller import Seller, Shop
 from app.services import cart as cart_service
+from app.services import catalog_media
 from app.services.auth import AuthContext
 
 EXPRESS = "express"
@@ -22,6 +23,8 @@ PICKUP = "pickup"
 def _issue(product: Product | None, sku: ProductSku | None, quantity: int, seller: Seller | None) -> str | None:
     if product is None or sku is None:
         return "商品已删除"
+    if product.status == "deleted":
+        return f"「{product.name}」已被删除"
     if product.status != "on_sale":
         return f"「{product.name}」已下架"
     if sku.status != "active":
@@ -64,6 +67,16 @@ async def build_preview(
     issues: list[str] = []
     total = 0
 
+    # 图片一次算完：清单可能十几行，逐行查规格值图就是 N+1
+    pairs: list[tuple[Product | None, ProductSku | None]] = []
+    for current_sku_id, _ in rows:
+        preview_sku = await db.get(ProductSku, current_sku_id)
+        preview_product = (
+            await db.get(Product, preview_sku.product_id) if preview_sku else None
+        )
+        pairs.append((preview_product, preview_sku))
+    images = await catalog_media.effective_image_map(db, pairs)
+
     for current_sku_id, current_quantity in rows:
         sku = await db.get(ProductSku, current_sku_id)
         product = await db.get(Product, sku.product_id) if sku else None
@@ -89,7 +102,7 @@ async def build_preview(
                 "product_name": product.name,
                 "sku_name": sku.name,
                 # 图优先取 SKU 图，和下单快照一致
-                "image": sku.image_url or product.main_image,
+                "image": images.get(sku.id),
                 "price_cents": sku.price_cents,
                 "quantity": current_quantity,
                 "subtotal_cents": subtotal,

@@ -6,6 +6,7 @@ export const PRODUCT_STATUS: Record<string, string> = {
   on_sale: '在售',
   off_sale: '已下架',
   rejected: '已驳回',
+  deleted: '已删除',
 };
 
 /**

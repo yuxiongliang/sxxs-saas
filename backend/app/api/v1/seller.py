@@ -224,6 +224,19 @@ async def change_seller_product_status(
     )
 
 
+@router.delete("/products/{product_id}")
+async def delete_seller_product(
+    product_id: int,
+    context: AuthContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """卖家软删除自己的商品（列表/商城不再展示，历史订单与审计保留）。"""
+    return ok(
+        await seller_service.delete_seller_product(db, context, product_id),
+        "商品已删除",
+    )
+
+
 @router.get("/orders")
 async def seller_orders(
     context: AuthContext = Depends(get_current_context),

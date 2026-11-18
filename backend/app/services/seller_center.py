@@ -54,6 +54,8 @@ async def seller_products(
     stmt = select(Product).where(
         Product.tenant_id == context.tenant.id,
         Product.seller_id == seller.id,
+        # 软删除的商品不再出现在卖家列表（行还在库里，历史订单/审计仍可追溯）
+        Product.status != "deleted",
     )
     if product_type:
         stmt = stmt.where(Product.product_type == product_type)
@@ -108,6 +110,8 @@ async def _own_product(db: AsyncSession, context: AuthContext, product_id: int) 
     product = await db.get(Product, product_id)
     if product is None or product.tenant_id != context.tenant.id or product.seller_id != seller.id:
         raise HTTPException(status_code=404, detail="商品不存在")
+    if product.status == "deleted":
+        raise HTTPException(status_code=404, detail="商品已删除")
     return product
 
 
@@ -381,6 +385,34 @@ async def update_seller_product(
         "stock": sku.stock if sku else 0,
         "bounced_to_review": bounced,
     }
+
+
+async def delete_seller_product(
+    db: AsyncSession, context: AuthContext, product_id: int
+) -> dict:
+    """卖家软删除自己的商品。
+
+    **软删**（status='deleted'）而不是物理删：订单快照、收藏、评价、审计都还引用着
+    这条商品，物理删会让历史数据变成孤儿。删除后：买家商城看不到、卖家列表看不到、
+    购物车行标记失效，但历史订单照常可查。
+    """
+    product = await _own_product(db, context, product_id)
+    before = product.status
+    product.status = "deleted"
+    # 驳回原因对已删除商品没有意义，顺手清掉
+    product.reject_reason = None
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_PRODUCT_DELETED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="product",
+        target_id=product.id,
+        before={"status": before},
+        after={"status": "deleted"},
+    )
+    await db.commit()
+    return {"id": product.id, "status": product.status}
 
 
 async def change_seller_product_status(

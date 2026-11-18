@@ -47,6 +47,7 @@ ACTION_JOB_CANCELLED = "job.cancelled"
 ACTION_SELLER_APPLIED = "seller.applied"
 ACTION_SELLER_APPROVED = "seller.approved"
 ACTION_PRODUCT_CREATED = "product.created"
+ACTION_PRODUCT_DELETED = "product.deleted"
 ACTION_PRODUCT_REVIEWED = "product.reviewed"
 ACTION_PRODUCT_UPDATED = "product.updated"
 ACTION_PAYOUT_REQUESTED = "payout.requested"
@@ -99,6 +100,7 @@ ACTION_LABELS: dict[str, str] = {
     ACTION_SELLER_APPLIED: "卖家入驻申请",
     ACTION_SELLER_APPROVED: "卖家审核通过",
     ACTION_PRODUCT_CREATED: "创建商品",
+    ACTION_PRODUCT_DELETED: "删除商品",
     ACTION_PRODUCT_REVIEWED: "商品审核",
     ACTION_PRODUCT_UPDATED: "修改商品",
     ACTION_PAYOUT_REQUESTED: "提现申请",

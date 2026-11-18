@@ -25,6 +25,7 @@ from app.schemas.cart import (
     PortalProductDetail,
     ProductSkuOut,
 )
+from app.services import catalog_media
 from app.services.auth import AuthContext
 
 
@@ -95,6 +96,8 @@ async def _to_out(db: AsyncSession, item: CartItem) -> CartItemOut:
         and sku.status == "active"
         and stock >= item.quantity
     )
+    # 成交图口径：SKU 覆盖图 > 规格值图 > 主图（与详情页/订单快照一致）
+    image = await catalog_media.effective_image(db, product, sku)
     return CartItemOut(
         id=item.id,
         product_id=item.product_id,
@@ -102,11 +105,16 @@ async def _to_out(db: AsyncSession, item: CartItem) -> CartItemOut:
         seller_id=item.seller_id,
         quantity=item.quantity,
         selected=item.selected,
-        product_name=product.name if product else "商品已删除",
+        product_name=(
+            "商品已删除"
+            if product is None or product.status == "deleted"
+            else product.name
+        ),
         sku_name=sku.name if sku else "规格已删除",
         price_cents=price,
         stock=stock,
-        main_image=product.main_image if product else None,
+        # 字段名是历史遗留（前端按 main_image 读），值已改为**成交图**口径
+        main_image=image,
         subtotal_cents=price * item.quantity,
         available=available,
         delivery_methods=(product.delivery_methods or ["express"]) if product else ["express"],

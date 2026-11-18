@@ -47,6 +47,9 @@ async def platform_products(
         stmt = stmt.where(Product.tenant_id == tenant_id)
     if status:
         stmt = stmt.where(Product.status == status)
+    else:
+        # 租户软删除的商品对平台也不该出现（要查就显式筛 status=deleted）
+        stmt = stmt.where(Product.status != "deleted")
     if product_type:
         stmt = stmt.where(Product.product_type == product_type)
     if keyword:

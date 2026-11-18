@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Card, Popconfirm, Select, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import ProductEditor, {
@@ -9,6 +9,7 @@ import ProductEditor, {
 import {
   changeSellerProductStatus,
   createSellerProduct,
+  deleteSellerProduct,
   getSellerProduct,
   listSellerCategories,
   listSellerProducts,
@@ -83,6 +84,17 @@ export default function SellerProductsPage() {
     }
   };
 
+  /** 软删除：商品从卖家列表与买家商城一起消失，历史订单/评价/审计照旧保留。 */
+  const removeProduct = async (record: SellerProductRecord) => {
+    try {
+      await deleteSellerProduct(record.id);
+      message.success('商品已删除');
+      refresh();
+    } catch (error) {
+      message.error((error as Error)?.message || '删除失败');
+    }
+  };
+
   const columns: ColumnsType<SellerProductRecord> = [
     {
       title: '商品',
@@ -135,7 +147,7 @@ export default function SellerProductsPage() {
     },
     {
       title: '操作',
-      width: 200,
+      width: 240,
       render: (_, record) => (
         <Space size={0}>
           <Button
@@ -167,6 +179,14 @@ export default function SellerProductsPage() {
               提交审核
             </Button>
           ) : null}
+          <Popconfirm
+            title="删除后商城与列表都不再展示，历史订单与评价保留。确定删除？"
+            onConfirm={() => removeProduct(record)}
+          >
+            <Button type="link" size="small" danger>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },

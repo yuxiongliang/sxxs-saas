@@ -17,6 +17,7 @@ from app.models.order import (
 from app.models.seller import Seller, Shop
 from app.schemas.order import OrderCreateRequest
 from app.services import audit as audit_service
+from app.services import catalog_media
 from app.services import finance as finance_service
 from app.services import jobs as jobs_service
 from app.services import order_state as st
@@ -163,8 +164,9 @@ async def create_order(
                 product_type=product.product_type,
                 # 交付方式快照（列表直接展示，不用再回查卖家单）
                 delivery_method=method,
-                # 订单快照的图要取**选中 SKU 的图**，否则买家收到的图和买的对不上
-                image=sku.image_url or product.main_image,
+                # 订单快照的图取**成交图**（SKU 覆盖图 > 规格值图 > 主图），
+                # 与详情页/确认页同一口径，否则买家收到的图和买的对不上
+                image=await catalog_media.effective_image(db, product, sku),
                 price_cents=sku.price_cents,
                 quantity=quantity,
                 subtotal_cents=subtotal,

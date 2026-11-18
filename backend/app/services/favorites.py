@@ -89,6 +89,8 @@ async def list_favorites(
         .join(User, User.id == ProductFavorite.user_id)
         .join(Seller, Seller.id == Product.seller_id, isouter=True)
         .join(Shop, Shop.id == Product.shop_id, isouter=True)
+        # 商品被卖家/运营软删除后，收藏条目不该再展示（否则点进去是 404）
+        .where(Product.status != "deleted")
     )
     if tenant_id is not None:
         stmt = stmt.where(ProductFavorite.tenant_id == tenant_id)

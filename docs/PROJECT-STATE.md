@@ -87,6 +87,8 @@ src/
 | 账号与权限 | 租户 RBAC（权限码）+ 平台独立鉴权（`aud` cookie 隔离）；卖家走**归属校验**不靠权限码 | `services/auth.py`、`services/platform_auth.py`、`access.ts` |
 | 站点品牌 | logo/favicon/全站名称/站点描述/ICP；**买家中心顶栏只显 logo**（站名进 aria-label） | `services/tenant_brand.py`、`hooks/useSiteBrand.ts` |
 | 商品 | 类型四步向导（类型→基础→规格→详情→**交付**）；多规格笛卡尔积 SKU；主图/视频；Tiptap 富文本 | `ProductEditor`、`catalog_specs.py`、`rich_text.py` |
+| 商品图片优先级 | **成交图 = SKU 覆盖图 > 规格值图 > 主图**，只在 `catalog_media.py` 一处算（详情页 / 购物车 / 确认页 / 订单快照共用）；列表卡片、收藏、评价固定用主图（那是「商品封面」）。规格值的「图/视频」是**一个入口**（附件类型决定落 `image_url` 还是 `video_url`），两处都能清除 | `services/catalog_media.py`、`utils/specUtils.resolveMedia` |
+| 商品软删除 | 卖家/运营删商品 = `status='deleted'`（**不物理删**：订单快照、收藏、评价、审计还引用它）。删后卖家列表/买家商城/收藏/确认页全部不见，购物车行标失效；运营端默认不列，显式筛「已删除」可追溯 | `seller_center.delete_seller_product`、`PRODUCT_STATUS_FLOW` |
 | 商品类型 | 只有 `physical` 开放；创建后不可改；非实物后端 400 | `schemas/commerce.py`、`order_state` 无关 |
 | 交付方式 | 快递 / 自提可多选（不预勾选）；落 `seller_orders.delivery_method` | `products.delivery_methods`、`shops.address/pickup_note` |
 | 订单 | **双状态**：`payment_status` + `fulfillment_status`；旧 `status` 已删 | `services/order_state.py::sync_order()` |
@@ -250,6 +252,8 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | 现象 | 病根 | 口诀 |
 | --- | --- | --- |
 | 自定义控件「选了值但保存后是空的」 | 控件不是 `Form.Item` 的**注册字段**（用隐藏字段 + setFieldsValue），`validateFields()` 拿不到 | 自定义控件必须挂在 `Form.Item name=...` 上；后端 schema 也别给默认空串，空值要 422 拒绝 |
+| 详情页是规格图、订单里却是主图 | 各处自己拼 `sku.image_url or main_image`，漏了规格值图 | **凡是「这支 SKU 长什么样」都调 `catalog_media.effective_image`**，别在业务代码里重复优先级 |
+| 商品删了但收藏/购物车里还点得进去 | 只删了商品，没同步各列表的过滤 | 软删除是**状态**不是删行：每个新列表都要问一句「deleted 要不要排除」 |
 | 结算页展示的价格与下单时不一致 | 前端自己拿商品详情拼清单 | 清单只来自服务端 `checkout/preview`，提交时后端再算一次（以后端为准） |
 | 保存成功但值变空 | 多步表单用条件渲染把 `<Form>` 卸载了 | **多步表单 + 保存按钮只在最后一步 = 必须检查 Form 是否被卸载**；用 `display` 切换 |
 | 页面卡「正在加载资源」 | dev 与 build 抢写 `src/.umi`，chunk 图不一致 | **build 前先停 dev**；恢复靠重启 dev（或 `rm -rf node_modules/.cache`） |

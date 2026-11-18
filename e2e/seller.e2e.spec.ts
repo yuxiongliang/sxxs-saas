@@ -91,6 +91,15 @@ test.describe('seller centre', () => {
     await expect(page.getByText(name).first()).toBeVisible({
       timeout: 20_000,
     });
+
+    // 软删除：卖家能删自己的商品，删完列表里不再有（行还在库里，历史订单照旧）
+    const row = page.locator('tr', { hasText: name }).first();
+    await row.getByRole('button', { name: /删\s*除/ }).click();
+    await page
+      .locator('.ant-popconfirm-buttons .ant-btn-primary')
+      .first()
+      .click();
+    await expect(page.getByText(name).first()).toBeHidden({ timeout: 20_000 });
   });
 
   test('buyer opening the seller centre gets no shop data', async ({

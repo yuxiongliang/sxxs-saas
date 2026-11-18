@@ -29,6 +29,8 @@ interface AttachmentPickerProps {
   /** 上传框 accept，按类型给默认值（图片/视频各一套） */
   accept?: string;
   title?: string;
+  /** 上传按钮文案：图片槽位和"图片或视频"槽位说法不同 */
+  uploadText?: string;
 }
 
 const PAGE_SIZE = 12;
@@ -54,6 +56,7 @@ export default function AttachmentPicker({
   category = 'image',
   accept,
   title = '选择图片',
+  uploadText = '上传新图片',
 }: AttachmentPickerProps) {
   const { message } = App.useApp();
   const { token } = theme.useToken();
@@ -117,7 +120,7 @@ export default function AttachmentPicker({
             accept={accept ?? (category === 'video' ? 'video/*' : 'image/*')}
             multiple={false}
             sourceModule="brand"
-            buttonText="上传新图片"
+            buttonText={uploadText}
             onUploaded={(record) => {
               // 新传的图片直接选中，省一次翻页
               queryClient.invalidateQueries({
@@ -142,7 +145,7 @@ export default function AttachmentPicker({
         <Empty
           description={
             <>
-              <InboxOutlined /> 还没有图片附件，先上传一张
+              <InboxOutlined /> 还没有附件，先上传一个
             </>
           }
         />
