@@ -38,6 +38,7 @@ export { default as RichTextEditor, EMPTY_DOC } from './RichTextEditor';
 export { default as RichTextViewer } from './RichTextViewer';
 export { default as StandardFormRow } from './StandardFormRow';
 export { default as TagSelect } from './TagSelect';
+export { default as UserMenu } from './UserMenu';
 
 export {
   AvatarDropdown,

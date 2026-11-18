@@ -199,7 +199,7 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 | | 物流快递 | 自提 |
 | --- | --- | --- |
-| 下单 | 选收货地址 | 只填联系人 + 手机号（`shops.address` / `pickup_note` 显示自提点） |
+| 下单 | 选收货地址 | 只填联系人 + 手机号（`shops.address` / `pickup_note` 显示自提门店） |
 | 卖家 | 填物流公司 + 运单号 → 已发货 | **备货完成**（不写运单） → 已发货 |
 | 买家 | 确认收货 | 确认已自提（同一接口，文案不同） |
 | 兑现 | **7 天**未确认自动完成 | **90 天**兑底自动完成 |
@@ -873,6 +873,42 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 3. **刚选完的预览用 `record.url`**：那一瞬附件还没发布，直链仍是 404。
 4. **槽位类型必须匹配**：主图槽选了视频直接提示拒绝，**不能静默清空主图**
    （以前会把 `main_image` 至于空，用户以为存上了，回前台发现图没了）。
+
+### 门户侧栏的公共交互（买家中心 / 卖家中心）
+
+两套侧栏共用一个 `PortalLayout`，所以下面这些能力**只实现一次**：
+
+| 能力 | 口径 |
+| --- | --- |
+| 顶部横向标签栏 | `components/PageTabs` 的**菜单驱动**模式（另一模式给控制台按路由名走）。概览标签常驻不可关；关当前标签回相邻/概览；「关闭全部」回概览；状态按中心存 `sessionStorage`（`portal-tabs-buyer` / `portal-tabs-seller`） |
+| 用户名菜单 | `components/UserMenu`：**hover** 出「个人设置 / 退出登录」。个人设置**新窗口**开 `/account/settings`（那个页挂在控制台外壳里，同窗口开会出现"门户外壳套控制台外壳"）；退出留在当前窗口回登录页 |
+| 消息未读 | 侧栏菜单与标签栏两处都要显示（标签栏通过 `badges` 传 href→count） |
+
+> 门户页面**每个都自己渲染一次外壳**，所以 `PageTabs` 会随导航重挂：标签状态必须写进
+> 模块级缓存 + `sessionStorage`，并且在**事件里同步写**——只靠 `useState` 的话，
+> 关标签后立刻 `history.push`，持久化 effect 还没跑就被卸载，新实例会把旧列表读回来
+> （表现为"关掉的标签又出现了"）。
+
+### 卖家中心 · 店铺管理（`/portal/seller/shop`）
+
+配置类内容不再堆在「店铺概览」里（概览是看数的地方）：
+
+- **店铺信息**：店铺名、简介 —— 买家在商品详情/店铺卡看到的就是这些；
+- **自提门店**（原「自提点」）：自提地址 + 自提说明。商品勾了「自提」时，买家结算页
+  显示这个地址；没填就只能看到「卖家未填写」，等于不能自提，所以页面对空地址给红色提示。
+- 两者走同一个 `PUT /portal/seller/shop`，因此是**一张表单、一个保存按钮**。
+
+文案统一叫「自提门店」；**字段名不变**（`shops.address` / `shops.pickup_note`），不需要迁移。
+
+### 平台端：管理员自助改密码
+
+`POST /platform/auth/password`（验当前密码 → 换 hash → `token_version+1`）：
+旧 access token 立刻 401，Redis 里的 refresh token 也作废；前端拿到成功响应后
+清 token 回登录页。审计动作 `platform.password.changed`。
+
+顺带修了一个真实体验问题：平台登录页原来只 `tokens.set()` 就跳转，
+全局 `initialState` 还是登录前的空用户，顶栏一直显示兜底文案 `platform`。
+现在登录成功后先 `await refresh()`。
 
 ### 商品图片的三层优先级（**成交图**口径）
 

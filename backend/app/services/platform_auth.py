@@ -18,10 +18,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import redis_client
-from app.core.security import create_access_token, create_refresh_token, verify_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+    verify_password,
+)
 from app.dao import user as user_dao
 from app.models.permission import Permission
 from app.models.user import User
+from app.schemas.auth import PasswordChange
+from app.services import audit as audit_service
 from app.services.auth import token_is_stale
 
 logger = structlog.get_logger(__name__)
@@ -177,3 +184,31 @@ async def logout(refresh_token: str | None) -> None:
         await redis_client.delete(f"refresh:{refresh_token}")
     except RedisError as exc:
         logger.warning("platform_logout_failed", error=str(exc))
+
+
+async def change_password(
+    db: AsyncSession, context: PlatformContext, payload: PasswordChange
+) -> None:
+    """平台管理员自助改密码。
+
+    改完 `token_version + 1`：本人所有 access / refresh token 立即作废
+    （前端拿到成功响应后自己清 token 并回登录页）—— 平台账号只有一把钥匙，
+    留着旧会话等于改了个寂寞。
+    """
+    user = context.user
+    if not user.password_hash:
+        raise HTTPException(status_code=400, detail="该账号没有密码，无法自助修改")
+    if not verify_password(payload.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="当前密码不正确")
+    if payload.old_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
+    user.password_hash = hash_password(payload.new_password)
+    user.token_version = (user.token_version or 0) + 1
+    await audit_service.record_platform(
+        db,
+        actor_id=user.id,
+        action=audit_service.ACTION_PLATFORM_PASSWORD_CHANGED,
+        target_type="platform_user",
+        target_id=user.id,
+    )
+    await db.commit()

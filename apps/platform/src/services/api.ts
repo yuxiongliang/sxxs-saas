@@ -28,6 +28,12 @@ export const platformMe = () => apiGet<PlatformMe>('/platform/auth/me');
 
 export const logout = () => apiPost<null>('/platform/auth/logout');
 
+/** 平台管理员自助改密码（成功后本人所有旧会话立即失效） */
+export const changePlatformPassword = (data: {
+  old_password: string;
+  new_password: string;
+}) => apiPost<null>('/platform/auth/password', data);
+
 // ---------------------------------------------------------------------------
 // 租户 / 套餐 / 订阅 / 账单
 // ---------------------------------------------------------------------------

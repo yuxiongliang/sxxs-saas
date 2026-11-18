@@ -1,5 +1,5 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
-import { history, useIntl } from '@umijs/max';
+import { history, useIntl, useModel } from '@umijs/max';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { useState } from 'react';
 import { login } from '@/services/api';
@@ -9,12 +9,16 @@ export default function PlatformLoginPage() {
   const intl = useIntl();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
+  // 登录后**必须**刷新全局 initialState：否则顶栏还停在登录前的空用户上，
+  // 右上角会一直显示兜底文案「platform」，而不是真实昵称。
+  const { refresh } = useModel('@@initialState');
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
       const session = await login(values.username, values.password);
       tokens.set(session.access_token);
+      await refresh();
       const params = new URLSearchParams(window.location.search);
       history.replace(params.get('redirect') || '/tenants/list');
     } catch (error) {

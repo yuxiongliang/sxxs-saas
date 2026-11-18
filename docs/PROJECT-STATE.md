@@ -76,6 +76,10 @@ src/
   utils/labels.ts  # 全站枚举文案中枢（状态/类型/交付方式）
 ```
 
+**已下线**：`/dashboard/monitor`（Pro 模板监控页，无业务数据源，路由/页面/四套 locale 一起删）。
+
+| 平台账号 | 顶栏昵称 hover → **修改密码**：`POST /platform/auth/password`（验当前密码、`token_version+1` 让旧会话全部失效、写 `platform.password.changed` 审计），改完回登录页。登录后必须 `refresh()` 全局 initialState，否则顶栏停在兜底文案 | `apps/platform/src/components/PlatformAvatar.tsx` |
+
 **平台控制台页面**：`tenants`（列表/套餐/服务类目）、`users`、`billing`（SaaS 账单/抽佣）、`catalog`（商品/分类/收藏/评价）、`moderation`（附件审核）、`audit`、`jobs`（定时任务）、`notifications`、`services`、`settings`。
 
 ---
@@ -87,6 +91,8 @@ src/
 | 账号与权限 | 租户 RBAC（权限码）+ 平台独立鉴权（`aud` cookie 隔离）；卖家走**归属校验**不靠权限码 | `services/auth.py`、`services/platform_auth.py`、`access.ts` |
 | 站点品牌 | logo/favicon/全站名称/站点描述/ICP；**买家中心顶栏只显 logo**（站名进 aria-label） | `services/tenant_brand.py`、`hooks/useSiteBrand.ts` |
 | 商品 | 类型四步向导（类型→基础→规格→详情→**交付**）；多规格笛卡尔积 SKU；主图/视频；Tiptap 富文本 | `ProductEditor`、`catalog_specs.py`、`rich_text.py` |
+| 门户外壳 | 买家/卖家中心共用 `PortalLayout`（一套实现两套菜单）。内容区顶部是**标签栏**（`components/PageTabs` 菜单驱动模式）：概览常驻不可关、单关回相邻/概览、「关闭全部」回概览、按中心分 `sessionStorage`。顶栏用户名是 `components/UserMenu`：**hover** 出「个人设置（新窗口 `/account/settings`）/ 退出登录」 | `PageTabs`、`UserMenu`、`portal/components` |
+| 卖家店铺管理 | `/portal/seller/shop`：店铺信息（名/简介）+ **自提门店**（原「自提点」，地址/说明）。概览页只留入口与数据，不再放表单 | `portal/seller/shop`、`PUT /portal/seller/shop` |
 | 商品图片优先级 | **成交图 = SKU 覆盖图 > 规格值图 > 主图**，只在 `catalog_media.py` 一处算（详情页 / 购物车 / 确认页 / 订单快照共用）；列表卡片、收藏、评价固定用主图（那是「商品封面」）。规格值的「图/视频」是**一个入口**（附件类型决定落 `image_url` 还是 `video_url`），两处都能清除 | `services/catalog_media.py`、`utils/specUtils.resolveMedia` |
 | 商品软删除 | 卖家/运营删商品 = `status='deleted'`（**不物理删**：订单快照、收藏、评价、审计还引用它）。删后卖家列表/买家商城/收藏/确认页全部不见，购物车行标失效；运营端默认不列，显式筛「已删除」可追溯 | `seller_center.delete_seller_product`、`PRODUCT_STATUS_FLOW` |
 | 商品类型 | 只有 `physical` 开放；创建后不可改；非实物后端 400 | `schemas/commerce.py`、`order_state` 无关 |
@@ -252,6 +258,7 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | 现象 | 病根 | 口诀 |
 | --- | --- | --- |
 | 自定义控件「选了值但保存后是空的」 | 控件不是 `Form.Item` 的**注册字段**（用隐藏字段 + setFieldsValue），`validateFields()` 拿不到 | 自定义控件必须挂在 `Form.Item name=...` 上；后端 schema 也别给默认空串，空值要 422 拒绝 |
+| 标签栏关掉的标签「又回来了」 | 门户每个页面各自渲染一次外壳，导航时 PageTabs 会重挂；`setState` + `history.push` 同一 tick，持久化 effect 来不及跑 | **门户类组件不能只靠 useState**：状态写进模块级缓存 + `sessionStorage`，且**在事件里同步写**，别等 effect |
 | 详情页是规格图、订单里却是主图 | 各处自己拼 `sku.image_url or main_image`，漏了规格值图 | **凡是「这支 SKU 长什么样」都调 `catalog_media.effective_image`**，别在业务代码里重复优先级 |
 | 商品删了但收藏/购物车里还点得进去 | 只删了商品，没同步各列表的过滤 | 软删除是**状态**不是删行：每个新列表都要问一句「deleted 要不要排除」 |
 | 结算页展示的价格与下单时不一致 | 前端自己拿商品详情拼清单 | 清单只来自服务端 `checkout/preview`，提交时后端再算一次（以后端为准） |

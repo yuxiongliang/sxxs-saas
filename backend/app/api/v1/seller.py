@@ -65,7 +65,7 @@ async def seller_profile(
                     "name": shop.name,
                     "slug": shop.slug,
                     "description": shop.description,
-                    # 自提点信息：买家选自提时要看到
+                    # 自提门店信息：买家选自提时要看到
                     "address": shop.address,
                     "pickup_note": shop.pickup_note,
                 }
@@ -145,7 +145,7 @@ async def update_shop(
     context: AuthContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ):
-    """维护店铺资料（含自提点地址与说明）。"""
+    """维护店铺资料（含自提门店地址与说明）。"""
     return ok(await seller_service.update_shop_profile(db, context, payload), "店铺资料已更新")
 
 

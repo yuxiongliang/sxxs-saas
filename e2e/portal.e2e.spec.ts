@@ -237,6 +237,55 @@ test.describe('portal: buyer journey', () => {
     await expect(page.locator('.ant-cascader')).toHaveCount(0);
   });
 
+  test('portal tabs: open, close one, close all returns to overview', async ({
+    page,
+  }) => {
+    /**
+     * 买家中心顶部横向标签栏（菜单驱动）：
+     * - 概览常驻不可关；
+     * - 关掉当前标签 → 回概览；
+     * - 「关闭全部」→ 回概览。
+     */
+    await loginAs(page, CUSTOMER);
+    await page.goto('/portal', { waitUntil: 'commit' }).catch(() => undefined);
+    await page.waitForTimeout(3000);
+
+    const tabs = page.getByTestId('page-tabs');
+    await expect(tabs).toBeVisible({ timeout: 30_000 });
+    await expect(tabs.getByText('概览')).toBeVisible();
+
+    await page.locator('.portal-sider').getByText('我的订单').click();
+    await expect(page).toHaveURL(/\/portal\/orders/, { timeout: 20_000 });
+    await expect(tabs.getByText('我的订单')).toBeVisible();
+
+    // 关当前标签 → 回概览，标签也消失
+    await page.locator('.ant-tabs-tab-active .ant-tabs-tab-remove').click();
+    await expect(page).toHaveURL(/\/portal$/, { timeout: 20_000 });
+    await expect(tabs.getByText('我的订单')).toHaveCount(0);
+
+    // 再开一个 → 关闭全部 → 回概览
+    await page.locator('.portal-sider').getByText('我的收藏').click();
+    await expect(page).toHaveURL(/\/portal\/favorites/, { timeout: 20_000 });
+    await page.getByTestId('page-tabs-close-all').click();
+    await expect(page).toHaveURL(/\/portal$/, { timeout: 20_000 });
+    await expect(tabs.getByText('我的收藏')).toHaveCount(0);
+  });
+
+  test('hovering the user name offers settings and logout', async ({
+    page,
+  }) => {
+    /** 用户名不再是一行纯文本：悬停出「个人设置 / 退出登录」。 */
+    await loginAs(page, CUSTOMER);
+    await page.goto('/portal', { waitUntil: 'commit' }).catch(() => undefined);
+    await page.waitForTimeout(2500);
+
+    await page.getByTestId('portal-user-menu').hover();
+    const dropdown = page.locator('.ant-dropdown:visible').first();
+    await expect(dropdown).toBeVisible({ timeout: 15_000 });
+    await expect(dropdown.getByText('个人设置')).toBeVisible();
+    await expect(dropdown.getByText('退出登录')).toBeVisible();
+  });
+
   test('favorites a product and sees it in the portal list', async ({
     page,
   }) => {

@@ -9,7 +9,6 @@ export default {
   'menu.register-result': 'নিবন্ধনে ফলাফল',
   'menu.dashboard': 'ড্যাশবোর্ড',
   'menu.dashboard.analysis': 'বিশ্লেষণ',
-  'menu.dashboard.monitor': 'নিরীক্ষণ',
   'menu.dashboard.workplace': 'কর্মক্ষেত্র',
   'menu.exception.403': '403',
   'menu.exception.404': '404',

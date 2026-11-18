@@ -1,13 +1,10 @@
-import {
-  MenuFoldOutlined,
-  ShopOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { MenuFoldOutlined, ShopOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useModel } from '@umijs/max';
 import { Badge, Button, Drawer, Layout, Menu, Space } from 'antd';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { PageTabs, UserMenu } from '@/components';
 import { LangDropdown } from '@/components/RightContent/LangDropdown';
 import ThemeSwitch from '@/components/RightContent/ThemeSwitch';
 import { listConversations } from '@/services/im/api';
@@ -79,6 +76,19 @@ export default function PortalLayout({
         : title
       : site || document.title;
   }, [title, brand?.display_name]);
+
+  // 标签栏：首页 = 菜单里标了 exact 的那一项（概览），常驻不可关
+  const homeItem = menu.find((item) => item.exact) ?? menu[0];
+  // 两个中心各存一套，避免买家开的标签跑到卖家中心里
+  const tabsStorageKey =
+    sectionLabel === '卖家中心' ? 'portal-tabs-seller' : 'portal-tabs-buyer';
+  const messagesHref = menu.find((item) =>
+    item.href.endsWith('/messages'),
+  )?.href;
+  const messagesBadge =
+    messagesHref && unreadTotal > 0
+      ? { [messagesHref]: unreadTotal }
+      : undefined;
 
   const nav = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -171,11 +181,10 @@ export default function PortalLayout({
               <span style={{ fontSize: 13 }}>购物车</span>
             </Badge>
           </Link>
-          <span
-            style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}
-          >
-            <UserOutlined /> {initialState?.currentUser?.name || '买家'}
-          </span>
+          <UserMenu
+            name={initialState?.currentUser?.name}
+            testId="portal-user-menu"
+          />
         </Space>
       </Header>
 
@@ -191,20 +200,31 @@ export default function PortalLayout({
           {nav}
         </Sider>
 
-        <Content
-          style={{
-            // 宽页面收窄外边距：列多的表格被 1080 卡住会疯狂横向滚动
-            padding: wide ? 12 : 20,
-            background: 'var(--ant-color-bg-layout)',
-          }}
-        >
+        <Content style={{ background: 'var(--ant-color-bg-layout)' }}>
+          {/* 标签栏铺满内容区宽度；内边距只在页面正文上，否则标签会缩进得很奇怪 */}
+          <PageTabs
+            menu={menu.map((item) => ({ href: item.href, label: item.label }))}
+            home={{
+              href: homeItem.href,
+              label: homeItem.label,
+            }}
+            storageKey={tabsStorageKey}
+            badges={messagesBadge}
+          />
           <div
             style={{
-              maxWidth: wide ? 1600 : 1080,
-              margin: '0 auto',
+              // 宽页面收窄外边距：列多的表格被 1080 卡住会疯狂横向滚动
+              padding: wide ? 12 : 20,
             }}
           >
-            {children}
+            <div
+              style={{
+                maxWidth: wide ? 1600 : 1080,
+                margin: '0 auto',
+              }}
+            >
+              {children}
+            </div>
           </div>
         </Content>
       </Layout>

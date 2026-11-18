@@ -9,7 +9,6 @@ export default {
   'menu.register-result': 'ثبت نام نتیجه',
   'menu.dashboard': 'داشبورد',
   'menu.dashboard.analysis': 'تحلیل و بررسی',
-  'menu.dashboard.monitor': 'نظارت',
   'menu.dashboard.workplace': 'محل کار',
   'menu.exception.403': '403',
   'menu.exception.404': '404',

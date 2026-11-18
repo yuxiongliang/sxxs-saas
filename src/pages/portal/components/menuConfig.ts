@@ -38,6 +38,12 @@ export const SELLER_MENU: PortalMenuItem[] = [
     href: '/portal/seller',
     exact: true,
   },
+  // 配置类入口紧跟概览：概览只看数，改东西去店铺管理
+  {
+    key: 'seller-shop',
+    label: '店铺管理',
+    href: '/portal/seller/shop',
+  },
   // 与买家中心保持同一顺序：消息紧跟在概览下面
   { key: 'seller-messages', label: '消息', href: '/portal/seller/messages' },
   {

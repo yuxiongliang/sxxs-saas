@@ -36,7 +36,7 @@ export async function getSellerProfile() {
   );
 }
 
-/** 卖家维护店铺资料：自提点地址与说明在这里填（自提单买家要看）。 */
+/** 卖家维护店铺资料：自提门店地址与说明在这里填（自提单买家要看）。 */
 export async function updateSellerShop(data: {
   name?: string;
   description?: string;

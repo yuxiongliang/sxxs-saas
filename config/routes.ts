@@ -82,12 +82,6 @@ export default [
         component: './dashboard/analysis',
       },
       {
-        name: 'monitor',
-        icon: 'monitor',
-        path: '/dashboard/monitor',
-        component: './dashboard/monitor',
-      },
-      {
         name: 'workplace',
         icon: 'desktop',
         path: '/dashboard/workplace',
@@ -555,6 +549,11 @@ export default [
     component: './portal/seller',
   },
   // 卖家中心：从原来的单页 Tabs 拆成真实子页面（侧栏要高亮/可深链）
+  {
+    path: '/portal/seller/shop',
+    layout: false,
+    component: './portal/seller/shop',
+  },
   {
     path: '/portal/seller/products',
     layout: false,

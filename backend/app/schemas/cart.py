@@ -27,7 +27,7 @@ class CartItemOut(BaseModel):
     main_image: str | None = None
     subtotal_cents: int
     available: bool
-    # 交付方式与自提点：结算页按卖家选快递/自提时要显示
+    # 交付方式与自提门店：结算页按卖家选快递/自提时要显示
     delivery_methods: list[str] = []
     shop_address: str | None = None
     shop_pickup_note: str | None = None

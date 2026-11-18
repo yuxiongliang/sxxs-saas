@@ -29,7 +29,7 @@ class Shop(Base, TimestampMixin):
     logo: Mapped[str | None] = mapped_column(String(512), nullable=True)
     banner: Mapped[str | None] = mapped_column(String(512), nullable=True)
     description: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    # 自提点信息：选了「自提」交付的商品，买家要知道去哪儿取
+    # 自提门店信息：选了「自提」交付的商品，买家要知道去哪儿取
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pickup_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)

@@ -177,7 +177,7 @@ export interface SellerProfile {
     name: string;
     slug: string;
     description?: string | null;
-    /** 自提点：选了「自提」的商品，买家结算时看到 */
+    /** 自提门店：选了「自提」的商品，买家结算时看到 */
     address?: string | null;
     pickup_note?: string | null;
   } | null;
@@ -290,7 +290,7 @@ export interface CartItemRecord {
   available: boolean;
   /** 该商品支持的交付方式（express / pickup） */
   delivery_methods?: string[];
-  /** 卖家自提点（选「自提」时买家要看） */
+  /** 卖家自提门店（选「自提」时买家要看） */
   shop_address?: string | null;
   shop_pickup_note?: string | null;
 }

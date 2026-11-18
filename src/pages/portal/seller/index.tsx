@@ -6,23 +6,20 @@ import {
   Button,
   Card,
   Col,
-  Form,
-  Input,
   Row,
+  Space,
   Statistic,
   Table,
   Tag,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useState } from 'react';
 import {
   getSellerLedger,
   getSellerProfile,
   listSellerOrders,
   listSellerProducts,
   requestSellerPayout,
-  updateSellerShop,
 } from '@/services/commerce/api';
 import type { SellerOrderRecord } from '@/services/commerce/types';
 import { getWallet } from '@/services/wallet/api';
@@ -38,39 +35,10 @@ export default function SellerOverviewPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
-  const [shopForm] = Form.useForm<{ address?: string; pickup_note?: string }>();
-  const [savingShop, setSavingShop] = useState(false);
-
   const profile = useQuery({
     queryKey: ['seller-profile'],
     queryFn: getSellerProfile,
   });
-  // 商品支持自提时，买家结算会看到这里的地址与说明 —— 不填等于"凭空自提"
-  const handleSaveShop = async () => {
-    const values = await shopForm.validateFields();
-    setSavingShop(true);
-    try {
-      await updateSellerShop({
-        address: values.address ?? '',
-        pickup_note: values.pickup_note ?? '',
-      });
-      message.success('自提点信息已保存');
-      queryClient.invalidateQueries({ queryKey: ['seller-profile'] });
-    } catch (error) {
-      message.error((error as Error).message);
-    } finally {
-      setSavingShop(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!profile.data?.shop) return;
-    shopForm.setFieldsValue({
-      address: profile.data.shop.address ?? '',
-      pickup_note: profile.data.shop.pickup_note ?? '',
-    });
-  }, [profile.data, shopForm]);
-
   const wallet = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
   // 待结算货款来自卖家台账（还没到账期的钱），与钱包余额是两个口径
   const ledger = useQuery({
@@ -141,45 +109,13 @@ export default function SellerOverviewPage() {
               {profile.data?.status || '-'}
             </Typography.Text>
           </div>
-          <Button onClick={handlePayout}>申请结算</Button>
+          <Space>
+            <Link to="/portal/seller/shop">
+              <Button data-testid="seller-shop-entry">店铺管理</Button>
+            </Link>
+            <Button onClick={handlePayout}>申请结算</Button>
+          </Space>
         </div>
-      </Card>
-
-      {/* 自提点：选「自提」的商品结算时，买家要看到去哪儿取、什么时间取 */}
-      <Card
-        size="small"
-        title="自提点设置"
-        style={{ marginBottom: 16 }}
-        data-testid="seller-pickup-card"
-      >
-        <Form
-          form={shopForm}
-          layout="inline"
-          initialValues={{
-            address: profile.data?.shop?.address ?? '',
-            pickup_note: profile.data?.shop?.pickup_note ?? '',
-          }}
-        >
-          <Form.Item label="自提地址" name="address" style={{ minWidth: 320 }}>
-            <Input placeholder="如：深圳市南山区科技园 1 号 A 座 101" />
-          </Form.Item>
-          <Form.Item
-            label="自提说明"
-            name="pickup_note"
-            style={{ minWidth: 320 }}
-          >
-            <Input placeholder="如：工作日 10:00-18:00，请出示订单号" />
-          </Form.Item>
-          <Form.Item>
-            <Button
-              type="primary"
-              loading={savingShop}
-              onClick={handleSaveShop}
-            >
-              保存
-            </Button>
-          </Form.Item>
-        </Form>
       </Card>
 
       {/* 两个口径必须并排说清：钱包里是**已结算**的钱，待结算是还没到账期的钱 */}

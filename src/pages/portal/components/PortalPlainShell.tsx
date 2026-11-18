@@ -1,8 +1,8 @@
-import { UserOutlined } from '@ant-design/icons';
 import { useModel } from '@umijs/max';
 import { Space } from 'antd';
 import type React from 'react';
 import { useEffect } from 'react';
+import { UserMenu } from '@/components';
 import { LangDropdown } from '@/components/RightContent/LangDropdown';
 import ThemeSwitch from '@/components/RightContent/ThemeSwitch';
 import PortalBrand, { PORTAL_HEADER_HEIGHT } from './PortalBrand';
@@ -56,11 +56,10 @@ const PortalPlainShell: React.FC<{
         <Space size={12}>
           <LangDropdown />
           <ThemeSwitch />
-          <span
-            style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}
-          >
-            <UserOutlined /> {initialState?.currentUser?.name || '买家'}
-          </span>
+          <UserMenu
+            name={initialState?.currentUser?.name}
+            testId="plain-user-menu"
+          />
         </Space>
       </div>
       <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>

@@ -102,6 +102,52 @@ test.describe('seller centre', () => {
     await expect(page.getByText(name).first()).toBeHidden({ timeout: 20_000 });
   });
 
+  test('shop management hosts the pickup store settings', async ({ page }) => {
+    /**
+     * 「自提点设置」原来躺在店铺概览里，现在收进「店铺管理」子页，并改名「自提门店」。
+     * 概览只留一行入口 —— 概览是看数的地方，不放表单。
+     */
+    await loginAs(page, OPERATOR);
+    await page
+      .goto('/portal/seller', { waitUntil: 'commit' })
+      .catch(() => undefined);
+    await page.waitForTimeout(3500);
+
+    // 侧栏有「店铺管理」，概览里没有自提设置卡
+    const sider = page.locator('.portal-sider');
+    await expect(sider.getByText('店铺管理')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('seller-pickup-card')).toHaveCount(0);
+
+    await sider.getByText('店铺管理').click();
+    await expect(page).toHaveURL(/\/portal\/seller\/shop/, { timeout: 20_000 });
+    await expect(page.getByTestId('seller-shop-page')).toBeVisible({
+      timeout: 30_000,
+    });
+    // 新叫法必须出现，旧叫法必须消失
+    await expect(page.getByText('自提门店').first()).toBeVisible();
+    await expect(page.getByText('自提点').first()).toHaveCount(0);
+
+    // 保存链路（后端 PUT /portal/seller/shop）
+    await page.getByTestId('seller-shop-save').click();
+    await expect(page.getByText(/已保存/).first()).toBeVisible({
+      timeout: 20_000,
+    });
+  });
+
+  test('product list shows a dedicated image column', async ({ page }) => {
+    await loginAs(page, OPERATOR);
+    await page
+      .goto('/portal/seller/products', {
+        waitUntil: 'commit',
+      })
+      .catch(() => undefined);
+    await page.waitForTimeout(3500);
+    const headers = await page.locator('thead th').allInnerTexts();
+    expect(headers.map((item) => item.replace(/\s+/g, ''))).toContain(
+      '商品图片',
+    );
+  });
+
   test('buyer opening the seller centre gets no shop data', async ({
     page,
   }) => {

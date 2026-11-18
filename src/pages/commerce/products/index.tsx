@@ -226,25 +226,39 @@ const ProductManagementPage: React.FC = () => {
       ),
     },
     {
+      // 和卖家中心同款：图片独立成列，商品名那列只放文字（表格更好扫）
+      title: '商品图片',
+      dataIndex: 'main_image',
+      width: 96,
+      render: (value: string | null | undefined, record) =>
+        value ? (
+          <Image
+            src={value}
+            alt={record.name}
+            width={56}
+            height={56}
+            style={{ objectFit: 'cover', borderRadius: 6 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 6,
+              background: 'rgba(0,0,0,0.04)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ShoppingOutlined style={{ color: '#1677ff', fontSize: 18 }} />
+          </div>
+        ),
+    },
+    {
       title: '商品',
       dataIndex: 'name',
-      render: (_, record) => (
-        <Space>
-          {record.main_image ? (
-            <Image
-              src={record.main_image}
-              alt={record.name}
-              width={40}
-              height={40}
-            />
-          ) : (
-            <ShoppingOutlined style={{ color: '#1677ff', fontSize: 18 }} />
-          )}
-          <div>
-            <div style={{ fontWeight: 600 }}>{record.name}</div>
-          </div>
-        </Space>
-      ),
+      render: (value: string) => <div style={{ fontWeight: 600 }}>{value}</div>,
     },
     {
       title: '价格',

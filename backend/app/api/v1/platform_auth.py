@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_platform_context
 from app.core.config import settings
 from app.core.response import ok
-from app.schemas.auth import LoginRequest
+from app.schemas.auth import LoginRequest, PasswordChange
 from app.schemas.common import ApiResponse
 from app.schemas.platform_auth import PlatformAuthResponse, PlatformMeResponse
 from app.services import platform_auth as platform_auth_service
@@ -54,6 +54,17 @@ async def platform_refresh(
     new_token = result.pop("refresh_token")
     _set_platform_refresh_cookie(response, new_token)
     return ok(PlatformAuthResponse.model_validate(result), "已刷新")
+
+
+@router.post("/password", response_model=ApiResponse[None])
+async def platform_change_password(
+    payload: PasswordChange,
+    context: PlatformContext = Depends(get_platform_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """平台管理员自助改密码（改完所有旧会话立即失效，需要重新登录）。"""
+    await platform_auth_service.change_password(db, context, payload)
+    return ok(None, "密码已修改，请重新登录")
 
 
 @router.post("/logout", response_model=ApiResponse[None])

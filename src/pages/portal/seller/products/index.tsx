@@ -1,6 +1,16 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Popconfirm, Select, Space, Table, Tag } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Image,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import ProductEditor, {
@@ -109,6 +119,37 @@ export default function SellerProductsPage() {
           ) : null}
         </div>
       ),
+    },
+    {
+      title: '商品图片',
+      dataIndex: 'main_image',
+      width: 96,
+      render: (value: string | null | undefined, record) =>
+        value ? (
+          <Image
+            src={value}
+            alt={record.name}
+            width={64}
+            height={64}
+            style={{ objectFit: 'cover', borderRadius: 6 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 6,
+              background: 'rgba(0,0,0,0.04)',
+              color: '#bfbfbf',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            无图
+          </div>
+        ),
     },
     {
       title: '类型',

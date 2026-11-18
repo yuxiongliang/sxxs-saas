@@ -4,7 +4,6 @@ import {
   DesktopOutlined,
   DownOutlined,
   GlobalOutlined,
-  LogoutOutlined,
   ShopOutlined,
 } from '@ant-design/icons';
 import {
@@ -17,11 +16,10 @@ import {
 } from '@umijs/max';
 import { Button, Dropdown } from 'antd';
 import { useEffect, useMemo } from 'react';
+import { UserMenu } from '@/components';
 import { useSiteBrand } from '@/hooks/useSiteBrand';
-import { logout as authLogout } from '@/services/auth/api';
 import type { ThemeMode } from '@/theme';
 import { useAppTheme } from '@/theme';
-import { clearAccessToken } from '@/utils/authToken';
 import { visibleEntrances } from '../entrances';
 import type { SearchEntry } from '../search';
 import useStyles from '../style';
@@ -142,17 +140,6 @@ export default function SiteHeader({
       window.removeEventListener('focus', recheck);
     };
   }, [initialState?.currentUser, refresh]);
-
-  const handleLogout = async () => {
-    // 后端失败也要把本地登出做完，否则用户会卡在「看似已登录」的状态里
-    try {
-      await authLogout();
-    } catch {
-      /* 忽略：下面照常清理本地状态 */
-    }
-    clearAccessToken();
-    await refresh();
-  };
 
   const locales = useMemo(() => {
     const current = getLocale();
@@ -330,23 +317,10 @@ export default function SiteHeader({
                     </Button>
                   </Dropdown>
 
-                  <Dropdown
-                    menu={{
-                      items: [
-                        {
-                          key: 'logout',
-                          icon: <LogoutOutlined />,
-                          label: formatMessage({
-                            id: 'site.nav.logout',
-                            defaultMessage: '退出登录',
-                          }),
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === 'logout') handleLogout();
-                      },
-                    }}
-                    placement="bottomRight"
+                  {/* 悬停出「个人设置 / 退出登录」：和门户、确认页同一套菜单（UserMenu） */}
+                  <UserMenu
+                    name={initialState?.currentUser?.name}
+                    testId="site-user-menu"
                   >
                     <button type="button" className={styles.accountBtn}>
                       <span className={styles.accountAvatar}>
@@ -357,7 +331,7 @@ export default function SiteHeader({
                       </span>
                       <DownOutlined className={styles.accountArrow} />
                     </button>
-                  </Dropdown>
+                  </UserMenu>
                 </>
               ) : (
                 <>

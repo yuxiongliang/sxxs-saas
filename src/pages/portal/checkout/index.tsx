@@ -356,7 +356,7 @@ export default function CheckoutPage() {
                     <div
                       style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}
                     >
-                      自提点：{group.pickup_address || '卖家未填写'}
+                      自提门店：{group.pickup_address || '卖家未填写'}
                       {group.pickup_note ? ` · ${group.pickup_note}` : ''}
                     </div>
                   ) : null}
