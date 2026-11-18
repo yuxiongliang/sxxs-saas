@@ -21,7 +21,6 @@ export const CONFIG_FIELD_LABELS: Record<string, string> = {
 
   // ---- 支付：支付宝 ----
   appId: 'App ID',
-  merchantId: '商户号',
   privateKey: '应用私钥',
   publicKey: '支付宝公钥',
 

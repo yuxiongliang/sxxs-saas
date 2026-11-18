@@ -99,7 +99,23 @@ async def create_payment(
                 status="pending",
             )
         )
-        await db.commit()
+        await db.flush()
+
+    # 排一个对账任务：回调到不了时（本地/内网/回调未登记）靠主动查询把状态补上。
+    # 1 分钟后第一次查，失败按 1/5/30 分钟退避重试。
+    from datetime import UTC, datetime, timedelta
+
+    from app.services import jobs as jobs_service
+
+    await jobs_service.schedule(
+        db,
+        tenant_id=context.tenant.id,
+        kind=jobs_service.KIND_PAYMENT_SYNC,
+        ref_type="order",
+        ref_id=order.id,
+        run_at=datetime.now(UTC) + timedelta(seconds=60),
+    )
+    await db.commit()
 
     return {
         "type": result["type"],
@@ -221,6 +237,52 @@ async def settle_paid_order(
         },
     )
     await db.commit()
+
+
+async def sync_pending_payment(
+    db: AsyncSession, *, tenant_id: int, order_id: int, provider: str
+) -> str:
+    """主动查询渠道并同步状态。返回 `paid` / `pending` / `skipped`。
+
+    worker 与「刷新支付状态」按钮都走这里 —— 逻辑只有一份。
+    """
+    order = await db.get(Order, order_id)
+    if order is None or order.tenant_id != tenant_id:
+        return "skipped"
+    if order.payment_status == "paid":
+        return "paid"
+
+    config = await payment_config.load_payment_config(db, tenant_id)
+    number = out_trade_no(tenant_id, order.order_no)
+    try:
+        if provider == PROVIDER_ALIPAY:
+            gateway = AlipayGateway(payment_config.require_alipay(config))
+            notice = await gateway.query(out_trade_no=number)
+            paid = notice.trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED")
+            trade_no, amount, raw = notice.trade_no, notice.total_amount_cents, notice.raw
+        elif provider == PROVIDER_WECHAT:
+            gateway = WechatGateway(payment_config.require_wechat(config))
+            notice = await gateway.query(out_trade_no=number)
+            paid = notice.trade_state == "SUCCESS"
+            trade_no, amount, raw = notice.transaction_id, notice.amount_cents, notice.raw
+        else:
+            return "skipped"
+    except (PaymentConfigError, AlipayError, WechatError):
+        # 让任务重试：渠道可能只是抖了一下，不能把"查询失败"当成"没支付"
+        raise
+
+    if not paid:
+        return "pending"
+    await settle_paid_order(
+        db,
+        order=order,
+        tenant_id=tenant_id,
+        provider=provider,
+        trade_no=trade_no,
+        amount_cents=amount,
+        raw=raw,
+    )
+    return "paid"
 
 
 async def handle_alipay_notify(db: AsyncSession, form: dict[str, str]) -> str:

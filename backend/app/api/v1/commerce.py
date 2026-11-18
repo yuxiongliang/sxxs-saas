@@ -962,6 +962,24 @@ async def request_refund(
     )
 
 
+@router.post("/portal/orders/{order_id}/refund-request/cancel")
+async def cancel_refund_request(
+    order_id: int,
+    context: AuthContext = Depends(require_permission("order:read:self")),
+    db: AsyncSession = Depends(get_db),
+):
+    """买家撤回售后申请（卖家还没处理时）。"""
+    order = await order_service.cancel_refund_request(db, context, order_id)
+    return ok(
+        {
+            "id": order.id,
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        },
+        "售后申请已取消",
+    )
+
+
 @router.post("/portal/orders/{order_id}/confirm")
 async def confirm_order(
     order_id: int,

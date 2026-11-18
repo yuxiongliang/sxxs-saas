@@ -199,6 +199,32 @@ const PaymentResultPage: React.FC = () => {
                         </div>
                       </>
                     ) : null}
+                    {order?.payment_status === 'unpaid' ? (
+                      <Button
+                        data-testid="pay-refresh"
+                        onClick={async () => {
+                          setPaying(true);
+                          try {
+                            const result = await queryOrderPayment(
+                              order.id,
+                              'alipay',
+                            );
+                            if (result.paid) {
+                              message.success('已确认支付成功');
+                              await refetch();
+                            } else {
+                              message.info('渠道还没返回成功，请稍后再试');
+                            }
+                          } catch (error) {
+                            message.error((error as Error).message);
+                          } finally {
+                            setPaying(false);
+                          }
+                        }}
+                      >
+                        刷新支付状态
+                      </Button>
+                    ) : null}
                     <Button onClick={() => navigate('/portal')}>
                       继续购物
                     </Button>

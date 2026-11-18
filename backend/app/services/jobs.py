@@ -22,6 +22,8 @@ from app.models.job import ScheduledJob
 KIND_AUTO_COMPLETE = "auto_complete"
 #: 账期到期，把卖家货款划进钱包
 KIND_SETTLE_EARNINGS = "settle_earnings"
+#: 支付对账：渠道回调到不了（本地/内网/回调配置未生效）时，主动查询补状态
+KIND_PAYMENT_SYNC = "payment_sync"
 
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"

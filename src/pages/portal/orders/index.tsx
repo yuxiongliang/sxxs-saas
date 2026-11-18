@@ -6,6 +6,7 @@ import {
   Card,
   Empty,
   Image,
+  Popconfirm,
   Space,
   Table,
   Tag,
@@ -13,6 +14,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
+  cancelPortalRefund,
   confirmPortalOrder,
   listPortalOrders,
   mockPayPortalOrder,
@@ -318,12 +320,28 @@ export default function PortalOrdersPage() {
                 }
               }}
             >
-              {record.order.payment_status === 'refunding'
-                ? '售后处理中'
-                : '申请售后'}
+              申请售后
             </Button>
           ) : null}
           {/* 完成后才有评价资格：一个订单项只能评一次，具体待评项在「我的评价」里列 */}
+          {record.first && record.order.payment_status === 'refunding' ? (
+            <Popconfirm
+              title="取消售后申请？"
+              description="卖家还没处理，取消后订单恢复为已支付"
+              onConfirm={async () => {
+                await cancelPortalRefund(record.order.id);
+                message.success('已取消售后申请');
+                refetch();
+              }}
+            >
+              <Button
+                size="small"
+                data-testid={`cancel-refund-${record.order.id}`}
+              >
+                取消售后
+              </Button>
+            </Popconfirm>
+          ) : null}
           {record.first && record.order.fulfillment_status === 'completed' ? (
             <Button
               size="small"

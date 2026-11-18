@@ -38,6 +38,8 @@ ACTION_SELLER_ORDER_SHIPPED = "seller_order.shipped"
 ACTION_SELLER_ORDER_REFUNDED = "seller_order.refunded"
 # 买家申请售后 / 卖家驳回售后：售后闭环的两端，都要能在审计里查
 ACTION_ORDER_REFUND_REQUESTED = "order.refund_requested"
+#: 买家撤回售后申请
+ACTION_ORDER_REFUND_CANCELLED = "order.refund_cancelled"
 ACTION_SELLER_ORDER_REFUND_REJECTED = "seller_order.refund_rejected"
 # 定时任务的人工操作（立即执行 / 取消）：改的是"系统自动行为"，必须留痕
 ACTION_JOB_RUN = "job.run"
@@ -90,6 +92,7 @@ ACTION_LABELS: dict[str, str] = {
     ACTION_SELLER_ORDER_SHIPPED: "卖家发货",
     ACTION_SELLER_ORDER_REFUNDED: "子订单退款",
     ACTION_ORDER_REFUND_REQUESTED: "买家申请售后",
+    ACTION_ORDER_REFUND_CANCELLED: "买家撤销售后",
     ACTION_SELLER_ORDER_REFUND_REJECTED: "驳回售后申请",
     ACTION_JOB_RUN: "手动执行定时任务",
     ACTION_JOB_CANCELLED: "取消定时任务",

@@ -18,7 +18,6 @@ DEFAULT_SETTINGS: dict[str, dict] = {
                 "enabled": True,
                 "environment": "sandbox",
                 "appId": "2021000000000000",
-                "merchantId": "2088000000000000",
                 "privateKey": "",
                 "publicKey": "",
                 # 回调地址必须是**真实可达**的路径：旧的 /api/v1/payments/* 早已不存在，

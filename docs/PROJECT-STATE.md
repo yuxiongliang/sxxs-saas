@@ -91,12 +91,12 @@ src/
 | 交付方式 | 快递 / 自提可多选（不预勾选）；落 `seller_orders.delivery_method` | `products.delivery_methods`、`shops.address/pickup_note` |
 | 订单 | **双状态**：`payment_status` + `fulfillment_status`；旧 `status` 已删 | `services/order_state.py::sync_order()` |
 | 订单列表 | 一行一商品、`rowSpan` 合并、横向滚动、**不做金额合计**；买家端**无详情页**（信息全进列） | `commerce/orders`、`portal/orders` |
-| 售后 | 买家 `paid/shipped` 可申请 → `refunding`；卖家/运营同意或驳回；`completed` 之后拒绝 | `order.request_refund/reject_refund` |
+| 售后 | 买家 `paid/shipped` 可申请 → `refunding`；**卖家处理前买家可自己撤回**；卖家/运营同意或驳回；`completed` 之后拒绝 | `order.request_refund/cancel_refund_request/reject_refund` |
 | 收藏/评价 | 四端打通（买家→卖家→运营→平台）；**先发后审**；匿名只在买家侧打码 | `services/favorites.py`、`reviews.py` |
 | 销量/浏览/收藏/评分 | 口径集中在 `catalog_stats`；浏览=详情页 PV；销量按 `SOLD_FULFILLMENTS` | `services/catalog_stats.py` |
 | IM | 一套组件三处复用；文本/图/视频/商品卡/emoji/搜索/软删/撤回(2min)/编辑(15min) | `components/ImChat`、`services/im` |
 | 钱包 | **统一钱包、按租户隔离**；余额支付；退款一律回余额；货款到期自动划转 | `services/wallet.py`、`models/wallet.py` |
-| 支付渠道 | **真实接入**：支付宝**公钥证书模式**（电脑网站支付）+ 微信 Native 扫码；回调验签/解密、金额核对、幂等；渠道未配置时明确报缺哪些字段 | `services/payment/`（含 `alipay_cert.py`）、`api/v1/payments.py` |
+| 支付渠道 | **真实接入**：支付宝**公钥证书模式**（电脑网站支付）+ 微信 Native 扫码；回调验签/解密、金额核对、幂等；**下单即排对账任务**（回调到不了也能补状态） | `services/payment/`、`api/v1/payments.py` |
 | 提现 | 申请即冻结 → **租户运营**审核 → 打款/驳回 | `/commerce/finance/withdrawals` |
 | 定时任务 | `scheduled_jobs` + 常驻 worker + 平台管理页 | `services/jobs.py`、`worker/` |
 
@@ -261,6 +261,8 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | `response_model` 吞字段 | Pydantic 按模型裁字段 | 新字段要么进模型，要么用 `dict` |
 | 迁移里的部分唯一索引 | autogenerate 看不见 | 幂等改应用层"先查后插" |
 | 后端改了变量遮蔽 | `hold_days = await hold_days(...)` | 局部变量别与函数同名 |
+| 用户说"付了款但订单还是待支付" | 回调到不了（本地/内网/域名未备案/开放平台没登记回调地址） | 下单即排 `payment_sync` 对账任务（1 分钟后首个查询，1/5/30 分钟退避）；买家支付页也有「刷新支付状态」按钮 |
+| 支付宝查询报 `'utf-8' codec can't decode` | 网关出错时返回 **GBK** 错误页，不是 JSON | 查询响应做 utf-8/gbk 兜底解码，失败给「非 JSON 响应」中文提示 |
 | 支付宝报 `invalid-signature` | ①证书模式缺 `app_cert_sn`/`alipay_root_cert_sn`；②私钥与控制台「应用公钥」不是一对；③**待签名字符串漏了 `sign_type`**（实测网关要含它，官方文档写的是剔除——以实测为准） | 诊断页给推导公钥 + 两个 SN；`sign()` 默认 `with_sign_type=True`，有测试锁死 |
 | 微信回调一直验签失败（密钥正确） | 回调签名串与「我方请求」不同：回调只有 `timestamp\nnonce\nbody\n`，**不含 method 与 URL** | 两种串分开写（`build_notify_message` vs `build_message`） |
 | 多租户只有一个回调地址 | 回调不带租户信息 | `payments.out_trade_no = T{tenant_id}-{order_no}`，回调据此反查租户配置再验签 |

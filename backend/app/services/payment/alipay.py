@@ -227,7 +227,15 @@ class AlipayGateway:
             response = await client.post(self.config.gateway, data=params)
         if response.status_code >= 400:
             raise AlipayError(f"支付宝查询失败：HTTP {response.status_code}")
-        body = response.json()
+        # 出错时网关返回的是 **GBK** 的错误页，直接 response.json() 会抛 UnicodeDecodeError
+        try:
+            body = response.json()
+        except ValueError as exc:
+            text = response.content.decode("utf-8", "ignore") or response.content.decode(
+                "gbk", "ignore"
+            )
+            snippet = " ".join(text.split())[:160]
+            raise AlipayError(f"支付宝查询返回了非 JSON 响应：{snippet}") from exc
         node = body.get("alipay_trade_query_response") or {}
         if node.get("code") != "10000":
             raise AlipayError(

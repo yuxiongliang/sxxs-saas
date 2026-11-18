@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.job import ScheduledJob
 from app.services import jobs as jobs_service
 from app.services import order as order_service
+from app.services import payment as payment_service
 from app.services import wallet as wallet_service
 
 
@@ -36,7 +37,37 @@ async def settle_earnings(db: AsyncSession, job: ScheduledJob) -> str:
     return "transferred" if done else "skipped:not_settleable"
 
 
+async def payment_sync(db: AsyncSession, job: ScheduledJob) -> str:
+    """支付对账：主动查渠道，把"钱付了但回调没到"的订单补成已支付。
+
+    返回 `pending` 时**抛异常让任务重试**（渠道可能还没回调到成功）；
+    订单已支付或已取消则直接结束，不浪费重试次数。
+    """
+    from app.models.order import Order
+
+    order = await db.get(Order, job.ref_id)
+    if order is None:
+        return "skipped:no_order"
+    if order.payment_status != "unpaid":
+        return "skipped:already_final"
+    result = await payment_service.sync_pending_payment(
+        db,
+        tenant_id=job.tenant_id or 0,
+        order_id=order.id,
+        provider=_payment_provider_of(order.id, db),
+    )
+    if result == "pending":
+        raise RuntimeError("渠道仍未支付成功，稍后重试")
+    return result
+
+
+def _payment_provider_of(_order_id: int, _db: AsyncSession) -> str:
+    """对账按支付宝查（当前只接了支付宝的主动查询；微信可照同样方式扩）。"""
+    return "alipay"
+
+
 HANDLERS: dict[str, Callable[[AsyncSession, ScheduledJob], Awaitable[str]]] = {
     jobs_service.KIND_AUTO_COMPLETE: auto_complete,
     jobs_service.KIND_SETTLE_EARNINGS: settle_earnings,
+    jobs_service.KIND_PAYMENT_SYNC: payment_sync,
 }

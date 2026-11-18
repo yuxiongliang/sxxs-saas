@@ -577,6 +577,65 @@ async def request_refund(
     return order
 
 
+async def cancel_refund_request(
+    db: AsyncSession, context: AuthContext, order_id: int
+) -> Order:
+    """买家撤回售后申请（卖家还没处理时）。
+
+    售后申请是买家自己提的，不能只能进不能退；撤回后：
+    * 待处理的退款单置 `cancelled`；
+    * 卖家单回到「已支付」；
+    * 已发货的卖家单**重新排上自动收货**（撤销售后时那条任务被撤了）。
+    """
+    order = await db.get(Order, order_id)
+    if order is None or order.tenant_id != context.tenant.id or order.buyer_id != context.user.id:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    seller_orders = await _seller_orders(db, order.id)
+    cancelled = 0
+    for seller_order in seller_orders:
+        if seller_order.payment_status != st.PAY_REFUNDING:
+            continue
+        refund = await _pending_refund(db, seller_order.id)
+        if refund is not None:
+            refund.status = "cancelled"
+        seller_order.payment_status = st.PAY_PAID
+        cancelled += 1
+        if seller_order.fulfillment_status == st.FULFILL_SHIPPED and seller_order.shipped_at:
+            window = (
+                jobs_service.AUTO_COMPLETE_EXPRESS
+                if seller_order.delivery_method == EXPRESS
+                else jobs_service.AUTO_COMPLETE_PICKUP
+            )
+            await jobs_service.schedule(
+                db,
+                tenant_id=context.tenant.id,
+                kind=jobs_service.KIND_AUTO_COMPLETE,
+                ref_type="seller_order",
+                ref_id=seller_order.id,
+                run_at=max(
+                    seller_order.shipped_at + window,
+                    datetime.now(UTC) + timedelta(minutes=1),
+                ),
+            )
+    if cancelled == 0:
+        raise HTTPException(status_code=400, detail="没有可取消的售后申请")
+
+    _sync(order, seller_orders)
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_ORDER_REFUND_CANCELLED,
+        tenant_id=context.tenant.id,
+        actor_id=context.user.id,
+        target_type="order",
+        target_id=order.id,
+        after={"order_no": order.order_no, "seller_order_count": cancelled},
+    )
+    await db.commit()
+    await db.refresh(order)
+    return order
+
+
 async def _pending_refund(db: AsyncSession, seller_order_id: int) -> Refund | None:
     return (
         await db.scalars(

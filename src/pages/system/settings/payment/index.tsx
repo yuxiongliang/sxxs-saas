@@ -230,7 +230,7 @@ const PaymentSettings: React.FC = () => {
                           />
                         </Form.Item>
                         <Row gutter={16}>
-                          <Col span={12}>
+                          <Col span={24}>
                             <Form.Item
                               label="App ID"
                               name={['alipay', 'appId']}
@@ -242,14 +242,6 @@ const PaymentSettings: React.FC = () => {
                               ]}
                             >
                               <Input placeholder="2021000000000000" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item
-                              label="商户号"
-                              name={['alipay', 'merchantId']}
-                            >
-                              <Input placeholder="2088000000000000" />
                             </Form.Item>
                           </Col>
                         </Row>

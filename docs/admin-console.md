@@ -211,6 +211,8 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 ```
 买家 paid/shipped → 申请售后 → payment_status=refunding + Refund(status=pending)
+  买家  → 取消售后（卖家还没处理时）→ Refund(status=cancelled)，订单回到 paid
+         —— 售后申请不能只能进不能退；已发货的会重新排上自动收货
   卖家/运营 → 同意（复用那条记录 → refunded）/ 驳回（→ 回 paid，自动收货倒计时恢复）
 买家 completed → 无入口，后端也 400「已完成订单不再受理」
 ```
@@ -230,6 +232,10 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
       微信：平台证书验签 + APIv3 密钥 AES-GCM 解密
   → 金额核对（必须等于订单应付）→ 置已支付（幂等）→ 写 payments.raw_payload
   → 前端每 3 秒 POST /portal/orders/{id}/payments/query 兜底（回调丢了也能收敛）
+
+**对账任务（关键）**：发起支付时同时排一个 `payment_sync` 定时任务（1 分钟后首查，
+失败按 1/5/30 分钟退避）。本地/内网/回调未登记时回调永远到不了，
+靠它对账把"钱付了但订单还是待支付"补成已支付 —— 不依赖人点按钮。
 ```
 
 ### 两条铁律
@@ -245,7 +251,7 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 | 字段 | 说明 |
 | --- | --- |
-| App ID | 开放平台应用 ID |
+| App ID | 开放平台应用 ID（**电脑网站支付不需要「商户号」，页面上已去掉**） |
 | 应用私钥 | `app_private_key`（PEM 或纯 base64） |
 | 应用公钥证书 | `appCertPublicKey_*.crt` —— 服务端据此**自动算 `app_cert_sn`** |
 | 支付宝公钥证书 | `alipayCertPublicKey_RSA2.crt` —— **回调验签用的就是它里的公钥** |

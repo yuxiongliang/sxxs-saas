@@ -285,6 +285,19 @@ export async function mockPayPortalOrder(
   );
 }
 
+/** 买家撤回售后申请（卖家还没处理时）。 */
+export async function cancelPortalRefund(id: number) {
+  return unwrap<{
+    id: number;
+    payment_status: string;
+    fulfillment_status: string;
+  }>(
+    request(`/api/v1/portal/orders/${id}/refund-request/cancel`, {
+      method: 'POST',
+    }),
+  );
+}
+
 /**
  * 买家申请售后（整单）。完成后（completed）后端会拒绝 —— 交易结束即关闭售后入口。
  */

@@ -62,7 +62,18 @@ async def query_payment(
     """主动查询渠道状态（回调丢了/用户付完没跳回来时兜底）。"""
     order = await _load_own_order(db, context, order_id)
     provider = str(payload.get("provider") or "").strip()
-    return ok(await payment_service.query_and_sync(db, context, order, provider))
+    # 与 worker 对账走同一个函数，避免两条路径行为不一致
+    result = await payment_service.sync_pending_payment(
+        db, tenant_id=context.tenant.id, order_id=order.id, provider=provider
+    )
+    await db.refresh(order)
+    return ok(
+        {
+            "paid": result == "paid",
+            "payment_status": order.payment_status,
+            "fulfillment_status": order.fulfillment_status,
+        }
+    )
 
 
 # ---------------------------------------------------------------- 回调

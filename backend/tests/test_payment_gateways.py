@@ -736,3 +736,96 @@ def test_sign_includes_sign_type_by_default():
     params = {"app_id": "1", "sign_type": "RSA2", "method": "alipay.trade.page.pay"}
     assert "sign_type=RSA2" in build_sign_content(params, with_sign_type=True)
     assert "sign_type" not in build_sign_content(params, with_sign_type=False)
+
+# ---------------------------------------------------------------- 对账任务 & 售后撤回
+
+
+async def test_create_payment_schedules_reconciliation_job(
+    client, customer_token, db_session
+):
+    """发起真实支付后必须排一个对账任务。
+
+    没有回调（本地/内网/域名未备案）时，用户钱付了、我们这里还停在待支付 ——
+    对账任务就是兜底，不靠人点按钮。
+    """
+    merchant_private, merchant_public = _keypair()
+    await _set_payment_config(
+        db_session,
+        1,
+        {
+            "alipay": {
+                "enabled": True,
+                "environment": "sandbox",
+                "appId": "2021007108682567",
+                "privateKey": merchant_private,
+                "publicKey": merchant_public,
+                "notifyUrl": "https://example.com/api/v1/public/payments/alipay/notify",
+                "returnUrl": "https://example.com/portal/payment-result",
+            }
+        },
+    )
+    order = await _place_order(client, customer_token, db_session)
+    created = await client.post(
+        f"/api/v1/portal/orders/{order['id']}/payments",
+        headers=bearer(customer_token),
+        json={"provider": "alipay"},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["data"]["type"] == "redirect"
+    assert "sign=" in created.json()["data"]["url"]
+
+    from app.models.job import ScheduledJob
+
+    job = (
+        await db_session.scalars(
+            select(ScheduledJob).where(
+                ScheduledJob.kind == "payment_sync",
+                ScheduledJob.ref_id == order["id"],
+            )
+        )
+    ).first()
+    assert job is not None, "发起支付后必须排对账任务"
+
+
+async def test_buyer_can_cancel_refund_request(
+    client, admin_token, customer_token, db_session
+):
+    """买家能撤回自己刚提的售后（卖家还没处理时），订单回到已支付。"""
+    order = await _place_order(client, customer_token, db_session)
+    order_id = order["id"]
+    await client.post(
+        f"/api/v1/admin/orders/{order_id}/mock-pay", headers=bearer(admin_token)
+    )
+    applied = await client.post(
+        f"/api/v1/portal/orders/{order_id}/refund-request",
+        headers=bearer(customer_token),
+        json={"amount_cents": 1, "reason": "不想要了"},
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["data"]["payment_status"] == "refunding"
+
+    cancelled = await client.post(
+        f"/api/v1/portal/orders/{order_id}/refund-request/cancel",
+        headers=bearer(customer_token),
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["data"]["payment_status"] == "paid"
+
+    from app.models.order import Order, Refund
+
+    refreshed = await db_session.get(Order, order_id)
+    await db_session.refresh(refreshed)
+    assert refreshed.payment_status == "paid"
+    refund = (
+        await db_session.scalars(
+            select(Refund).where(Refund.order_id == order_id).order_by(Refund.id.desc())
+        )
+    ).first()
+    assert refund is not None and refund.status == "cancelled"
+
+    # 再撤一次应报"没有可取消的售后申请"
+    again = await client.post(
+        f"/api/v1/portal/orders/{order_id}/refund-request/cancel",
+        headers=bearer(customer_token),
+    )
+    assert again.status_code == 400
