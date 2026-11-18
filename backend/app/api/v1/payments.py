@@ -169,14 +169,42 @@ async def payment_health(
             "https://<你的域名>/api/v1/public/payments/wechat/notify"
         )
 
-    app_cert_sn = str(alipay_raw.get("appCertSn") or "").strip()
-    root_cert_sn = str(alipay_raw.get("alipayRootCertSn") or "").strip()
-    if bool(app_cert_sn) != bool(root_cert_sn):
+    # 证书模式：三件套要么都填要么都不填；SN 由证书算，不让手抄
+    app_cert = str(alipay_raw.get("appCertPublicKey") or "").strip()
+    alipay_cert = str(alipay_raw.get("alipayPublicCert") or "").strip()
+    root_cert = str(alipay_raw.get("alipayRootCert") or "").strip()
+    filled = [bool(app_cert), bool(alipay_cert), bool(root_cert)]
+    mode = "certificate" if any(filled) else "public_key"
+    computed_app_sn = ""
+    computed_root_sn = ""
+    if mode == "certificate" and not all(filled):
         issues.append(
-            "证书模式两个 SN 必须同时填：应用公钥证书 SN（app_cert_sn）与支付宝根证书 SN"
+            "证书模式需要三份证书全填：应用公钥证书、支付宝公钥证书、支付宝根证书"
         )
-    if str(alipay_raw.get("publicKey") or "").strip() == private_key and private_key:
-        issues.append("「支付宝公钥」和应用私钥贴成了同一段：支付宝公钥在控制台「接口加签方式」里")
+    if all(filled):
+        from app.services.payment.alipay_cert import (
+            app_cert_sn as derive_app_sn,
+        )
+        from app.services.payment.alipay_cert import (
+            root_cert_sn as derive_root_sn,
+        )
+
+        try:
+            computed_app_sn = derive_app_sn(app_cert)
+        except ValueError as exc:
+            issues.append(str(exc))
+        try:
+            computed_root_sn = derive_root_sn(root_cert)
+        except ValueError as exc:
+            issues.append(str(exc))
+    if (
+        mode == "public_key"
+        and str(alipay_raw.get("publicKey") or "").strip() == private_key
+        and private_key
+    ):
+        issues.append(
+            "「支付宝公钥」和应用私钥贴成了同一段：支付宝公钥在控制台「接口加签方式」里"
+        )
 
     return ok(
         {
@@ -184,9 +212,23 @@ async def payment_health(
             "alipay": {
                 "enabled": bool(alipay_raw.get("enabled", True)),
                 "environment": alipay_raw.get("environment") or "sandbox",
-                "mode": "certificate" if app_cert_sn else "public_key",
+                "mode": mode,
+                # 从证书算出来的 SN（证书模式下请求里带的就是这两个）
+                "appCertSn": computed_app_sn,
+                "alipayRootCertSn": computed_root_sn,
+                # 证书模式查证书，公钥模式查 publicKey —— 报错要报"当前模式下真正缺的"
                 "missing": missing_fields(
-                    alipay_raw, ("appId", "privateKey", "publicKey", "notifyUrl")
+                    alipay_raw,
+                    (
+                        "appId",
+                        "privateKey",
+                        "notifyUrl",
+                        "appCertPublicKey",
+                        "alipayPublicCert",
+                        "alipayRootCert",
+                    )
+                    if mode == "certificate"
+                    else ("appId", "privateKey", "publicKey", "notifyUrl"),
                 ),
                 # 让运营能把它贴进支付宝控制台的「应用公钥」，或与现有内容逐字对比
                 "derivedPublicKey": derived_public_key,

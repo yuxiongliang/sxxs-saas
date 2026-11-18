@@ -96,7 +96,7 @@ src/
 | 销量/浏览/收藏/评分 | 口径集中在 `catalog_stats`；浏览=详情页 PV；销量按 `SOLD_FULFILLMENTS` | `services/catalog_stats.py` |
 | IM | 一套组件三处复用；文本/图/视频/商品卡/emoji/搜索/软删/撤回(2min)/编辑(15min) | `components/ImChat`、`services/im` |
 | 钱包 | **统一钱包、按租户隔离**；余额支付；退款一律回余额；货款到期自动划转 | `services/wallet.py`、`models/wallet.py` |
-| 支付渠道 | **真实接入**：支付宝电脑网站支付 + 微信 Native 扫码；回调验签/解密、金额核对、幂等；渠道未配置时明确报缺哪些字段 | `services/payment/`、`api/v1/payments.py` |
+| 支付渠道 | **真实接入**：支付宝**公钥证书模式**（电脑网站支付）+ 微信 Native 扫码；回调验签/解密、金额核对、幂等；渠道未配置时明确报缺哪些字段 | `services/payment/`（含 `alipay_cert.py`）、`api/v1/payments.py` |
 | 提现 | 申请即冻结 → **租户运营**审核 → 打款/驳回 | `/commerce/finance/withdrawals` |
 | 定时任务 | `scheduled_jobs` + 常驻 worker + 平台管理页 | `services/jobs.py`、`worker/` |
 
@@ -261,6 +261,7 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | `response_model` 吞字段 | Pydantic 按模型裁字段 | 新字段要么进模型，要么用 `dict` |
 | 迁移里的部分唯一索引 | autogenerate 看不见 | 幂等改应用层"先查后插" |
 | 后端改了变量遮蔽 | `hold_days = await hold_days(...)` | 局部变量别与函数同名 |
+| 支付宝报 `invalid-signature`（密钥看着没问题） | ①应用是**证书模式**却按公钥模式请求（缺 `app_cert_sn`/`alipay_root_cert_sn`）；②私钥与控制台「应用公钥」不是一对 | 用「支付诊断」页：它从私钥**推导出应用公钥**供逐字比对，并展示从证书算出的两个 SN |
 | 微信回调一直验签失败（密钥正确） | 回调签名串与「我方请求」不同：回调只有 `timestamp\nnonce\nbody\n`，**不含 method 与 URL** | 两种串分开写（`build_notify_message` vs `build_message`） |
 | 多租户只有一个回调地址 | 回调不带租户信息 | `payments.out_trade_no = T{tenant_id}-{order_no}`，回调据此反查租户配置再验签 |
 | 买家"点一下就支付成功" | 模拟支付后门 | 模拟支付**仅运营 + 非生产**放行；微信/支付宝必须走 `POST /portal/orders/{id}/payments` |

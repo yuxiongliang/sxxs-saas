@@ -190,6 +190,9 @@ export async function getPaymentHealth() {
       mode: 'public_key' | 'certificate';
       missing: string[];
       derivedPublicKey: string;
+      /** 证书模式下由服务端从证书算出的两个 SN */
+      appCertSn: string;
+      alipayRootCertSn: string;
     };
     wechat: { enabled: boolean; missing: string[] };
     issues: string[];

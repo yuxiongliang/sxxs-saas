@@ -25,10 +25,10 @@ DEFAULT_SETTINGS: dict[str, dict] = {
                 # 配着它签名对了也收不到通知（订单永远停在待支付）
                 "notifyUrl": "http://127.0.0.1:9000/api/v1/public/payments/alipay/notify",
                 "returnUrl": "http://127.0.0.1:8010/portal/payment-result",
-                # 证书模式（支付宝新应用默认）：填了才会在请求里带 app_cert_sn / alipay_root_cert_sn。
-                # 应用是证书模式却按公钥模式请求，支付宝会直接回 invalid-signature。
-                "appCertSn": "",
-                "alipayRootCertSn": "",
+                # 证书模式（支付宝新应用默认）：**贴证书内容**，SN 由服务端算，不手填
+                "appCertPublicKey": "",
+                "alipayPublicCert": "",
+                "alipayRootCert": "",
             },
             "wechat": {
                 "enabled": True,

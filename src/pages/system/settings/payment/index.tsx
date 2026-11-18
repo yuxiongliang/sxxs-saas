@@ -264,8 +264,9 @@ const PaymentSettings: React.FC = () => {
                           />
                         </Form.Item>
                         <Form.Item
-                          label="支付宝公钥"
+                          label="支付宝公钥（仅公钥模式）"
                           name={['alipay', 'publicKey']}
+                          extra="填了三份证书就不用它；证书模式请留空"
                         >
                           <Input.TextArea
                             rows={3}
@@ -292,26 +293,37 @@ const PaymentSettings: React.FC = () => {
                             </Form.Item>
                           </Col>
                         </Row>
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item
-                              label="应用公钥证书 SN（证书模式）"
-                              name={['alipay', 'appCertSn']}
-                              extra="应用是证书模式才填；与根证书 SN 必须同时填"
-                            >
-                              <Input placeholder="687218e0b6f5c1a2…" />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item
-                              label="支付宝根证书 SN（证书模式）"
-                              name={['alipay', 'alipayRootCertSn']}
-                              extra="不填则按公钥模式请求"
-                            >
-                              <Input placeholder="687218e0b6f5c1a2…" />
-                            </Form.Item>
-                          </Col>
-                        </Row>
+                        {/* 证书模式：贴三份证书内容，SN 由服务端算（手抄必错、换证书就失效） */}
+                        <Form.Item
+                          label="应用公钥证书（appCertPublicKey_*.crt）"
+                          name={['alipay', 'appCertPublicKey']}
+                          extra="从开放平台「接口加签方式 → 公钥证书」下载；服务端据此算 app_cert_sn"
+                        >
+                          <Input.TextArea
+                            rows={3}
+                            placeholder="-----BEGIN CERTIFICATE-----"
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          label="支付宝公钥证书（alipayCertPublicKey_RSA2.crt）"
+                          name={['alipay', 'alipayPublicCert']}
+                          extra="异步通知/查询结果用它验签（不再用「支付宝公钥」文本）"
+                        >
+                          <Input.TextArea
+                            rows={3}
+                            placeholder="-----BEGIN CERTIFICATE-----"
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          label="支付宝根证书（alipayRootCert.crt）"
+                          name={['alipay', 'alipayRootCert']}
+                          extra="多张证书的文件；服务端据此算 alipay_root_cert_sn"
+                        >
+                          <Input.TextArea
+                            rows={3}
+                            placeholder="-----BEGIN CERTIFICATE-----"
+                          />
+                        </Form.Item>
                       </>
                     ),
                   },
@@ -457,6 +469,19 @@ const PaymentSettings: React.FC = () => {
                     )}
                   </Descriptions.Item>
                 </Descriptions>
+                {health.data?.alipay.mode === 'certificate' &&
+                health.data.alipay.appCertSn ? (
+                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                    <div>app_cert_sn = {health.data.alipay.appCertSn}</div>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      alipay_root_cert_sn ={' '}
+                      {health.data.alipay.alipayRootCertSn}
+                    </div>
+                    <div style={{ marginTop: 4 }}>
+                      这两个值由服务端从证书算出并随请求下发，不需要你手填
+                    </div>
+                  </div>
+                ) : null}
                 {(health.data?.issues ?? []).map((issue) => (
                   <Alert key={issue} type="warning" showIcon title={issue} />
                 ))}

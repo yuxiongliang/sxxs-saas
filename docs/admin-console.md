@@ -241,9 +241,24 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 
 ### 配置（租户控制台 → 支付设置）
 
+**支付宝走「公钥证书模式」**（新应用默认就是证书模式，按公钥模式请求会被判 `invalid-signature`）：
+
+| 字段 | 说明 |
+| --- | --- |
+| App ID | 开放平台应用 ID |
+| 应用私钥 | `app_private_key`（PEM 或纯 base64） |
+| 应用公钥证书 | `appCertPublicKey_*.crt` —— 服务端据此**自动算 `app_cert_sn`** |
+| 支付宝公钥证书 | `alipayCertPublicKey_RSA2.crt` —— **回调验签用的就是它里的公钥** |
+| 支付宝根证书 | `alipayRootCert.crt`（多张证书的文件）→ 自动算 `alipay_root_cert_sn` |
+| 异步通知 / 同步返回地址 | `…/api/v1/public/payments/alipay/notify`、`…/portal/payment-result` |
+
+> **SN 不让人手填**：`app_cert_sn = MD5(issuer + serial)`，根证书是各张证书的 MD5 用 `_` 连接。
+> 手抄必错、证书一换就失效 —— 所以贴证书内容，SN 由服务端算并随请求下发。
+
+「支付宝公钥（仅公钥模式）」保留给老应用；填了三份证书就不用它。
+
 | 渠道 | 必填 |
 | --- | --- |
-| 支付宝 | `appId`、应用私钥 `privateKey`、**支付宝公钥** `publicKey`、`notifyUrl`；`environment` 选 sandbox/production |
 | 微信 | `mchId`、`appId`、`apiV3Key`（32 字节）、证书序列号 `serialNo`、商户私钥 `privateKey`、`notifyUrl` |
 
 可选 `platformPublicKey`：把微信平台证书公钥钉在配置里，回调时不再去 `/v3/certificates` 拉取

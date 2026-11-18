@@ -25,12 +25,12 @@ class PaymentConfigError(Exception):
 class AlipayConfig:
     app_id: str
     private_key: str
+    # 验签公钥：**证书模式下由「支付宝公钥证书」解析出来**，公钥模式下直接用 publicKey
     alipay_public_key: str
     notify_url: str
     return_url: str
     gateway: str
-    # 证书模式（支付宝新应用默认）：两者都填才会在请求里带 cert SN。
-    # 应用是证书模式却按公钥模式请求 → 支付宝直接回 invalid-signature。
+    # 证书模式：两个 SN **由证书内容自动算出**，不让运营手填（抄错就等于签名无效）
     app_cert_sn: str = ""
     alipay_root_cert_sn: str = ""
 
@@ -81,7 +81,18 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
     problems: dict[str, list[str]] = {}
 
     alipay: AlipayConfig | None = None
-    alipay_missing = missing_fields(alipay_raw, ALIPAY_REQUIRED)
+    # 证书模式三件套：应用公钥证书 / 支付宝公钥证书 / 支付宝根证书
+    app_cert = _clean(alipay_raw.get("appCertPublicKey"))
+    alipay_cert = _clean(alipay_raw.get("alipayPublicCert"))
+    root_cert = _clean(alipay_raw.get("alipayRootCert"))
+    certificate_mode = bool(app_cert or alipay_cert or root_cert)
+
+    required = (
+        ("appId", "privateKey", "notifyUrl", "appCertPublicKey", "alipayPublicCert", "alipayRootCert")
+        if certificate_mode
+        else ALIPAY_REQUIRED
+    )
+    alipay_missing = missing_fields(alipay_raw, required)
     if alipay_missing:
         problems["alipay"] = alipay_missing
     elif alipay_raw.get("enabled", True):
@@ -90,15 +101,35 @@ async def load_payment_config(db: AsyncSession, tenant_id: int) -> PaymentConfig
             if _clean(alipay_raw.get("environment")) == "sandbox"
             else ALIPAY_PROD
         )
+        app_sn = ""
+        root_sn = ""
+        verify_key = _clean(alipay_raw.get("publicKey"))
+        if certificate_mode:
+            # SN 从证书算，验签公钥从「支付宝公钥证书」取
+            from app.services.payment.alipay_cert import (
+                app_cert_sn as derive_app_sn,
+            )
+            from app.services.payment.alipay_cert import (
+                public_key_from_certificate,
+                root_cert_sn as derive_root_sn,
+            )
+
+            try:
+                app_sn = derive_app_sn(app_cert)
+                root_sn = derive_root_sn(root_cert)
+                verify_key = public_key_from_certificate(alipay_cert)
+            except ValueError as exc:
+                problems["alipay"] = [str(exc)]
+                return PaymentConfig(alipay=None, wechat=None, problems=problems)
         alipay = AlipayConfig(
             app_id=_clean(alipay_raw.get("appId")),
             private_key=_clean(alipay_raw.get("privateKey")),
-            alipay_public_key=_clean(alipay_raw.get("publicKey")),
+            alipay_public_key=verify_key,
             notify_url=_clean(alipay_raw.get("notifyUrl")),
             return_url=_clean(alipay_raw.get("returnUrl")),
             gateway=gateway,
-            app_cert_sn=_clean(alipay_raw.get("appCertSn")),
-            alipay_root_cert_sn=_clean(alipay_raw.get("alipayRootCertSn")),
+            app_cert_sn=app_sn,
+            alipay_root_cert_sn=root_sn,
         )
 
     wechat: WechatConfig | None = None

@@ -473,3 +473,161 @@ def test_alipay_certificate_mode_params_and_derived_public_key():
         if "BEGIN" not in line and "END" not in line
     )
     assert derived == expected
+
+# ---------------------------------------------------------------- 证书模式
+
+
+def _make_cert(private_key, common_name: str, serial: int = 1) -> str:
+    """自签一张证书，返回 PEM（测试用：只要能解析出 issuer/serial/公钥即可）。"""
+    import datetime as _dt
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.x509.oid import NameOID
+
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(private_key.public_key())
+        .serial_number(serial)
+        .not_valid_before(_dt.datetime.now(_dt.UTC) - _dt.timedelta(days=1))
+        .not_valid_after(_dt.datetime.now(_dt.UTC) + _dt.timedelta(days=365))
+        .sign(private_key, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+
+def test_certificate_sn_matches_alipay_formula():
+    """app_cert_sn = MD5(issuer + serial)，与小写十六进制长度 32。"""
+    import hashlib
+
+    from cryptography import x509
+
+    from app.services.payment.alipay_cert import app_cert_sn
+
+    private_pem, _ = _keypair()
+    from cryptography.hazmat.primitives import serialization
+
+    key = serialization.load_pem_private_key(private_pem.encode(), password=None)
+    cert_pem = _make_cert(key, "app.example.com", serial=12345)
+    cert = x509.load_pem_x509_certificate(cert_pem.encode())
+    expected = hashlib.md5(
+        f"{cert.issuer.rfc4514_string()}{cert.serial_number}".encode()
+    ).hexdigest()
+    assert app_cert_sn(cert_pem) == expected
+    assert len(app_cert_sn(cert_pem)) == 32
+
+
+def test_root_cert_sn_joins_multiple_certificates():
+    from app.services.payment.alipay_cert import root_cert_sn
+
+    private_pem, _ = _keypair()
+    from cryptography.hazmat.primitives import serialization
+
+    key = serialization.load_pem_private_key(private_pem.encode(), password=None)
+    bundle = _make_cert(key, "root-a", serial=1) + _make_cert(key, "root-b", serial=2)
+    sn = root_cert_sn(bundle)
+    assert "_" in sn
+    assert len(sn.split("_")) == 2
+
+
+async def test_certificate_mode_derives_sns_and_verifies_by_certificate(
+    client, customer_token, db_session
+):
+    """证书模式：配置三份证书即可，SN 自动算、验签用「支付宝公钥证书」。"""
+    from cryptography.hazmat.primitives import serialization
+
+    merchant_private, _ = _keypair()
+    alipay_private, alipay_public = _keypair()
+    key = serialization.load_pem_private_key(merchant_private.encode(), password=None)
+    alipay_key = serialization.load_pem_private_key(
+        alipay_private.encode(), password=None
+    )
+
+    app_cert = _make_cert(key, "app-cert", serial=11)
+    alipay_cert = _make_cert(alipay_key, "alipay-cert", serial=22)
+    root_cert = _make_cert(key, "root-1", serial=33) + _make_cert(key, "root-2", serial=44)
+
+    await _set_payment_config(
+        db_session,
+        1,
+        {
+            "alipay": {
+                "enabled": True,
+                "environment": "sandbox",
+                "appId": "2021007108682567",
+                "privateKey": merchant_private,
+                # 证书模式下 publicKey 留空，靠证书
+                "publicKey": "",
+                "appCertPublicKey": app_cert,
+                "alipayPublicCert": alipay_cert,
+                "alipayRootCert": root_cert,
+                "notifyUrl": "https://example.com/api/v1/public/payments/alipay/notify",
+                "returnUrl": "https://example.com/portal/payment-result",
+            }
+        },
+    )
+
+    from app.services.payment.config import load_payment_config
+
+    config = await load_payment_config(db_session, 1)
+    assert config.alipay is not None, config.problems
+    assert config.alipay.app_cert_sn
+    assert "_" in config.alipay.alipay_root_cert_sn
+    # 验签公钥来自证书，而不是配置里的空 publicKey
+    assert "BEGIN PUBLIC KEY" in config.alipay.alipay_public_key
+    normalized = "".join(config.alipay.alipay_public_key.split())
+    assert alipay_public.splitlines()[1][:20] in normalized
+
+    # 真报文：用证书里的私钥签，走完整回调
+    order = await _place_order(client, customer_token, db_session)
+    form = {
+        "app_id": "2021007108682567",
+        "out_trade_no": f"T1-{order['order_no']}",
+        "trade_no": "CERT-TRADE-1",
+        "trade_status": "TRADE_SUCCESS",
+        "total_amount": f"{order['payable_amount_cents'] / 100:.2f}",
+        "sign_type": "RSA2",
+    }
+    form["sign"] = sign(form, alipay_private)
+    response = await client.post(
+        "/api/v1/public/payments/alipay/notify", data=form
+    )
+    assert response.status_code == 200, response.text
+    assert response.text == "success"
+
+    from app.models.order import Order
+
+    refreshed = await db_session.get(Order, order["id"])
+    await db_session.refresh(refreshed)
+    assert refreshed.payment_status == "paid"
+
+
+async def test_certificate_mode_reports_missing_certificates(
+    client, admin_token, db_session
+):
+    """只填了一半证书要报"缺哪些"，不能让运营对着 500 猜。"""
+    await _set_payment_config(
+        db_session,
+        1,
+        {
+            "alipay": {
+                "enabled": True,
+                "appId": "2021007108682567",
+                "privateKey": "x",
+                "appCertPublicKey": "-----BEGIN CERTIFICATE-----",
+                "notifyUrl": "https://example.com/api/v1/public/payments/alipay/notify",
+                "returnUrl": "",
+            }
+        },
+    )
+    response = await client.get(
+        "/api/v1/settings/payment/health", headers=bearer(admin_token)
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["alipay"]["mode"] == "certificate"
+    assert "alipayPublicCert" in data["alipay"]["missing"]
+    assert "alipayRootCert" in data["alipay"]["missing"]
