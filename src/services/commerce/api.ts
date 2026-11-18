@@ -206,12 +206,50 @@ export async function listPortalOrders() {
   );
 }
 
+/** 订单确认页的预览（服务端算价/校验库存，前端只负责展示）。 */
+export async function previewCheckout(data: {
+  mode: 'buy' | 'cart';
+  sku_id?: number;
+  quantity?: number;
+}) {
+  return unwrap<{
+    items: Array<{
+      sku_id: number;
+      product_id: number;
+      seller_id: number;
+      seller_username?: string | null;
+      shop_name?: string | null;
+      product_name: string;
+      sku_name: string;
+      image?: string | null;
+      price_cents: number;
+      quantity: number;
+      subtotal_cents: number;
+      delivery_methods: string[];
+    }>;
+    sellers: Array<{
+      seller_id: number;
+      seller_name?: string | null;
+      seller_username?: string | null;
+      shop_name?: string | null;
+      delivery_methods: string[];
+      pickup_address?: string | null;
+      pickup_note?: string | null;
+    }>;
+    total_cents: number;
+    issues: string[];
+  }>(request('/api/v1/portal/checkout/preview', { method: 'POST', data }));
+}
+
 export async function createPortalOrder(data: {
   sku_id: number;
   quantity: number;
-  receiver_name: string;
-  receiver_phone: string;
-  receiver_address: { detail: string };
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_address?: { detail: string };
+  address_id?: number;
+  remark?: string;
+  delivery?: Array<{ seller_id: number; delivery_method: string }>;
 }) {
   return unwrap<PortalOrder>(
     request('/api/v1/portal/orders', {
@@ -221,6 +259,9 @@ export async function createPortalOrder(data: {
         receiver_name: data.receiver_name,
         receiver_phone: data.receiver_phone,
         receiver_address: data.receiver_address,
+        address_id: data.address_id,
+        remark: data.remark,
+        delivery: data.delivery,
       },
     }),
   );

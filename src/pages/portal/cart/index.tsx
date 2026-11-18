@@ -6,26 +6,19 @@ import {
   Card,
   Checkbox,
   Empty,
-  Form,
-  Input,
   InputNumber,
-  Modal,
   Popconfirm,
-  Radio,
-  Select,
   Space,
   Table,
   Tag,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-  checkoutCart,
   clearPortalCart,
   deleteCartItem,
   getPortalCart,
-  listAddresses,
   updateCartItem,
 } from '@/services/commerce/api';
 import type { CartItemRecord } from '@/services/commerce/types';
@@ -37,35 +30,15 @@ const CartPage: React.FC = () => {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  // 一个订单可拆多个卖家单，交付方式按卖家各选一个（默认快递）
-  const [deliveryBySeller, setDeliveryBySeller] = useState<
-    Record<number, 'express' | 'pickup'>
-  >({});
-  const [submitting, setSubmitting] = useState(false);
-  const [form] = Form.useForm();
 
   const { data, isLoading } = useQuery({
     queryKey: ['portal-cart'],
     queryFn: getPortalCart,
   });
-  const { data: addresses } = useQuery({
-    queryKey: ['portal-addresses'],
-    queryFn: listAddresses,
-  });
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['portal-cart'] });
   };
-
-  // 「管理收货地址」在新窗口打开：用户回来自动刷新，弹窗里立刻能看到新地址
-  useEffect(() => {
-    const onFocus = () => {
-      queryClient.invalidateQueries({ queryKey: ['portal-addresses'] });
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [queryClient]);
 
   const selectedIds = useMemo(
     () =>
@@ -95,85 +68,13 @@ const CartPage: React.FC = () => {
     await invalidate();
   };
 
-  const openCheckout = () => {
+  /** 结算：跳到独立的订单确认页（弹窗已下线），商品清单/地址/支付都在那里。 */
+  const goCheckout = () => {
     if (!selectedIds.length) {
       message.warning('请先勾选要结算的商品');
       return;
     }
-    const preferred =
-      addresses?.find((item) => item.is_default) ?? addresses?.[0];
-    form.setFieldsValue({
-      address_id: preferred?.id,
-      receiver_name: preferred?.receiver_name ?? '',
-      receiver_phone: preferred?.receiver_phone ?? '',
-    });
-    setCheckoutOpen(true);
-  };
-
-  const checkedItems = (data?.items ?? []).filter((item) =>
-    selectedIds.includes(item.id),
-  );
-  const sellerGroups = useMemo(() => {
-    const map = new Map<
-      number,
-      {
-        sellerId: number;
-        methods: string[];
-        pickupAddress?: string;
-        pickupNote?: string;
-      }
-    >();
-    for (const item of checkedItems) {
-      if (!map.has(item.seller_id)) {
-        map.set(item.seller_id, {
-          sellerId: item.seller_id,
-          methods: item.delivery_methods ?? ['express'],
-          pickupAddress: item.shop_address ?? undefined,
-          pickupNote: item.shop_pickup_note ?? undefined,
-        });
-      }
-    }
-    return [...map.values()];
-  }, [checkedItems]);
-  const needsAddress = sellerGroups.some(
-    (group) => (deliveryBySeller[group.sellerId] ?? 'express') === 'express',
-  );
-
-  const submitCheckout = async () => {
-    const values = await form.validateFields();
-    const address = addresses?.find((item) => item.id === values.address_id);
-    if (!address) {
-      message.warning('请选择收货地址');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const order = await checkoutCart({
-        delivery: checkedItems.map((item) => ({
-          seller_id: item.seller_id,
-          delivery_method: deliveryBySeller[item.seller_id] ?? 'express',
-        })),
-        // 收货人/电话/地址全部来自地址簿，不再有手填字段
-        receiver_name: address.receiver_name,
-        receiver_phone: address.receiver_phone,
-        receiver_address: {
-          province: address.province,
-          city: address.city,
-          district: address.district,
-          detail: address.detail,
-        },
-        address_id: address.id,
-        remark: values.remark,
-      });
-      await invalidate();
-      setCheckoutOpen(false);
-      message.success(`下单成功：${order.order_no}`);
-      navigate(`/portal/payment-result?orderId=${order.id}`);
-    } catch (error) {
-      message.error((error as Error).message);
-    } finally {
-      setSubmitting(false);
-    }
+    navigate('/portal/checkout?from=cart');
   };
 
   const columns: ColumnsType<CartItemRecord> = [
@@ -304,98 +205,12 @@ const CartPage: React.FC = () => {
                 {yuan(data?.selected_amount_cents ?? 0)}
               </Typography.Text>
             </Typography.Text>
-            <Button type="primary" size="large" onClick={openCheckout}>
+            <Button type="primary" size="large" onClick={goCheckout}>
               去结算
             </Button>
           </Space>
         </Space>
       </Card>
-
-      <Modal
-        title="确认订单"
-        open={checkoutOpen}
-        onCancel={() => setCheckoutOpen(false)}
-        onOk={submitCheckout}
-        confirmLoading={submitting}
-        okText="提交订单"
-      >
-        <Form form={form} layout="vertical">
-          {/* 交付方式按卖家分组：同一单可能一个卖家发快递、另一个自提 */}
-          {sellerGroups.map((group) => (
-            <Form.Item
-              key={group.sellerId}
-              label={`交付方式（卖家 #${group.sellerId}）`}
-            >
-              <Radio.Group
-                value={deliveryBySeller[group.sellerId] ?? 'express'}
-                onChange={(event) =>
-                  setDeliveryBySeller((prev) => ({
-                    ...prev,
-                    [group.sellerId]: event.target.value,
-                  }))
-                }
-              >
-                <Radio.Button value="express">物流快递</Radio.Button>
-                <Radio.Button
-                  value="pickup"
-                  disabled={
-                    !group.methods.includes('pickup') || !group.pickupAddress
-                  }
-                >
-                  自提
-                </Radio.Button>
-              </Radio.Group>
-              {deliveryBySeller[group.sellerId] === 'pickup' ? (
-                <Typography.Paragraph
-                  type="secondary"
-                  style={{ margin: '6px 0 0', fontSize: 12 }}
-                >
-                  自提点：{group.pickupAddress || '卖家未填写'}
-                  {group.pickupNote ? ` · ${group.pickupNote}` : ''}
-                </Typography.Paragraph>
-              ) : null}
-            </Form.Item>
-          ))}
-          {/* 只保留「收货地址」与「备注」：地址统一在地址簿里维护，
-              这里不再手填姓名/电话/省市区/门牌——手填会造出和地址簿不一样的一套脏数据。
-              自提单也用地址簿里的联系人+手机号作为到店联系信息。 */}
-          <Form.Item
-            label="收货地址"
-            name="address_id"
-            rules={[{ required: true, message: '请选择收货地址' }]}
-            extra="地址在「收货地址」页面维护，保存后回来自动出现在这里"
-          >
-            <Select
-              allowClear
-              placeholder="选择已保存的地址"
-              options={(addresses ?? []).map((item) => ({
-                value: item.id,
-                label: `${item.is_default ? '[默认] ' : ''}${item.receiver_name} ${item.receiver_phone} ${item.province}${item.city}${item.district}${item.detail}`,
-              }))}
-              notFoundContent="还没有收货地址，点下方「管理收货地址」新增"
-            />
-          </Form.Item>
-          {needsAddress ? null : (
-            <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-              本单全部为自提，用地址簿里的联系人/手机号作为到店联系方式。
-            </Typography.Paragraph>
-          )}
-          <Form.Item label="备注" name="remark">
-            <Input.TextArea rows={2} placeholder="选填" />
-          </Form.Item>
-        </Form>
-        <Button
-          type="link"
-          onClick={() => window.open('/portal/addresses', '_blank', 'noopener')}
-        >
-          管理收货地址（新窗口）
-        </Button>
-        <div style={{ marginTop: 8 }}>
-          <Typography.Text type="secondary">
-            提交订单后可在支付页完成模拟支付。
-          </Typography.Text>
-        </div>
-      </Modal>
     </PortalShell>
   );
 };

@@ -133,83 +133,108 @@ test.describe('portal: buyer journey', () => {
     return created.status();
   }
 
-  test('checks out the cart and completes the mock payment', async ({
-    page,
-  }) => {
-    await loginAs(page, CUSTOMER);
-
-    // Make sure there is at least one line to settle.
-    await addAnyProductToCart(page);
-
-    // 确认订单弹窗只保留「收货地址 + 备注」：地址必须先在地址簿里存在。
-    // 走真实接口建一条（比在弹窗里手点级联快且稳定），再打开弹窗。
-    await ensureAddress(page);
-
-    await page.goto('/portal/cart');
-    await page.getByRole('button', { name: '去结算' }).click();
-    await expect(page.getByText('确认订单').first()).toBeVisible({
-      timeout: 20_000,
-    });
-    await page.waitForTimeout(800);
-
-    const addressSelect = page
-      .getByRole('dialog')
-      .locator('.ant-select')
-      .first();
-    await addressSelect.click();
-    await page.waitForTimeout(600);
+  /** 在确认页选一条地址（下拉第一项）。 */
+  async function pickAddress(page: import('@playwright/test').Page) {
+    await page.locator('.ant-select').first().click();
+    await page.waitForTimeout(700);
     await page
       .locator('.ant-select-dropdown:visible .ant-select-item-option')
       .first()
       .click();
-    await page.getByRole('button', { name: '提交订单' }).click();
+    await page.waitForTimeout(400);
+  }
 
-    // Order created -> the app navigates to the payment result page.
-    await expect(page).toHaveURL(/\/portal\/payment-result\?orderId=\d+/, {
-      timeout: 40_000,
-    });
-
-    // 真实支付需要商户号配置；e2e 用**余额支付**（种子里给 e2e 买家预置了余额）
-    const payButton = page.getByTestId('pay-wallet');
-    if (await payButton.isVisible().catch(() => false)) {
-      await payButton.click();
-      await expect(page.getByText('支付成功').first()).toBeVisible({
-        timeout: 30_000,
-      });
-    }
-    await expect(page.getByText(/订单号/).first()).toBeVisible({
-      timeout: 30_000,
-    });
-  });
-
-  test('checkout modal only asks for an address and a remark', async ({
+  test('checks out the cart on the standalone checkout page', async ({
     page,
   }) => {
     /**
-     * 确认订单弹窗**只保留「收货地址 + 备注」**：
-     * 手填的姓名/电话/省市区/门牌已经删掉 —— 地址统一在地址簿里维护，
-     * 两边各填一套就会出现"下单用的是手填值，地址簿里却是另一套"。
+     * 购物车「去结算」→ **独立确认页**（弹窗已下线）→ 余额支付 → 结果页。
+     * 确认页要能看到商品清单 + 地址 + 支付方式，而不是只有一个弹窗表单。
      */
     await loginAs(page, CUSTOMER);
     await addAnyProductToCart(page);
     await ensureAddress(page);
 
     await page.goto('/portal/cart');
-    await expect(page.getByText('确认订单').first()).not.toBeVisible();
     await page.getByRole('button', { name: '去结算' }).click();
 
-    const modal = page.getByRole('dialog').first();
-    await expect(modal.getByText('确认订单').first()).toBeVisible({
-      timeout: 20_000,
+    await expect(page).toHaveURL(/\/portal\/checkout\?from=cart/, {
+      timeout: 30_000,
     });
-    await expect(modal.getByText('收货地址').first()).toBeVisible();
-    await expect(modal.getByText('备注').first()).toBeVisible();
-    await expect(modal.getByText(/管理收货地址/).first()).toBeVisible();
+    await expect(page.getByText('商品清单').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText('收货信息').first()).toBeVisible();
+    await expect(page.getByText('支付方式').first()).toBeVisible();
+
+    await pickAddress(page);
+    await page.getByTestId('checkout-submit').click();
+
+    // 余额支付是即时的：提交后直接落到结果页
+    await expect(page).toHaveURL(/\/portal\/payment-result\?orderId=\d+/, {
+      timeout: 40_000,
+    });
+    await expect(page.getByText(/订单号/).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
+  test('buy now goes straight to the checkout page (no cart detour)', async ({
+    page,
+  }) => {
+    await loginAs(page, CUSTOMER);
+    await ensureAddress(page);
+
+    // 从商品列表进第一个商品详情
+    await page.goto('/products');
+    const cards = page.locator('[data-testid^="product-card-"]');
+    await expect(cards.first()).toBeVisible({ timeout: 30_000 });
+    await cards.first().click();
+    await page.waitForTimeout(3500);
+
+    const buy = page.getByTestId('buy-now');
+    if (!(await buy.isVisible().catch(() => false))) {
+      // 多规格商品要先选规格，这条用例只用单规格；选不到就跳过，不制造假失败
+      test.skip(true, '当前商品需要先选规格，跳过立即购买用例');
+      return;
+    }
+    await buy.click();
+
+    await expect(page).toHaveURL(/\/portal\/checkout\?skuId=\d+/, {
+      timeout: 30_000,
+    });
+    await expect(page.getByText('商品清单').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    // 立即购买不写购物车：URL 里没有 cart
+    expect(page.url()).not.toContain('/portal/cart');
+  });
+
+  test('checkout page asks for an address and a remark only', async ({
+    page,
+  }) => {
+    /**
+     * 确认页的输入只有「收货地址 + 备注」：
+     * 姓名/电话/省市区/门牌都取自地址簿，两边各填一套会出现"下单用A、地址簿存B"。
+     */
+    await loginAs(page, CUSTOMER);
+    await ensureAddress(page);
+
+    await page.goto('/portal/checkout?skuId=9&quantity=1');
+    await page.waitForTimeout(3500);
+
+    await expect(page.getByText('商品清单').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText('收货地址').first()).toBeVisible();
+    await expect(page.getByText('备注').first()).toBeVisible();
+    await expect(page.getByText(/管理收货地址/).first()).toBeVisible();
+
     // 手填控件必须不存在
-    await expect(modal.locator('input#receiver_name')).toHaveCount(0);
-    await expect(modal.locator('input#receiver_phone')).toHaveCount(0);
-    await expect(modal.locator('input#receiver_address')).toHaveCount(0);
-    await expect(modal.locator('.ant-cascader')).toHaveCount(0);
+    await expect(page.locator('input#receiver_name')).toHaveCount(0);
+    await expect(page.locator('input#receiver_phone')).toHaveCount(0);
+    await expect(page.locator('input#receiver_address')).toHaveCount(0);
+    await expect(page.locator('.ant-cascader')).toHaveCount(0);
   });
 
   test('favorites a product and sees it in the portal list', async ({

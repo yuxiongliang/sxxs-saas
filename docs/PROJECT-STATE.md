@@ -91,7 +91,7 @@ src/
 | 交付方式 | 快递 / 自提可多选（不预勾选）；落 `seller_orders.delivery_method` | `products.delivery_methods`、`shops.address/pickup_note` |
 | 订单 | **双状态**：`payment_status` + `fulfillment_status`；旧 `status` 已删 | `services/order_state.py::sync_order()` |
 | 订单列表 | 一行一商品、`rowSpan` 合并、横向滚动、**不做金额合计**；买家端**无详情页**（信息全进列） | `commerce/orders`、`portal/orders` |
-| 结算与支付 | 确认订单弹窗**只留「收货地址 + 备注」**（地址只在地址簿维护，新窗口去加）；买家待支付订单点「去支付」→ 支付页三选一（无「模拟支付」） | `portal/cart`、`portal/payment-result` |
+| 结算与支付 | **独立订单确认页 `/portal/checkout`**（不是弹窗）：商品清单 + 地址 + 备注 + 三种支付方式在同一页，**点「提交订单并支付」才建单**；详情页「立即购买」直接进此页（不进购物车），购物车「去结算」也进此页；待支付订单点「去支付」→ 支付结果页 | `portal/checkout`、`services/checkout.py`、`portal/payment-result` |
 | 售后 | 买家 `paid/shipped` 可申请 → `refunding`；**卖家处理前买家可自己撤回**；卖家/运营同意或驳回；`completed` 之后拒绝 | `order.request_refund/cancel_refund_request/reject_refund` |
 | 收藏/评价 | 四端打通（买家→卖家→运营→平台）；**先发后审**；匿名只在买家侧打码 | `services/favorites.py`、`reviews.py` |
 | 销量/浏览/收藏/评分 | 口径集中在 `catalog_stats`；浏览=详情页 PV；销量按 `SOLD_FULFILLMENTS` | `services/catalog_stats.py` |
@@ -249,6 +249,8 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 
 | 现象 | 病根 | 口诀 |
 | --- | --- | --- |
+| 自定义控件「选了值但保存后是空的」 | 控件不是 `Form.Item` 的**注册字段**（用隐藏字段 + setFieldsValue），`validateFields()` 拿不到 | 自定义控件必须挂在 `Form.Item name=...` 上；后端 schema 也别给默认空串，空值要 422 拒绝 |
+| 结算页展示的价格与下单时不一致 | 前端自己拿商品详情拼清单 | 清单只来自服务端 `checkout/preview`，提交时后端再算一次（以后端为准） |
 | 保存成功但值变空 | 多步表单用条件渲染把 `<Form>` 卸载了 | **多步表单 + 保存按钮只在最后一步 = 必须检查 Form 是否被卸载**；用 `display` 切换 |
 | 页面卡「正在加载资源」 | dev 与 build 抢写 `src/.umi`，chunk 图不一致 | **build 前先停 dev**；恢复靠重启 dev（或 `rm -rf node_modules/.cache`） |
 | 显示时间差 8 小时 / 显示成 ISO 原文 | 直接截字符串或用 `toLocaleString()`，各页格式还不一样 | **统一用 `utils/datetime.ts`**（`formatDateTime` / `formatDateTimeFull` / `formatDate`），别在页面里自己写 |

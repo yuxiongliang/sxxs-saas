@@ -139,15 +139,14 @@ export default function ProductDetailPage() {
     }
   };
 
+  /**
+   * 立即购买：**不进购物车**，直接去订单确认页。
+   * （加入购物车走另一个按钮；购物车结算也跳同一个确认页）
+   */
   const buyNow = async () => {
     if (!activeSku) return;
     if (!(await requireLogin())) return;
-    try {
-      await addCartItem({ sku_id: activeSku.id, quantity });
-      navigate('/portal/cart');
-    } catch (error) {
-      message.error((error as Error)?.message || '下单失败');
-    }
+    navigate(`/portal/checkout?skuId=${activeSku.id}&quantity=${quantity}`);
   };
 
   const outOfStock = Boolean(activeSku) && (activeSku?.stock ?? 0) <= 0;

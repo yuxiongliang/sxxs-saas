@@ -126,6 +126,29 @@ async def wechat_notify(request: Request, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------- 配置自检
 
 
+@router.post("/portal/checkout/preview")
+async def checkout_preview(
+    payload: dict,
+    context: AuthContext = Depends(require_permission("order:create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """订单确认页的预览（只读）：商品清单、金额、能不能买。
+
+    价格/库存的最终裁判仍是下单接口；这里只把服务端看到的事实给用户确认。
+    """
+    from app.services import checkout as checkout_service
+
+    return ok(
+        await checkout_service.build_preview(
+            db,
+            context,
+            mode=str(payload.get("mode") or "buy"),
+            sku_id=payload.get("sku_id"),
+            quantity=int(payload.get("quantity") or 1),
+        )
+    )
+
+
 @router.get("/settings/payment/health")
 async def payment_health(
     context: AuthContext = Depends(require_permission("setting:payment")),

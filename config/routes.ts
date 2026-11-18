@@ -521,6 +521,12 @@ export default [
     component: './portal/favorites',
   },
   {
+    // 订单确认页（独立页面）：立即购买 与 购物车结算 都走这里，弹窗已下线
+    path: '/portal/checkout',
+    layout: false,
+    component: './portal/checkout',
+  },
+  {
     // 我的钱包（买家/卖家同一个钱包；按租户隔离）
     path: '/portal/wallet',
     layout: false,

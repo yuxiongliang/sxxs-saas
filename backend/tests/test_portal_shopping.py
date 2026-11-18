@@ -513,3 +513,104 @@ async def test_address_requires_region_fields(client, customer_token):
     )
     assert allowed.status_code == 200, allowed.text
     assert allowed.json()["data"]["province"] == "广东省"
+
+async def test_checkout_preview_buy_mode_returns_priced_items(
+    client, customer_token, db_session
+):
+    """订单确认页预览：服务端算价、给出卖家与交付方式，前端不自己拼。"""
+    sku = await _on_sale_sku(db_session)
+    response = await client.post(
+        "/api/v1/portal/checkout/preview",
+        headers=bearer(customer_token),
+        json={"mode": "buy", "sku_id": sku.id, "quantity": 2},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["issues"] == []
+    assert len(data["items"]) == 1
+    item = data["items"][0]
+    assert item["sku_id"] == sku.id
+    assert item["quantity"] == 2
+    # 单价 × 数量 = 小计 = 总额（服务端算，不是前端乘出来的）
+    assert item["subtotal_cents"] == item["price_cents"] * 2
+    assert data["total_cents"] == item["subtotal_cents"]
+    # 商品信息展示需要的字段
+    for key in ("product_name", "sku_name", "image", "shop_name"):
+        assert key in item
+    assert data["sellers"] and data["sellers"][0]["delivery_methods"]
+
+
+async def test_checkout_preview_reports_stock_issues(
+    client, customer_token, db_session
+):
+    """库存不足时不给"能买"的假象，而是明确列出问题（页面据此禁用提交）。"""
+    sku = await _on_sale_sku(db_session)
+    response = await client.post(
+        "/api/v1/portal/checkout/preview",
+        headers=bearer(customer_token),
+        json={"mode": "buy", "sku_id": sku.id, "quantity": sku.stock + 1},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert any("库存不足" in issue for issue in data["issues"])
+
+
+async def test_checkout_preview_cart_mode_uses_selected_lines(
+    client, customer_token, db_session
+):
+    sku = await _on_sale_sku(db_session)
+    await client.post(
+        "/api/v1/portal/cart/items",
+        headers=bearer(customer_token),
+        json={"sku_id": sku.id, "quantity": 1},
+    )
+    response = await client.post(
+        "/api/v1/portal/checkout/preview",
+        headers=bearer(customer_token),
+        json={"mode": "cart"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["items"], "购物车已勾选行必须出现在预览里"
+    assert data["total_cents"] > 0
+
+
+async def test_checkout_preview_rejects_unknown_mode(client, customer_token):
+    response = await client.post(
+        "/api/v1/portal/checkout/preview",
+        headers=bearer(customer_token),
+        json={"mode": "nope"},
+    )
+    assert response.status_code == 400
+
+
+async def _on_sale_sku(db_session):
+    """取一个在售商品的可售 SKU（seed 里保证有）。"""
+    from app.models.catalog import Product, ProductSku
+
+    product = (
+        (
+            await db_session.execute(
+                select(Product).where(
+                    Product.tenant_id == 1, Product.status == "on_sale"
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert product is not None
+    sku = (
+        (
+            await db_session.execute(
+                select(ProductSku).where(
+                    ProductSku.product_id == product.id,
+                    ProductSku.status == "active",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert sku is not None
+    return sku
