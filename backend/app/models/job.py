@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -37,6 +37,9 @@ class ScheduledJob(Base, TimestampMixin):
         Integer, default=0, server_default="0", nullable=False
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 任务依据快照：{"rule": "auto_confirm", "days": 7, "source": "tenant"}
+    # 平台端「定时任务」据此解释"为什么是这个时间执行"，日后改配置也不篡改历史任务
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

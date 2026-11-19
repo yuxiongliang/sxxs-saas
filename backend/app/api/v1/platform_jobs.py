@@ -111,6 +111,8 @@ async def list_jobs(
                     "ref_id": row.ref_id,
                     "ref_no": order_nos.get(row.ref_id),
                     "run_at": row.run_at.isoformat() if row.run_at else None,
+                    # 触发依据快照（哪个规则、几天、入队时的配置）
+                    "meta": row.meta,
                     "status": row.status,
                     "attempts": row.attempts,
                     "last_error": row.last_error,

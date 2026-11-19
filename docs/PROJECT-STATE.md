@@ -99,6 +99,7 @@ src/
 | 交付方式 | 快递 / 自提可多选（不预勾选）；落 `seller_orders.delivery_method` | `products.delivery_methods`、`shops.address/pickup_note` |
 | 订单 | **双状态**：`payment_status` + `fulfillment_status`；旧 `status` 已删 | `services/order_state.py::sync_order()` |
 | 订单列表 | 一行一商品、`rowSpan` 合并、横向滚动、**不做金额合计**；买家端**无详情页**（信息全进列） | `commerce/orders`、`portal/orders` |
+| 时间控制 | 「系统设置 → 基础设置 → 时间控制」按商品类型配 5 个值：发货时限（**只提醒不处罚**）/ 快递自动确认 / 自提自动确认 / 确认收货后可申请售后 / 待支付自动关闭。存 `system_settings.category=time_control`（可跟随平台默认值），天数 0 = 关闭该项；**改配置只影响之后新产生的订单与任务**（`orders.expires_at`、`scheduled_jobs.meta` 是下单/入队时的快照） | `services/time_control.py`、`system/settings/time-control` |
 | 结算与支付 | **独立订单确认页 `/portal/checkout`**（不是弹窗）：商品清单 + 地址 + 备注 + 三种支付方式在同一页，**点「提交订单并支付」才建单**；详情页「立即购买」直接进此页（不进购物车），购物车「去结算」也进此页；待支付订单点「去支付」→ 支付结果页 | `portal/checkout`、`services/checkout.py`、`portal/payment-result` |
 | 售后 | 买家 `paid/shipped` 可申请 → `refunding`；**卖家处理前买家可自己撤回**；卖家/运营同意或驳回；`completed` 之后拒绝 | `order.request_refund/cancel_refund_request/reject_refund` |
 | 收藏/评价 | 四端打通（买家→卖家→运营→平台）；**先发后审**；匿名只在买家侧打码 | `services/favorites.py`、`reviews.py` |
@@ -186,7 +187,9 @@ pm2 start ecosystem.config.js     # sxxs-api + sxxs-jobs
 - 心跳 30s，平台 `/jobs` 页与 `/public/jobs/heartbeat` 据此判在线（**只有 pm2 起了 worker，自动收货才会真的执行**）
 
 现有任务类型：
-- `auto_complete`：发货后 7 天（快递）/ 90 天（自提）自动完成，复用买家确认收货同一段逻辑
+- `auto_complete`：发货后 N 天自动完成（**N 来自租户时间控制**，快递/自提各一个；缺省 7/90），复用买家确认收货同一段逻辑
+- `close_unpaid`：待支付超时自动关闭并释放库存（N 来自租户时间控制，0 = 不自动关闭）
+- 每个任务入队时把**依据快照**写进 `scheduled_jobs.meta`（`{rule, days, delivery_method?}`），平台端据此解释「为什么是这个时候执行」
 - `settle_earnings`：账期到期，货款划入卖家钱包
 
 ---
@@ -258,6 +261,8 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | 现象 | 病根 | 口诀 |
 | --- | --- | --- |
 | 自定义控件「选了值但保存后是空的」 | 控件不是 `Form.Item` 的**注册字段**（用隐藏字段 + setFieldsValue），`validateFields()` 拿不到 | 自定义控件必须挂在 `Form.Item name=...` 上；后端 schema 也别给默认空串，空值要 422 拒绝 |
+| 改了时间控制，老订单的倒计时没变 | 期望它「立刻重排」 | **配置只影响新任务**：截止时间在下单/发货时已落库（`expires_at` / 任务 `meta`），这是刻意设计，避免买家看到的倒计时被运营改设置跳变 |
+| 已完成订单申请售后被拒 | 售后窗口默认 0 天 = 确认收货即结束交易 | 要放开就配「确认收货后可申请售后 N 天」；判断统一走 `time_control.refund_window_open`，别在前端按状态猜 |
 | 标签栏关掉的标签「又回来了」 | 门户每个页面各自渲染一次外壳，导航时 PageTabs 会重挂；`setState` + `history.push` 同一 tick，持久化 effect 来不及跑 | **门户类组件不能只靠 useState**：状态写进模块级缓存 + `sessionStorage`，且**在事件里同步写**，别等 effect |
 | 详情页是规格图、订单里却是主图 | 各处自己拼 `sku.image_url or main_image`，漏了规格值图 | **凡是「这支 SKU 长什么样」都调 `catalog_media.effective_image`**，别在业务代码里重复优先级 |
 | 商品删了但收藏/购物车里还点得进去 | 只删了商品，没同步各列表的过滤 | 软删除是**状态**不是删行：每个新列表都要问一句「deleted 要不要排除」 |

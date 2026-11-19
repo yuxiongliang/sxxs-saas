@@ -674,6 +674,8 @@ export const listPlatformProducts = (params: {
 
 /** 定时任务（延时任务队列）。平台运维要能看计划、手动执行、取消、重试。 */
 export interface ScheduledJobRow {
+  /** 触发依据快照：{rule, days, delivery_method?} */
+  meta?: Record<string, unknown> | null;
   id: number;
   kind: string;
   ref_type: string;

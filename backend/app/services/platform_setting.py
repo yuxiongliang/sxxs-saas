@@ -11,7 +11,6 @@ from app.schemas.setting import SettingUpdate
 from app.services.setting import DEFAULT_SETTINGS as TENANT_SETTING_DEFAULTS
 
 # 白名单 1/2：允许的分类（api/v1/platform_settings.py 里还有一层权限白名单）
-# 白名单 1/2：允许的分类（api/v1/platform_settings.py 里还有一层权限白名单）
 ALLOWED_CATEGORIES = {
     "platform",
     "moderation",
@@ -20,6 +19,7 @@ ALLOWED_CATEGORIES = {
     "email",
     "storage",
     "amap",
+    "time_control",
     "upload",
 }
 
@@ -117,6 +117,13 @@ async def save_platform_setting(
     policy_locked: bool | None = None,
 ) -> PlatformSetting:
     _ensure_category(category)
+    # 平台默认值同样要过校验：平台写坏的默认值会扩散到所有「跟随系统」的租户。
+    # 延迟 import：setting_resolver 依赖本模块，模块级导入会成环。
+    from app.services.setting_resolver import validate_config
+
+    payload = payload.model_copy(
+        update={"config": validate_config(category, payload.config)}
+    )
     row = await _get_row(db, category)
     if row is None:
         row = PlatformSetting(category=category)
@@ -138,7 +145,7 @@ DEFAULT_PLATFORM_SETTINGS["upload"] = {
     "config": copy.deepcopy(DEFAULT_UPLOAD_POLICY),
 }
 
-# 5 类「可被租户继承」的平台配置。
+# 6 类「可被租户继承」的平台配置。
 # enabled=False 表示平台尚未真正接管该类配置：租户切到 inherit 时会自动回落
 # 自己的历史配置（见 services/setting_resolver.py 的优先级 3），
 # 因此「存量租户改 inherit」不会让全站支付/邮件在平台没配好之前就不可用。
@@ -148,6 +155,6 @@ DEFAULT_PLATFORM_SETTINGS.update(
             "enabled": False,
             "config": copy.deepcopy(TENANT_SETTING_DEFAULTS[category]["config"]),
         }
-        for category in ("payment", "sms", "email", "storage", "amap")
+        for category in ("payment", "sms", "email", "storage", "amap", "time_control")
     }
 )

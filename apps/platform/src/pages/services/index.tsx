@@ -56,6 +56,11 @@ const CATEGORIES = [
     label: '高德地图',
     hint: '平台统一 key。注意 Web服务 key 有 QPS 限额，多租户共用需留意。',
   },
+  {
+    key: 'time_control',
+    label: '时间控制',
+    hint: '订单链路的「等多久自动做什么」：发货时限、自动确认收货（快递/自提）、售后窗口、待支付关闭。租户跟随时用这里的默认值，也可各自自定义。',
+  },
 ];
 
 const SECRET_HINTS = [

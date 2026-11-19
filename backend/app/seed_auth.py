@@ -20,6 +20,7 @@ PERMISSIONS = [
     ("profile:update", "修改个人资料", "profile", "update"),
     ("dashboard:read", "查看 Dashboard", "dashboard", "read"),
     ("setting:amap", "配置高德地图", "setting", "amap"),
+    ("setting:time_control", "配置时间控制", "setting", "time_control"),
     ("amap:read", "使用地图服务", "amap", "read"),
     ("user:read", "查看用户", "user", "read"),
     ("user:write", "管理用户", "user", "write"),
@@ -153,6 +154,7 @@ ROLE_PERMISSIONS = {
         "setting:sms",
         "setting:email",
         "setting:storage",
+        "setting:time_control",
         "audit:read",
     ],
     "tenant_admin": [
@@ -283,6 +285,14 @@ for _amap_role in ("tenant_owner", "tenant_admin", "operator", "viewer"):
     for _amap_code in ("setting:amap", "amap:read"):
         if _amap_role in ROLE_PERMISSIONS and _amap_code not in ROLE_PERMISSIONS[_amap_role]:
             ROLE_PERMISSIONS[_amap_role].append(_amap_code)
+
+# 时间控制：管理端四个角色都能读写（它决定自动关闭/自动收货，属于日常运营配置）
+for _tc_role in ("tenant_owner", "tenant_admin", "operator", "viewer"):
+    if (
+        _tc_role in ROLE_PERMISSIONS
+        and "setting:time_control" not in ROLE_PERMISSIONS[_tc_role]
+    ):
+        ROLE_PERMISSIONS[_tc_role].append("setting:time_control")
 
 # 绝不允许存在的授权：即使老库已经写入过，启动时也要清掉。
 # 与 `_prune_foreign_tenant_owners()` 同一思路 —— 只针对已知的越权组合，

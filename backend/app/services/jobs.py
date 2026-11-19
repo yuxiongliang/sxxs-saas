@@ -24,6 +24,8 @@ KIND_AUTO_COMPLETE = "auto_complete"
 KIND_SETTLE_EARNINGS = "settle_earnings"
 #: 支付对账：渠道回调到不了（本地/内网/回调配置未生效）时，主动查询补状态
 KIND_PAYMENT_SYNC = "payment_sync"
+#: 待支付超时自动关闭（天数来自租户「时间控制」，0 天 = 不排这个任务）
+KIND_CLOSE_UNPAID = "close_unpaid"
 
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
@@ -31,6 +33,8 @@ STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
 
+#: **缺省**自动确认时效（真正的天数由租户「时间控制」决定，见 services/time_control.py）。
+#: 保留这两个常量是为了"没配过时间控制的租户"与历史测试仍按原行为跑。
 #: 快递单：发货后 7 天买家未确认 → 自动完成
 AUTO_COMPLETE_EXPRESS = timedelta(days=7)
 #: 自提单：没有"物流签收"，但仍要有个兜底，否则订单永远挂着占结算与待办
@@ -47,8 +51,13 @@ async def schedule(
     ref_type: str,
     ref_id: int,
     run_at: datetime,
+    meta: dict | None = None,
 ) -> ScheduledJob | None:
-    """入队（幂等）：同一条业务对象已有 pending 任务时不再重复插入。"""
+    """入队（幂等）：同一条业务对象已有 pending 任务时不再重复插入。
+
+    `meta` 是**任务依据快照**（例：`{"rule": "auto_confirm", "days": 7}`）。
+    平台端据此解释"为什么是这个时间执行"；配置后来改了也不影响历史任务的解释。
+    """
     existing = (
         await db.scalars(
             select(ScheduledJob).where(
@@ -61,6 +70,8 @@ async def schedule(
     ).first()
     if existing is not None:
         existing.run_at = run_at
+        if meta is not None:
+            existing.meta = meta
         return existing
     job = ScheduledJob(
         tenant_id=tenant_id,
@@ -70,6 +81,7 @@ async def schedule(
         run_at=run_at,
         status=STATUS_PENDING,
         attempts=0,
+        meta=meta,
     )
     db.add(job)
     await db.flush()

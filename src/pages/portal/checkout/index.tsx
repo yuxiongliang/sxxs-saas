@@ -466,6 +466,11 @@ export default function CheckoutPage() {
           <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 8 }}>
             <Tag>提示</Tag>
             点击后才会创建订单；未完成支付可在「我的订单」继续支付。
+            {data?.unpaid_close_days ? (
+              <span style={{ marginLeft: 4 }}>
+                下单后 {data.unpaid_close_days} 天内未支付将自动关闭。
+              </span>
+            ) : null}
           </div>
         </Card>
       </Space>

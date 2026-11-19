@@ -66,6 +66,7 @@ export default function access(
     canSmsSetting: permissions.has('setting:sms'),
     canEmailSetting: permissions.has('setting:email'),
     canStorageSetting: permissions.has('setting:storage'),
+    canTimeControl: permissions.has('setting:time_control'),
     canAmapSetting: permissions.has('setting:amap'),
     canAmapRead: permissions.has('amap:read'),
     canBrandManage: permissions.has('tenant:brand:manage'),

@@ -18,7 +18,7 @@ from app.services import wallet as wallet_service
 
 
 async def auto_complete(db: AsyncSession, job: ScheduledJob) -> str:
-    """发货超时未确认 → 自动完成（快递 7 天 / 自提 90 天）。
+    """发货超时未确认 → 自动完成（天数来自租户「时间控制」，快递/自提各自配置）。
 
     与「买家手动确认收货」共用 `order._complete()`，两条路径行为必须一致 ——
     否则会分叉出「自动完成的订单评价不了 / 结算不解锁」这类 bug。
@@ -27,6 +27,15 @@ async def auto_complete(db: AsyncSession, job: ScheduledJob) -> str:
         db, job.tenant_id or 0, job.ref_id
     )
     return "completed" if done else "skipped:state_changed"
+
+
+async def close_unpaid(db: AsyncSession, job: ScheduledJob) -> str:
+    """待支付超时 → 关闭订单并释放库存（天数来自租户「时间控制」）。
+
+    幂等靠业务状态：到点时若已付款/已取消，handler 直接跳过。
+    """
+    done = await order_service.close_unpaid_order(db, job.tenant_id or 0, job.ref_id)
+    return "closed" if done else "skipped:already_final"
 
 
 async def settle_earnings(db: AsyncSession, job: ScheduledJob) -> str:
@@ -82,4 +91,5 @@ HANDLERS: dict[str, Callable[[AsyncSession, ScheduledJob], Awaitable[str]]] = {
     jobs_service.KIND_AUTO_COMPLETE: auto_complete,
     jobs_service.KIND_SETTLE_EARNINGS: settle_earnings,
     jobs_service.KIND_PAYMENT_SYNC: payment_sync,
+    jobs_service.KIND_CLOSE_UNPAID: close_unpaid,
 }

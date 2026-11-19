@@ -28,6 +28,7 @@ SETTING_PERMISSIONS = {
     "email": "setting:email",
     "storage": "setting:storage",
     "amap": "setting:amap",
+    "time_control": "setting:time_control",
 }
 
 

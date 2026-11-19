@@ -246,6 +246,8 @@ export async function previewCheckout(data: {
     }>;
     total_cents: number;
     issues: string[];
+    /** 待支付自动关闭天数（0 = 不自动关闭），确认页据此提示 */
+    unpaid_close_days?: number;
   }>(request('/api/v1/portal/checkout/preview', { method: 'POST', data }));
 }
 

@@ -399,8 +399,37 @@ export default [
     access: 'canSettings',
     routes: [
       {
+        // 默认落在「基础设置」下的站点品牌：分组排第一，默认项也要跟着走
         path: '/system/settings',
-        redirect: '/system/settings/payment',
+        redirect: '/system/settings/basic/brand',
+      },
+      {
+        path: '/system/settings/basic',
+        name: 'basic-settings',
+        icon: 'control',
+        access: 'canSettings',
+        routes: [
+          {
+            path: '/system/settings/basic',
+            redirect: '/system/settings/basic/brand',
+          },
+          {
+            // 注意：子路由必须以上级路径开头，所以品牌页从 /system/brand 迁到这里；
+            // 旧地址下面用一条 redirect 兜住，历史链接不会 404
+            path: '/system/settings/basic/brand',
+            name: 'brand',
+            icon: 'picture',
+            access: 'canBrandManage',
+            component: './system/brand',
+          },
+          {
+            path: '/system/settings/basic/time-control',
+            name: 'time-control',
+            icon: 'fieldTime',
+            access: 'canTimeControl',
+            component: './system/settings/time-control',
+          },
+        ],
       },
       {
         path: '/system/settings/payment',
@@ -440,11 +469,9 @@ export default [
     ],
   },
   {
+    // 兼容旧地址：站点品牌搬进「系统设置 → 基础设置」后，外部链接与收藏仍能打开
     path: '/system/brand',
-    name: 'brand',
-    icon: 'picture',
-    access: 'canBrandManage',
-    component: './system/brand',
+    redirect: '/system/settings/basic/brand',
   },
   {
     path: '/attachments',

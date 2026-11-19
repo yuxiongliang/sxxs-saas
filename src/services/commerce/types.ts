@@ -226,6 +226,10 @@ export interface SellerOrderRecord {
   created_at?: string | null;
   /** 卖家要知道自己卖了什么：图片/名称/规格/类型都来自订单行快照 */
   items?: OrderItemRecord[];
+  /** 时间口径：发货截止（超时只提醒不处罚）/ 自动确认 / 售后截止 */
+  ship_deadline_at?: string | null;
+  auto_confirm_at?: string | null;
+  refund_deadline_at?: string | null;
 }
 
 export interface PortalOrder {
@@ -250,6 +254,15 @@ export interface PortalOrder {
     tracking_no: string;
     shipped_at?: string | null;
   }>;
+  /**
+   * 时间口径（服务端按租户「时间控制」算好，前端只负责展示）。
+   * `can_request_refund` 是**唯一**的售后按钮判据 —— 别再按 fulfillment_status 自己猜。
+   */
+  expires_at?: string | null;
+  ship_deadline_at?: string | null;
+  auto_confirm_at?: string | null;
+  refund_deadline_at?: string | null;
+  can_request_refund?: boolean;
 }
 
 export interface SellerLedgerEntry {

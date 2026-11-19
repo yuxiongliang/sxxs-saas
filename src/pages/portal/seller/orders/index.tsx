@@ -10,6 +10,7 @@ import {
   Space,
   Table,
   Tag,
+  Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
@@ -23,6 +24,7 @@ import type {
   OrderItemRecord,
   SellerOrderRecord,
 } from '@/services/commerce/types';
+import { formatDateTime } from '@/utils/datetime';
 import {
   DELIVERY_METHOD,
   FULFILLMENT_STATUS,
@@ -231,6 +233,37 @@ export default function SellerOrdersPage() {
           {labelOf(FULFILLMENT_STATUS, record.order.fulfillment_status)}
         </Tag>
       ),
+    },
+    {
+      // 时间口径由服务端算好：发货超时**只提醒，不自动处罚**
+      title: '时效',
+      width: 180,
+      onCell: merge,
+      render: (_, record) => {
+        const order = record.order;
+        if (order.fulfillment_status === 'to_ship' && order.ship_deadline_at) {
+          const deadline = new Date(order.ship_deadline_at).getTime();
+          const overdue = deadline < Date.now();
+          return (
+            <Typography.Text
+              type={overdue ? 'danger' : 'secondary'}
+              style={{ fontSize: 12 }}
+            >
+              {overdue
+                ? '已超出发货时限'
+                : `需在 ${formatDateTime(order.ship_deadline_at)} 前发货`}
+            </Typography.Text>
+          );
+        }
+        if (order.fulfillment_status === 'shipped' && order.auto_confirm_at) {
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              预计 {formatDateTime(order.auto_confirm_at)} 自动确认
+            </Typography.Text>
+          );
+        }
+        return '—';
+      },
     },
     {
       title: '操作',

@@ -63,6 +63,13 @@ export const CONFIG_FIELD_LABELS: Record<string, string> = {
   defaultCenter: '默认中心点（经度,纬度）',
   defaultZoom: '默认缩放级别（3-18）',
   useProxy: '安全密钥走服务端代理',
+
+  // ---- 时间控制（单位：天；0 = 关闭该项自动化）----
+  ship_days: '卖家发货时限',
+  auto_confirm_days: '快递自动确认收货',
+  pickup_auto_confirm_days: '自提自动确认收货',
+  refund_window_days: '确认收货后可申请售后',
+  unpaid_close_days: '待支付自动关闭',
 };
 
 /** 配置分组（嵌套对象）→ 中文名 */
@@ -76,6 +83,7 @@ export const CONFIG_GROUP_LABELS: Record<string, string> = {
   storage: '存储',
   amap: '高德地图',
   payment: '支付',
+  physical: '实物商品',
 };
 
 /** 字段的取值说明（只给运营真的会用错的那些） */
@@ -85,6 +93,11 @@ export const CONFIG_FIELD_HINTS: Record<string, string> = {
   provider: '短信：aliyun / tencent；邮件：qq / 163 / aliyun',
   defaultCenter: '格式：经度,纬度（如 116.397428,39.90923）',
   useProxy: '开启后密钥不出现在前端，由服务端代理请求',
+  ship_days: '超时只在卖家订单列表标「已超时」，不自动取消订单',
+  auto_confirm_days: '0 = 不自动确认；自动确认会触发结算账期',
+  pickup_auto_confirm_days: '自提没有物流签收，需要独立兜底',
+  refund_window_days: '0 = 确认收货即结束交易，不再受理售后',
+  unpaid_close_days: '0 = 不自动关闭；开启后下单即落截止时间',
   publicBaseUrl: '附件直链前缀，换域名要同步改这里',
 };
 

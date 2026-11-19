@@ -33,6 +33,11 @@ class Order(Base, TimestampMixin):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 待支付自动关闭时间：**下单时定死**。租户后改配置不影响已下的单，
+    # 否则买家看到的倒计时会跟着运营改设置乱跳（见 time_control 服务）
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
 
 class SellerOrder(Base, TimestampMixin):

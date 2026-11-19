@@ -8,7 +8,7 @@ from app.dao import setting as setting_dao
 from app.models.setting import SystemSetting
 from app.schemas.setting import SettingTestResult, SettingUpdate
 
-ALLOWED_CATEGORIES = {"payment", "sms", "email", "storage", "amap"}
+ALLOWED_CATEGORIES = {"payment", "sms", "email", "storage", "amap", "time_control"}
 
 DEFAULT_SETTINGS: dict[str, dict] = {
     "payment": {
@@ -254,5 +254,21 @@ DEFAULT_SETTINGS["amap"] = {
         "defaultCenter": "116.397428,39.90923",
         "defaultZoom": 11,
         "useProxy": True,
+    },
+}
+
+
+# ---- 时间控制：订单链路上"等多久自动做什么"（见 services/time_control.py）----
+# 缺省值 = 上线前的硬编码行为，保证升级不改既有语义
+DEFAULT_SETTINGS["time_control"] = {
+    "enabled": True,
+    "config": {
+        "physical": {
+            "ship_days": 0,
+            "auto_confirm_days": 7,
+            "pickup_auto_confirm_days": 90,
+            "refund_window_days": 0,
+            "unpaid_close_days": 0,
+        }
     },
 }

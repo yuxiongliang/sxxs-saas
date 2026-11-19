@@ -201,6 +201,44 @@ export default function PortalOrdersPage() {
       ),
     },
     {
+      // 时间口径由服务端算好：倒计时/截止时间都在这里，不放到「操作」里挤
+      title: '时效',
+      width: 170,
+      onCell: merge,
+      render: (_, record) => {
+        const order = record.order;
+        if (order.payment_status === 'unpaid' && order.expires_at) {
+          return (
+            <Typography.Text type="warning" style={{ fontSize: 12 }}>
+              未支付将于 {formatDateTime(order.expires_at)} 关闭
+            </Typography.Text>
+          );
+        }
+        if (order.fulfillment_status === 'shipped' && order.auto_confirm_at) {
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              预计 {formatDateTime(order.auto_confirm_at)} 自动确认收货
+            </Typography.Text>
+          );
+        }
+        if (order.fulfillment_status === 'completed') {
+          if (order.refund_deadline_at) {
+            return (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                售后申请至 {formatDateTime(order.refund_deadline_at)}
+              </Typography.Text>
+            );
+          }
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              已过售后期
+            </Typography.Text>
+          );
+        }
+        return '—';
+      },
+    },
+    {
       title: '收货信息',
       width: 200,
       onCell: merge,
@@ -294,9 +332,10 @@ export default function PortalOrdersPage() {
                 : '确认收货'}
             </Button>
           ) : null}
+          {/* 售后入口只看服务端的 can_request_refund：窗口/状态两条规则都在后端 */}
           {record.first &&
           ['paid', 'refunding'].includes(record.order.payment_status) &&
-          ['to_ship', 'shipped'].includes(record.order.fulfillment_status) ? (
+          record.order.can_request_refund ? (
             <Button
               size="small"
               danger

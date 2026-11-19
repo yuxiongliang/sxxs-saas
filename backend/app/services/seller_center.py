@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import InventoryLog, Product, ProductSku
-from app.models.order import OrderItem, SellerOrder, Shipment
+from app.models.order import Order, OrderItem, SellerOrder, Shipment
 from app.models.seller import Seller, SellerMember, Shop
 from app.schemas.commerce import (
     ProductSpecsUpdate,
@@ -21,6 +21,7 @@ from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
+from app.services import time_control
 from app.services.auth import AuthContext
 
 
@@ -619,6 +620,55 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
         )
         for row in rows:
             items_map.setdefault(row.seller_order_id, []).append(row)
+    # 时间口径：卖家最关心「还剩几天必须发货」，同样由服务端算。
+    # 付款时间是**订单级**的（seller_orders 没有 paid_at 列），所以取父订单。
+    parent_orders: dict[int, Order] = {}
+    if orders:
+        parent_rows = list(
+            (
+                await db.scalars(
+                    select(Order).where(Order.id.in_({item.order_id for item in orders}))
+                )
+            ).all()
+        )
+        parent_orders = {row.id: row for row in parent_rows}
+    product_types = {
+        (row.product_type or "physical")
+        for rows in items_map.values()
+        for row in rows
+    } or {"physical"}
+    controls = await time_control.resolve_many(db, context.tenant.id, product_types)
+    fallback_control = controls.get("physical") or time_control.TimeControl()
+
+    def _deadlines(seller_order: SellerOrder, rows: list[OrderItem]) -> dict:
+        control = controls.get(
+            (rows[0].product_type if rows else "physical") or "physical",
+            fallback_control,
+        )
+        paid_at = getattr(parent_orders.get(seller_order.order_id), "paid_at", None)
+        ship_at = (
+            time_control.ship_deadline(control, paid_at)
+            if seller_order.fulfillment_status == "to_ship"
+            else None
+        )
+        auto_at = (
+            time_control.auto_confirm_deadline(
+                control, seller_order.shipped_at, seller_order.delivery_method
+            )
+            if seller_order.shipped_at
+            else None
+        )
+        return {
+            # 发货超时**只提醒、不自动处罚**（业务口径，见 docs 时间控制一节）
+            "ship_deadline_at": ship_at.isoformat() if ship_at else None,
+            "auto_confirm_at": auto_at.isoformat() if auto_at else None,
+            "refund_deadline_at": (
+                time_control.refund_deadline(control, seller_order.completed_at).isoformat()
+                if time_control.refund_deadline(control, seller_order.completed_at)
+                else None
+            ),
+        }
+
     return [
         {
             "id": item.id,
@@ -631,6 +681,7 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
             "commission_amount_cents": item.commission_amount_cents,
             "payable_to_seller_cents": item.payable_to_seller_cents,
             "created_at": item.created_at.isoformat() if item.created_at else None,
+            **_deadlines(item, items_map.get(item.id) or []),
             "items": [
                 {
                     "id": row.id,

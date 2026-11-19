@@ -43,7 +43,30 @@ const STATUS_COLOR: Record<string, string> = {
 
 const KIND_LABEL: Record<string, string> = {
   auto_complete: '超时自动收货',
+  close_unpaid: '待支付自动关闭',
+  settle_earnings: '货款结算入钱包',
+  payment_sync: '支付对账补单',
 };
+
+/** 触发依据：任务入队时快照的规则（改配置不会篡改历史任务的解释） */
+function metaText(meta?: Record<string, unknown> | null) {
+  if (!meta) return '—';
+  const rule = String(meta.rule ?? '');
+  const days = meta.days;
+  const map: Record<string, string> = {
+    auto_confirm: '自动确认收货',
+    unpaid_close: '待支付自动关闭',
+  };
+  const label = map[rule] ?? rule;
+  if (days === undefined || days === null) return label || '—';
+  const extra =
+    meta.delivery_method === 'pickup'
+      ? '（自提）'
+      : meta.delivery_method === 'express'
+        ? '（快递）'
+        : '';
+  return `${label}：${days} 天${extra}`;
+}
 
 /** 时间按浏览器本地时区展示（后端存 UTC，直接截字符串会差 8 小时）。 */
 
@@ -81,6 +104,16 @@ export default function PlatformJobsPage() {
       width: 180,
       render: (_, record) =>
         record.ref_no ?? `${record.ref_type}#${record.ref_id}`,
+    },
+    {
+      // 这个任务「为什么是这个时候执行」：入队时的规则快照（改配置不回溯）
+      title: '触发依据',
+      width: 200,
+      render: (_, record) => (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {metaText(record.meta)}
+        </Typography.Text>
+      ),
     },
     {
       title: '计划执行时间',

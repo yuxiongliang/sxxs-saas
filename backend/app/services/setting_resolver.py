@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.setting import SystemSetting
+from app.services import audit as audit_service
 from app.services import platform_setting as platform_setting_service
 from app.services.setting import DEFAULT_SETTINGS
 
@@ -193,6 +194,17 @@ async def resolve_for_runtime(db: AsyncSession, tenant_id: int, category: str) -
     return resolved.config
 
 
+def validate_config(category: str, config: dict | None) -> dict | None:
+    """按分类校验配置。**没有校验就等于允许写坏数据** ——
+    时间控制的 7 天写成 "7天"、写成 -1，都要在建单/排任务时才炸。"""
+    if category == "time_control":
+        # 延迟 import：避免 setting ↔ time_control 循环依赖
+        from app.services import time_control
+
+        return time_control.normalize_config(config)
+    return config
+
+
 async def set_source(
     db: AsyncSession,
     tenant_id: int,
@@ -217,8 +229,14 @@ async def set_source(
     platform_row = await platform_setting_service.get_platform_setting(db, category)
     if platform_row.policy_locked and source == OVERRIDE:
         raise HTTPException(status_code=403, detail="平台已锁定该配置，不允许自定义")
+    config = validate_config(category, config)
 
     row = await _tenant_row(db, tenant_id, category)
+    before_config = {
+        "source": row.source if row else None,
+        "enabled": row.enabled if row else None,
+        "config": deepcopy(row.config) if row else None,
+    }
     if row is None:
         row = SystemSetting(
             tenant_id=tenant_id,
@@ -236,6 +254,17 @@ async def set_source(
             # 只切换来源时保留原有配置（避免被脱敏占位符覆盖）
             row.config = config
         row.updated_by = user_id
+    # 改的是"系统自动行为"（自动关闭/自动收货/售后期限），必须能追溯是谁改的
+    await audit_service.record(
+        db,
+        action=audit_service.ACTION_SETTING_UPDATED,
+        tenant_id=tenant_id,
+        actor_id=user_id,
+        target_type="setting",
+        target_id=category,
+        before=before_config,
+        after={"source": source, "enabled": enabled, "config": config},
+    )
     await db.commit()
     await db.refresh(row)
     return row

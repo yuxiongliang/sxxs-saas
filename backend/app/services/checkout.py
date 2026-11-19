@@ -14,6 +14,7 @@ from app.models.catalog import Product, ProductSku
 from app.models.seller import Seller, Shop
 from app.services import cart as cart_service
 from app.services import catalog_media
+from app.services import time_control
 from app.services.auth import AuthContext
 
 EXPRESS = "express"
@@ -138,9 +139,12 @@ async def build_preview(
         for item in items:
             item["seller_username"] = sellers[item["seller_id"]].get("seller_username")
 
+    # 确认页要提示「未支付多久后自动关闭」：值来自服务端配置，前端别猜
+    control = await time_control.resolve(db, context.tenant.id)
     return {
         "items": items,
         "sellers": list(sellers.values()),
         "total_cents": total,
         "issues": issues,
+        "unpaid_close_days": control.unpaid_close_days,
     }

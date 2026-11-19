@@ -202,7 +202,7 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
 | 下单 | 选收货地址 | 只填联系人 + 手机号（`shops.address` / `pickup_note` 显示自提门店） |
 | 卖家 | 填物流公司 + 运单号 → 已发货 | **备货完成**（不写运单） → 已发货 |
 | 买家 | 确认收货 | 确认已自提（同一接口，文案不同） |
-| 兑现 | **7 天**未确认自动完成 | **90 天**兑底自动完成 |
+| 兑现 | 发货后 N 天未确认自动完成（N 可配，缺省 7） | 自提 N 天兑底（N 可配，缺省 90） |
 
 - 交付方式落在 `seller_orders.delivery_method`（一个卖家单一种），`order_items.delivery_method` 做快照
 - 历史商品迁移回填 `["express"]`（系统此前只有快递这一条路径）
@@ -214,7 +214,7 @@ membership, and `seed_auth_data` only backfills the seeded demo accounts
   买家  → 取消售后（卖家还没处理时）→ Refund(status=cancelled)，订单回到 paid
          —— 售后申请不能只能进不能退；已发货的会重新排上自动收货
   卖家/运营 → 同意（复用那条记录 → refunded）/ 驳回（→ 回 paid，自动收货倒计时恢复）
-买家 completed → 无入口，后端也 400「已完成订单不再受理」
+买家 completed → 默认无入口（售后窗口 0 天）；配置「确认收货后可申请售后 N 天」后，N 天内仍可申请，超期后端 400「已超过售后期限」。判据统一由服务端 `can_request_refund` 下发
 ```
 
 ## 真实支付接入（支付宝 / 微信）
@@ -873,6 +873,37 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 3. **刚选完的预览用 `record.url`**：那一瞬附件还没发布，直链仍是 404。
 4. **槽位类型必须匹配**：主图槽选了视频直接提示拒绝，**不能静默清空主图**
    （以前会把 `main_image` 至于空，用户以为存上了，回前台发现图没了）。
+
+### 时间控制（系统设置 → 基础设置 → 时间控制）
+
+订单链路上「等多久自动做什么」全部收在一页，按**商品类型**配置（目前只有实物商品）：
+
+| 配置 | 作用 | 0 / 留空 |
+| --- | --- | --- |
+| `ship_days` | 卖家发货时限：卖家订单列表显示「需在 … 前发货 / 已超出发货时限」 | 不限（且**永不自动取消订单**） |
+| `auto_confirm_days` | 快递发货后 N 天自动确认收货（触发结算账期） | 不自动确认 |
+| `pickup_auto_confirm_days` | 自提发货后 N 天自动确认（自提没有物流签收，需独立兜底） | 不自动确认 |
+| `refund_window_days` | 确认收货后 N 天内仍可申请售后 | 确认后结束交易 |
+| `unpaid_close_days` | 下单后 N 天未支付自动关闭并释放库存 | 不自动关闭 |
+
+落点与不变量：
+
+1. 存 `system_settings.category=time_control`，**平台默认值**存 `platform_settings` 同分类，
+   租户可「跟随系统 / 自定义」，平台可锁定（复用 `InheritSwitch` 那套四级优先级）。
+2. 读取唯一入口 `services/time_control.resolve()`；**后端算好再返回**给前端：
+   买家订单列表有 `expires_at / ship_deadline_at / auto_confirm_at / refund_deadline_at / can_request_refund`，
+   卖家订单列表有 `ship_deadline_at / auto_confirm_at / refund_deadline_at`。
+3. **截止时间是快照**：`orders.expires_at` 在下单时落定；任务依据写进 `scheduled_jobs.meta`。
+   改配置只影响之后新产生的订单/任务（jobs 页的「触发依据」列读的就是这份快照）。
+4. 支付成功会**撤销** `close_unpaid`；买家手动取消也会撤销 —— 否则到点会把已付款订单关掉。
+5. 售后判据只有一处：`time_control.refund_window_open()`；前端按钮只认 `can_request_refund`。
+6. 保存设置会写审计 `setting.updated`（原来租户改设置完全没留痕）。
+
+平台端：
+- 「服务配置」新增 `time_control` 分类（平台默认值 + 锁定），字段中文名在
+  `apps/platform/src/pages/services/configLabels.ts`。
+- 「定时任务」补齐四种 kind 的中文名（原来只翻译了 `auto_complete`）并新增
+  「触发依据」列（如「自动确认收货：7 天（快递）」）。
 
 ### 门户侧栏的公共交互（买家中心 / 卖家中心）
 

@@ -21,6 +21,7 @@ from app.services import catalog_media
 from app.services import finance as finance_service
 from app.services import jobs as jobs_service
 from app.services import order_state as st
+from app.services import time_control
 from app.services import wallet as wallet_service
 from app.services.auth import AuthContext
 
@@ -108,6 +109,11 @@ async def create_order(
     if has_express and not payload.receiver_address:
         raise HTTPException(status_code=400, detail="物流快递需要填写收货地址")
 
+    # 待支付自动关闭：截止时间**下单时定死**，之后租户改配置不影响这一单
+    control = await time_control.resolve(db, context.tenant.id)
+    now = datetime.now(UTC)
+    expires_at = time_control.unpaid_close_deadline(control, now)
+
     order = Order(
         tenant_id=context.tenant.id,
         order_no=_order_no("ORD"),
@@ -120,9 +126,23 @@ async def create_order(
         receiver_phone=payload.receiver_phone,
         receiver_address=payload.receiver_address,
         remark=payload.remark,
+        expires_at=expires_at,
     )
     db.add(order)
     await db.flush()
+    if expires_at is not None:
+        await jobs_service.schedule(
+            db,
+            tenant_id=context.tenant.id,
+            kind=jobs_service.KIND_CLOSE_UNPAID,
+            ref_type="order",
+            ref_id=order.id,
+            run_at=expires_at,
+            meta={
+                "rule": "unpaid_close",
+                "days": control.unpaid_close_days,
+            },
+        )
 
     seller_orders: dict[int, SellerOrder] = {}
     for sku, product, shop, seller, quantity, subtotal, method in lines:
@@ -225,6 +245,14 @@ async def mark_order_paid(
     if order.payment_status != st.PAY_UNPAID:
         raise HTTPException(status_code=400, detail="当前订单状态不可支付")
     order.paid_at = datetime.now(UTC)
+    # 已付款，待支付关闭任务必须撤掉：否则到了点会把已付款订单关掉
+    await jobs_service.cancel(
+        db,
+        kind=jobs_service.KIND_CLOSE_UNPAID,
+        ref_type="order",
+        ref_id=order.id,
+        reason="订单已支付",
+    )
     seller_orders = await _seller_orders(db, order.id)
     for seller_order in seller_orders:
         seller_order.payment_status = st.PAY_PAID
@@ -298,9 +326,21 @@ async def mark_order_paid(
     return order
 
 
-async def cancel_order(db: AsyncSession, context: AuthContext, order_id: int) -> Order:
+async def _cancel_unpaid_order(
+    db: AsyncSession,
+    tenant_id: int,
+    order_id: int,
+    *,
+    actor_id: int | None,
+    reason: str,
+) -> Order:
+    """取消待支付订单（**不 commit**，由调用方决定事务边界）。
+
+    买家手点取消与「超时未支付自动关闭」共用这一段：库存释放、卖家单状态、
+    审计都只有一处实现，否则两条路径迟早有一条忘了放库存。
+    """
     order = await db.get(Order, order_id)
-    if order is None or order.tenant_id != context.tenant.id:
+    if order is None or order.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="订单不存在")
     if order.payment_status != st.PAY_UNPAID:
         raise HTTPException(status_code=400, detail="仅待支付订单可取消")
@@ -316,7 +356,7 @@ async def cancel_order(db: AsyncSession, context: AuthContext, order_id: int) ->
         (
             await db.scalars(
                 select(OrderItem).where(
-                    OrderItem.tenant_id == context.tenant.id,
+                    OrderItem.tenant_id == tenant_id,
                     OrderItem.order_id == order.id,
                 )
             )
@@ -327,11 +367,12 @@ async def cancel_order(db: AsyncSession, context: AuthContext, order_id: int) ->
         if sku is not None:
             sku.stock += item.quantity
             sku.locked_stock = max(0, sku.locked_stock - item.quantity)
+    # 关闭任务已由调用方处理（买家取消 → 任务没必要再跑；超时关闭 → 就是任务自己）
     await audit_service.record(
         db,
         action=audit_service.ACTION_ORDER_CANCELLED,
-        tenant_id=context.tenant.id,
-        actor_id=context.user.id,
+        tenant_id=tenant_id,
+        actor_id=actor_id,
         target_type="order",
         target_id=order.id,
         before={"payment_status": previous[0], "fulfillment_status": previous[1]},
@@ -339,11 +380,109 @@ async def cancel_order(db: AsyncSession, context: AuthContext, order_id: int) ->
             "payment_status": order.payment_status,
             "fulfillment_status": order.fulfillment_status,
             "order_no": order.order_no,
+            "reason": reason,
         },
+    )
+    return order
+
+
+async def cancel_order(db: AsyncSession, context: AuthContext, order_id: int) -> Order:
+    """买家手动取消待支付订单。"""
+    order = await _cancel_unpaid_order(
+        db,
+        context.tenant.id,
+        order_id,
+        actor_id=context.user.id,
+        reason="买家取消订单",
+    )
+    # 人已经主动取消了，定时关闭任务没有意义
+    await jobs_service.cancel(
+        db,
+        kind=jobs_service.KIND_CLOSE_UNPAID,
+        ref_type="order",
+        ref_id=order.id,
+        reason="订单已取消",
     )
     await db.commit()
     await db.refresh(order)
     return order
+
+
+async def close_unpaid_order(db: AsyncSession, tenant_id: int, order_id: int) -> bool:
+    """定时任务入口：待支付超时 → 关闭并释放库存。返回是否真的关闭了。"""
+    order = await db.get(Order, order_id)
+    if order is None or order.tenant_id != tenant_id:
+        return False
+    if order.payment_status != st.PAY_UNPAID:
+        # 已付款/已取消：任务属于"到点前状态已变"，什么都不做
+        return False
+    await _cancel_unpaid_order(
+        db,
+        tenant_id,
+        order_id,
+        actor_id=None,
+        reason="超时未支付，自动关闭",
+    )
+    await db.commit()
+    return True
+
+
+async def _schedule_auto_complete(
+    db: AsyncSession,
+    seller_order: SellerOrder,
+    *,
+    not_before: datetime | None = None,
+) -> None:
+    """按**租户时间控制**排自动确认收货（快递/自提天数不同）。
+
+    4 个调用点（发货、撤销售后、驳回售后、支付后无需）必须共用这一段：
+    各算一份迟早会出现"发货排 7 天、撤销售后却排 90 天"的口径漂移。
+    天数 <= 0 = 不自动确认，不排任务。
+    """
+    if seller_order.shipped_at is None:
+        return
+    control = await time_control.resolve(
+        db, seller_order.tenant_id, await _seller_order_product_type(db, seller_order)
+    )
+    days = control.auto_confirm_days_for(seller_order.delivery_method)
+    if days <= 0:
+        # 租户把自动确认关了：撤掉可能存在的旧任务，避免旧配置继续生效
+        await jobs_service.cancel(
+            db,
+            kind=jobs_service.KIND_AUTO_COMPLETE,
+            ref_type="seller_order",
+            ref_id=seller_order.id,
+            reason="租户关闭了自动确认收货",
+        )
+        return
+    run_at = seller_order.shipped_at + timedelta(days=days)
+    if not_before is not None:
+        run_at = max(run_at, not_before)
+    await jobs_service.schedule(
+        db,
+        tenant_id=seller_order.tenant_id,
+        kind=jobs_service.KIND_AUTO_COMPLETE,
+        ref_type="seller_order",
+        ref_id=seller_order.id,
+        run_at=run_at,
+        meta={
+            "rule": "auto_confirm",
+            "days": days,
+            "delivery_method": seller_order.delivery_method,
+        },
+    )
+
+
+async def _seller_order_product_type(db: AsyncSession, seller_order: SellerOrder) -> str:
+    """时间控制按商品类型分组：取该卖家单第一件商品的类型快照。"""
+    row = (
+        await db.scalars(
+            select(OrderItem.product_type).where(
+                OrderItem.seller_order_id == seller_order.id
+            ).limit(1)
+        )
+    ).first()
+    return row or "physical"
 
 
 async def _mark_shipped(
@@ -367,20 +506,8 @@ async def _mark_shipped(
                 status="shipped",
             )
         )
-    # 发货即入队自动完成：快递 7 天、自提 90 天（自提没有物流签收，但要兜底）
-    window = (
-        jobs_service.AUTO_COMPLETE_EXPRESS
-        if seller_order.delivery_method == EXPRESS
-        else jobs_service.AUTO_COMPLETE_PICKUP
-    )
-    await jobs_service.schedule(
-        db,
-        tenant_id=seller_order.tenant_id,
-        kind=jobs_service.KIND_AUTO_COMPLETE,
-        ref_type="seller_order",
-        ref_id=seller_order.id,
-        run_at=seller_order.shipped_at + window,
-    )
+    # 发货即入队自动完成：天数来自租户「时间控制」（快递/自提各一个）
+    await _schedule_auto_complete(db, seller_order)
 
 
 async def ship_seller_order(
@@ -529,9 +656,24 @@ async def request_refund(
     order = await db.get(Order, order_id)
     if order is None or order.tenant_id != context.tenant.id or order.buyer_id != context.user.id:
         raise HTTPException(status_code=404, detail="订单不存在")
-    if order.fulfillment_status not in st.AFTER_SALE_FULFILLMENTS:
+    # 售后窗口由租户「时间控制」决定：
+    #   to_ship / shipped —— 交易未结束，随时可申请；
+    #   completed —— 仅当配置了「确认收货后可申请售后 N 天」且未过期。
+    control = await time_control.resolve(db, context.tenant.id)
+    if not time_control.refund_window_open(
+        control, order.fulfillment_status, order.completed_at
+    ):
+        if order.fulfillment_status == st.FULFILL_COMPLETED:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "已超过售后期限"
+                    if control.refund_window_days > 0
+                    else "该订单已完成，当前不支持申请售后"
+                ),
+            )
         raise HTTPException(
-            status_code=400, detail="该订单当前状态不支持申请售后（已完成订单不再受理）"
+            status_code=400, detail="该订单当前状态不支持申请售后"
         )
     seller_orders = await _seller_orders(db, order.id)
     applied = 0
@@ -604,21 +746,10 @@ async def cancel_refund_request(
         seller_order.payment_status = st.PAY_PAID
         cancelled += 1
         if seller_order.fulfillment_status == st.FULFILL_SHIPPED and seller_order.shipped_at:
-            window = (
-                jobs_service.AUTO_COMPLETE_EXPRESS
-                if seller_order.delivery_method == EXPRESS
-                else jobs_service.AUTO_COMPLETE_PICKUP
-            )
-            await jobs_service.schedule(
+            await _schedule_auto_complete(
                 db,
-                tenant_id=context.tenant.id,
-                kind=jobs_service.KIND_AUTO_COMPLETE,
-                ref_type="seller_order",
-                ref_id=seller_order.id,
-                run_at=max(
-                    seller_order.shipped_at + window,
-                    datetime.now(UTC) + timedelta(minutes=1),
-                ),
+                seller_order,
+                not_before=datetime.now(UTC) + timedelta(minutes=1),
             )
     if cancelled == 0:
         raise HTTPException(status_code=400, detail="没有可取消的售后申请")
@@ -770,21 +901,10 @@ async def reject_refund(
         _sync(order, siblings)
     # 已发货的订单被驳回后，自动收货倒计时需要恢复
     if seller_order.fulfillment_status == st.FULFILL_SHIPPED and seller_order.shipped_at:
-        window = (
-            jobs_service.AUTO_COMPLETE_EXPRESS
-            if seller_order.delivery_method == EXPRESS
-            else jobs_service.AUTO_COMPLETE_PICKUP
-        )
-        await jobs_service.schedule(
+        await _schedule_auto_complete(
             db,
-            tenant_id=context.tenant.id,
-            kind=jobs_service.KIND_AUTO_COMPLETE,
-            ref_type="seller_order",
-            ref_id=seller_order.id,
-            run_at=max(
-                seller_order.shipped_at + window,
-                datetime.now(UTC) + timedelta(minutes=1),
-            ),
+            seller_order,
+            not_before=datetime.now(UTC) + timedelta(minutes=1),
         )
     await audit_service.record(
         db,

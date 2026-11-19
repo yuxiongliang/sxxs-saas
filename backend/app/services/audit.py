@@ -74,6 +74,7 @@ ACTION_SUBSCRIPTION_RENEWED = "subscription.renewed"
 ACTION_SUBSCRIPTION_PAST_DUE = "subscription.past_due"
 ACTION_SUBSCRIPTION_CANCELLED = "subscription.cancelled"
 ACTION_SUBSCRIPTION_DOWNGRADED = "subscription.downgraded"
+ACTION_SETTING_UPDATED = "setting.updated"
 ACTION_PLATFORM_SETTING_UPDATED = "platform.setting.update"
 ACTION_PLATFORM_PASSWORD_CHANGED = "platform.password.changed"
 # ---- 钱包：钱的动作必须每一笔都能追 ----
@@ -128,6 +129,7 @@ ACTION_LABELS: dict[str, str] = {
     ACTION_SUBSCRIPTION_PAST_DUE: "订阅逾期",
     ACTION_SUBSCRIPTION_CANCELLED: "订阅取消",
     ACTION_SUBSCRIPTION_DOWNGRADED: "订阅降级",
+    ACTION_SETTING_UPDATED: "修改系统设置",
     ACTION_PLATFORM_SETTING_UPDATED: "修改平台配置",
     ACTION_PLATFORM_PASSWORD_CHANGED: "平台账号修改密码",
     ACTION_WALLET_RECHARGE: "钱包充值",

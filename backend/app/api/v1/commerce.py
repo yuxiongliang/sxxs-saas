@@ -29,6 +29,7 @@ from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
 from app.services import seller_center as seller_center_service
+from app.services import time_control
 from app.services import wallet as wallet_service
 from app.services.auth import AuthContext
 
@@ -1137,8 +1138,38 @@ async def portal_orders(
         db, [row.id for row in seller_order_rows]
     )
     seller_order_ids_by_order: dict[int, list[int]] = {}
+    seller_orders_by_order: dict[int, list[SellerOrder]] = {}
     for row in seller_order_rows:
         seller_order_ids_by_order.setdefault(row.order_id, []).append(row.id)
+        seller_orders_by_order.setdefault(row.order_id, []).append(row)
+    # 时间口径（待支付自动关闭 / 发货截止 / 预计自动确认 / 售后剩余）**服务端算好**，
+    # 前端不要再按状态自己猜一遍 —— 那是最容易两边不一致的地方。
+    product_types = {
+        (row.product_type or "physical")
+        for rows in items_map.values()
+        for row in rows
+    } or {"physical"}
+    controls = await time_control.resolve_many(db, context.tenant.id, product_types)
+    fallback_control = controls.get("physical") or time_control.TimeControl()
+    deadlines_by_order: dict[int, dict] = {}
+    for current in orders:
+        rows = items_map.get(current.id) or []
+        control = controls.get(
+            (rows[0].product_type if rows else "physical") or "physical",
+            fallback_control,
+        )
+        deadlines_by_order[current.id] = time_control.deadlines_for_order(
+            control,
+            payment_status=current.payment_status,
+            fulfillment_status=current.fulfillment_status,
+            paid_at=current.paid_at,
+            completed_at=current.completed_at,
+            expires_at=current.expires_at,
+            shipped_at_list=[
+                (row.shipped_at, row.delivery_method)
+                for row in seller_orders_by_order.get(current.id, [])
+            ],
+        )
     return ok(
         [
             {
@@ -1168,6 +1199,7 @@ async def portal_orders(
                 "created_at": item.created_at,
                 # 买家也要在列表里直接看到买的是什么，不用点进详情
                 "items": [_item_dict(row) for row in items_map.get(item.id, [])],
+                **deadlines_by_order.get(item.id, {}),
             }
             for item in orders
         ]

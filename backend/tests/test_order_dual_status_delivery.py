@@ -260,14 +260,14 @@ async def test_after_sale_loop_and_completed_is_closed(
     await client.post(
         f"/api/v1/portal/orders/{order_id}/confirm", headers=bearer(customer_token)
     )
-    # 完成后不再受理售后
+    # 默认配置（售后窗口 0 天）下，完成后不再受理售后
     closed = await client.post(
         f"/api/v1/portal/orders/{order_id}/refund-request",
         headers=bearer(customer_token),
         json={"amount_cents": 1, "reason": "后悔了"},
     )
     assert closed.status_code == 400
-    assert "不再受理" in closed.json()["message"]
+    assert "不支持申请售后" in closed.json()["message"]
 
 
 async def test_platform_can_run_and_cancel_jobs(
