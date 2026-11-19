@@ -29,7 +29,7 @@ export default function PortalLayout({
   children,
   menu,
   title,
-  wide = false,
+  narrow = false,
   cartCount = 0,
   sectionLabel,
   switchLink,
@@ -37,8 +37,8 @@ export default function PortalLayout({
   children: ReactNode;
   menu: PortalMenuItem[];
   title?: string;
-  /** 宽页面（订单列表这种列很多的）：放宽内容区，收窄外边距 */
-  wide?: boolean;
+  /** 表单/阅读类页面（如店铺管理）收窄到 960，其余一律铺满 */
+  narrow?: boolean;
   cartCount?: number;
   /** 侧栏分组标题，如「买家中心」「卖家中心」 */
   sectionLabel: string;
@@ -203,7 +203,11 @@ export default function PortalLayout({
         <Content style={{ background: 'var(--ant-color-bg-layout)' }}>
           {/* 标签栏铺满内容区宽度；内边距只在页面正文上，否则标签会缩进得很奇怪 */}
           <PageTabs
-            menu={menu.map((item) => ({ href: item.href, label: item.label }))}
+            menu={menu.map((item) => ({
+              href: item.href,
+              label: item.label,
+              exact: item.exact,
+            }))}
             home={{
               href: homeItem.href,
               label: homeItem.label,
@@ -213,13 +217,16 @@ export default function PortalLayout({
           />
           <div
             style={{
-              // 宽页面收窄外边距：列多的表格被 1080 卡住会疯狂横向滚动
-              padding: wide ? 12 : 20,
+              // 四周统一 10px：以前 20px + 1080 居中，大屏两侧空出一大片，
+              // 表格页还得在窄列里横向滚动（用户反馈"空的太多了"）
+              padding: 10,
             }}
           >
             <div
               style={{
-                maxWidth: wide ? 1600 : 1080,
+                // 默认铺满（四周只留 10px）：用户明确要求"空的太多了"。
+                // 只有表单类页面传 narrow，避免 2K 屏上一行输入框拉得过长。
+                maxWidth: narrow ? 960 : undefined,
                 margin: '0 auto',
               }}
             >

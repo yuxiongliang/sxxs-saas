@@ -20,9 +20,12 @@ import { applySeller, getSellerApplication } from '@/services/commerce/api';
 export default function SellerShell({
   children,
   title,
+  narrow = false,
 }: {
   children: ReactNode;
   title: string;
+  /** 表单/阅读类页面收窄到 960；默认铺满 */
+  narrow?: boolean;
 }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -60,6 +63,7 @@ export default function SellerShell({
       menu={ready ? SELLER_MENU : SELLER_MENU.slice(0, 1)}
       sectionLabel="卖家中心"
       title={title}
+      narrow={narrow}
       switchLink={{ label: '返回买家中心', href: '/portal' }}
     >
       {applicationQuery.isLoading ? (

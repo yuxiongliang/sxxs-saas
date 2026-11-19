@@ -78,7 +78,7 @@ export default function SellerShopPage() {
   };
 
   return (
-    <SellerShell title="店铺管理">
+    <SellerShell title="店铺管理" narrow>
       <Spin spinning={profile.isLoading}>
         <Form form={form} layout="vertical" data-testid="seller-shop-page">
           <Card

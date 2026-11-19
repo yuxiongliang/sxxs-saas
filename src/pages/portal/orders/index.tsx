@@ -388,7 +388,7 @@ export default function PortalOrdersPage() {
   ];
 
   return (
-    <PortalShell title="我的订单" wide>
+    <PortalShell title="我的订单">
       <Card>
         <Table<Row>
           rowKey="key"

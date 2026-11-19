@@ -27,6 +27,8 @@ interface PageTab {
 export interface PageTabMenuItem {
   href: string;
   label: string;
+  /** 首页/概览这种"只能精确命中"的项：否则它会把所有子路径都点亮成自己 */
+  exact?: boolean;
 }
 
 //: 门户每个页面都自己渲染一次外壳 → PageTabs 会随导航重挂。state 靠这个缓存接力。
@@ -39,13 +41,16 @@ const normalizePath = (pathname: string) => {
   return pathname || '/';
 };
 
-/** 菜单最长前缀匹配：`/portal/seller/products` 归到「我的商品」而不是「店铺概览」 */
+/** 菜单最长前缀匹配：`/portal/seller/products` 归到「我的商品」而不是「店铺概览」。
+ *  `exact` 的项（概览/首页）只认完全相等 —— 否则 `/portal/seller/products`
+ *  会被它按前缀吃掉，标签上显示成「店铺概览」。 */
 function matchMenu(items: PageTabMenuItem[], path: string) {
   let best: PageTabMenuItem | undefined;
   for (const item of items) {
-    if (path === item.href || path.startsWith(`${item.href}/`)) {
-      if (!best || item.href.length > best.href.length) best = item;
-    }
+    const hit = item.exact
+      ? path === item.href
+      : path === item.href || path.startsWith(`${item.href}/`);
+    if (hit && (!best || item.href.length > best.href.length)) best = item;
   }
   return best;
 }
@@ -157,8 +162,11 @@ const PageTabs: React.FC<{
   };
 
   const labelOf = (tab: PageTab) => {
+    // 菜单驱动模式下标题在渲染时重新解析：卖家中心菜单在"开店态"还没确定时
+    // 只给概览一项，若把当时的标题存进 state，之后就会一直显示错的（如把商品页
+    // 标成「店铺概览」）。
     const text = menuDriven
-      ? tab.name
+      ? (matchMenu(menuItems, tab.path)?.label ?? tab.name)
       : intl.formatMessage({ id: tab.name, defaultMessage: tab.path });
     const count = badges?.[tab.path] ?? 0;
     return (

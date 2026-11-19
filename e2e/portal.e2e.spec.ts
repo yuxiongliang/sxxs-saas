@@ -258,6 +258,15 @@ test.describe('portal: buyer journey', () => {
     await expect(page).toHaveURL(/\/portal\/orders/, { timeout: 20_000 });
     await expect(tabs.getByText('我的订单')).toBeVisible();
 
+    // 刷新后标签还在，而且**标题不能串**（曾经把子页标签解析成「概览」）
+    await page.reload();
+    await page.waitForTimeout(2500);
+    await expect(
+      page.getByTestId('page-tabs').getByText('我的订单'),
+    ).toBeVisible({
+      timeout: 20_000,
+    });
+
     // 关当前标签 → 回概览，标签也消失
     await page.locator('.ant-tabs-tab-active .ant-tabs-tab-remove').click();
     await expect(page).toHaveURL(/\/portal$/, { timeout: 20_000 });

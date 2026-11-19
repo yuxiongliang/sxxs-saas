@@ -91,6 +91,7 @@ src/
 | 账号与权限 | 租户 RBAC（权限码）+ 平台独立鉴权（`aud` cookie 隔离）；卖家走**归属校验**不靠权限码 | `services/auth.py`、`services/platform_auth.py`、`access.ts` |
 | 站点品牌 | logo/favicon/全站名称/站点描述/ICP；**买家中心顶栏只显 logo**（站名进 aria-label） | `services/tenant_brand.py`、`hooks/useSiteBrand.ts` |
 | 商品 | 类型四步向导（类型→基础→规格→详情→**交付**）；多规格笛卡尔积 SKU；主图/视频；Tiptap 富文本 | `ProductEditor`、`catalog_specs.py`、`rich_text.py` |
+| 门户布局间距 | 内容区**四周 10px、铺满可用宽度**（以前 20px + 1080 居中，大屏大片留白、表格还得在窄列里横滚）。表单/阅读页（如店铺管理）用 `narrow` 收窄到 960 | `PortalLayout`/`PortalShell`/`SellerShell` |
 | 门户外壳 | 买家/卖家中心共用 `PortalLayout`（一套实现两套菜单）。内容区顶部是**标签栏**（`components/PageTabs` 菜单驱动模式）：概览常驻不可关、单关回相邻/概览、「关闭全部」回概览、按中心分 `sessionStorage`。顶栏用户名是 `components/UserMenu`：**hover** 出「个人设置（新窗口 `/account/settings`）/ 退出登录」 | `PageTabs`、`UserMenu`、`portal/components` |
 | 卖家店铺管理 | `/portal/seller/shop`：店铺信息（名/简介）+ **自提门店**（原「自提点」，地址/说明）。概览页只留入口与数据，不再放表单 | `portal/seller/shop`、`PUT /portal/seller/shop` |
 | 商品图片优先级 | **成交图 = SKU 覆盖图 > 规格值图 > 主图**，只在 `catalog_media.py` 一处算（详情页 / 购物车 / 确认页 / 订单快照共用）；列表卡片、收藏、评价固定用主图（那是「商品封面」）。规格值的「图/视频」是**一个入口**（附件类型决定落 `image_url` 还是 `video_url`），两处都能清除 | `services/catalog_media.py`、`utils/specUtils.resolveMedia` |
