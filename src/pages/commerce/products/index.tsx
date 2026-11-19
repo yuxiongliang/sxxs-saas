@@ -4,7 +4,7 @@ import {
   ShoppingOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { useAccess } from '@umijs/max';
+import { useAccess, useNavigate } from '@umijs/max';
 import {
   App,
   Button,
@@ -38,7 +38,6 @@ import {
   PRODUCT_TYPE_COLOR,
 } from '@/utils/labels';
 import SettingPage from '../../system/components/SettingPage';
-import ProductEditor from './components/ProductEditor';
 
 const statusColor = (status: string) =>
   ({
@@ -136,9 +135,8 @@ const actionsFor = (status: string): Action[] => {
 
 const ProductManagementPage: React.FC = () => {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const access = useAccess();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorId, setEditorId] = useState<number>();
   const [rejectTarget, setRejectTarget] = useState<ProductRecord>();
   const [rejectForm] = Form.useForm<{ reason: string }>();
   const [keyword, setKeyword] = useState('');
@@ -163,9 +161,9 @@ const ProductManagementPage: React.FC = () => {
       }),
   });
 
+  /** 编辑商品改成**独立页面**（弹窗里填 5 步表单，滚动和校验都太挤） */
   const openEdit = (record: ProductRecord) => {
-    setEditorId(record.id);
-    setEditorOpen(true);
+    navigate(`/commerce/products/${record.id}/edit`);
   };
 
   const runAction = async (record: ProductRecord, action: Action) => {
@@ -464,13 +462,6 @@ const ProductManagementPage: React.FC = () => {
           pagination={{ defaultPageSize: 10, showSizeChanger: true }}
         />
       </Card>
-
-      <ProductEditor
-        open={editorOpen}
-        productId={editorId}
-        onClose={() => setEditorOpen(false)}
-        onSaved={refetch}
-      />
 
       <Modal
         title="驳回商品"

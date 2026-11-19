@@ -25,6 +25,8 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { CopyableText, PersonCell } from './IdentityText';
 export { default as ImChat } from './ImChat';
 export { default as ListToolbar } from './ListToolbar';
+export type { LocationValue } from './LocationPicker';
+export { default as LocationPicker } from './LocationPicker';
 export { default as MediaField, PUBLIC_ATTACHMENT_PREFIX } from './MediaField';
 export { default as OfflineBanner } from './OfflineBanner';
 export { default as PageTabs } from './PageTabs';

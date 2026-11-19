@@ -1,9 +1,14 @@
-import { CustomerServiceOutlined, ShopOutlined } from '@ant-design/icons';
+import {
+  CustomerServiceOutlined,
+  EnvironmentOutlined,
+  ShopOutlined,
+} from '@ant-design/icons';
 import { useModel } from '@umijs/max';
 import { App, Avatar, Button, Card, Divider, Space, Typography } from 'antd';
 import { useState } from 'react';
 import type { PublicProduct } from '@/services/commerce/api';
 import { createConversation } from '@/services/im/api';
+import { formatDistance } from '@/utils/distance';
 
 /**
  * 商品详情页右侧的「店铺信息」卡。
@@ -24,6 +29,7 @@ export default function ShopCard({ product }: { product: PublicProduct }) {
   const signedIn = Boolean(initialState?.currentUser);
 
   const shopName = product.shop_name || '店铺';
+  const distanceText = formatDistance(product.distance_m);
   const initial = shopName.trim().slice(0, 1).toUpperCase();
 
   const openCustomerService = async () => {
@@ -100,6 +106,19 @@ export default function ShopCard({ product }: { product: PublicProduct }) {
             data-testid="shop-tenant-name"
           >
             {product.tenant_name || '—'}
+          </Typography.Text>
+          {/* 商品所在地 / 距您多远：距离由服务端算（坐标不下发），没定位只显示地名 */}
+          <Typography.Text
+            type="secondary"
+            style={{ fontSize: 12, display: 'block' }}
+            ellipsis
+            data-testid="shop-product-location"
+          >
+            <EnvironmentOutlined />{' '}
+            {distanceText
+              ? `距您 ${distanceText}`
+              : product.location || '所在地未设置'}
+            {distanceText && product.location ? ` · ${product.location}` : ''}
           </Typography.Text>
         </div>
       </Space>

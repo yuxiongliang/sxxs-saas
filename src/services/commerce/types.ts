@@ -66,6 +66,13 @@ export interface ProductRecord {
   delivery_methods?: string[];
   main_image?: string | null;
   images?: string[];
+  /** 商品所在地：省市区（结构化，同城筛选用）+ 地址 + 坐标（仅卖家/运营可见） */
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
   /** 列表里 join 出来的可读名字，不用再显示裸 ID */
@@ -155,6 +162,10 @@ export interface OrderItemRecord {
   price_cents: number;
   quantity: number;
   subtotal_cents: number;
+  /** 商品所在地快照（下单时冻结）：买家/卖家列表显示「发货地」 */
+  location?: string | null;
+  location_city?: string | null;
+  location_address?: string | null;
 }
 
 export interface PortalProduct {
@@ -180,6 +191,9 @@ export interface SellerProfile {
     /** 自提门店：选了「自提」的商品，买家结算时看到 */
     address?: string | null;
     pickup_note?: string | null;
+    /** 自提门店坐标（买家侧只显示距离，不显示坐标） */
+    latitude?: number | null;
+    longitude?: number | null;
   } | null;
 }
 
@@ -192,6 +206,13 @@ export interface SellerProductRecord {
   description_doc?: Record<string, unknown> | null;
   description_html?: string | null;
   main_image?: string | null;
+  /** 商品所在地：省市区（结构化，同城筛选用）+ 地址 + 坐标（仅卖家/运营可见） */
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   video_url?: string | null;
   status: string;
   /** 被驳回时运营给的原因，重新提交后清空 */
@@ -224,6 +245,8 @@ export interface SellerOrderRecord {
   commission_amount_cents: number;
   payable_to_seller_cents: number;
   created_at?: string | null;
+  /** 收货城市（卖家判断同城/跨城；老订单为 null） */
+  receiver_city?: string | null;
   /** 卖家要知道自己卖了什么：图片/名称/规格/类型都来自订单行快照 */
   items?: OrderItemRecord[];
   /** 时间口径：发货截止（超时只提醒不处罚）/ 自动确认 / 售后截止 */

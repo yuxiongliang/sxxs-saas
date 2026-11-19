@@ -42,6 +42,9 @@ export async function updateSellerShop(data: {
   description?: string;
   address?: string;
   pickup_note?: string;
+  /** 自提门店坐标：买家选自提时显示「门店距您 x km」 */
+  latitude?: number | null;
+  longitude?: number | null;
 }) {
   return unwrap<{
     id: number;
@@ -49,6 +52,8 @@ export async function updateSellerShop(data: {
     description?: string | null;
     address?: string | null;
     pickup_note?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
   }>(request('/api/v1/portal/seller/shop', { method: 'PUT', data }));
 }
 
@@ -219,6 +224,9 @@ export async function previewCheckout(data: {
   mode: 'buy' | 'cart';
   sku_id?: number;
   quantity?: number;
+  /** 买家坐标：只用于算「自提门店距您 x km」，不会回传 */
+  buyer_lat?: number;
+  buyer_lng?: number;
 }) {
   return unwrap<{
     items: Array<{
@@ -243,6 +251,10 @@ export async function previewCheckout(data: {
       delivery_methods: string[];
       pickup_address?: string | null;
       pickup_note?: string | null;
+      /** 自提门店距买家多远（米）：服务端算，没定位/没门店坐标时为 null */
+      pickup_distance_m?: number | null;
+      /** 本组商品的所在地（省市区） */
+      location?: string | null;
     }>;
     total_cents: number;
     issues: string[];
@@ -781,6 +793,17 @@ export interface PublicProduct {
   /** 详情接口才有：浏览数（每次打开 +1）与当前用户是否已收藏 */
   view_count?: number;
   is_favorited?: boolean;
+  /** 商品所在地：只给省市区这层（**不含经纬度**，坐标不出服务端） */
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  /** 「浙江省 台州市 椒江区」合并串 */
+  location?: string | null;
+  /**
+   * 距买家多远（米）：**服务端算的**，请求时带 buyer_lat/buyer_lng 才有。
+   * 没定位 / 商品没坐标时为 null —— 界面不要编造 0 公里。
+   */
+  distance_m?: number | null;
 }
 
 /**
@@ -800,7 +823,20 @@ export interface PublicProductQuery {
   /** 价格区间（分）：按在售 SKU 的最低价筛 */
   min_price_cents?: number;
   max_price_cents?: number;
-  sort?: 'default' | 'sold_desc' | 'newest' | 'price_asc' | 'price_desc';
+  sort?:
+    | 'default'
+    | 'sold_desc'
+    | 'newest'
+    | 'price_asc'
+    | 'price_desc'
+    | 'distance';
+  /** 同城：与商品所在地的「市」精确匹配（不需要定位） */
+  city?: string;
+  /** 距离范围（公里）：需要同时给买家坐标，否则后端忽略 */
+  radius_km?: number;
+  /** 买家坐标：只用于服务端算距离，不会回传 */
+  buyer_lat?: number;
+  buyer_lng?: number;
   page?: number;
   page_size?: number;
 }
@@ -815,6 +851,26 @@ export interface PublicProductPage {
 export async function listPublicProducts(params?: PublicProductQuery) {
   return unwrap<PublicProductPage>(
     request('/api/v1/public/products', { method: 'GET', params }),
+  );
+}
+
+/**
+ * 坐标 → 行政区（省/市/区）。
+ *
+ * 买家不需要定位权限也不需要高德 key：服务端用租户自己的 key 代查。
+ * 只返回行政区名，不返回门牌 —— 同城筛选用它拿「市」。
+ */
+export async function reverseGeo(lat: number, lng: number) {
+  return unwrap<{
+    province?: string | null;
+    city?: string | null;
+    district?: string | null;
+    location?: string | null;
+  }>(
+    request('/api/v1/public/geo/reverse', {
+      method: 'GET',
+      params: { lat, lng },
+    }),
   );
 }
 
@@ -846,7 +902,10 @@ export async function listPublicCategories() {
 }
 
 /** 公开商品详情（匿名可读，含全部 SKU）。 */
-export async function getPublicProductDetail(id: number, params?: { tenant?: string }) {
+export async function getPublicProductDetail(
+  id: number,
+  params?: { tenant?: string; buyer_lat?: number; buyer_lng?: number },
+) {
   return unwrap<PublicProduct>(
     request(`/api/v1/public/products/${id}`, { method: 'GET', params }),
   );

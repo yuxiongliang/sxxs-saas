@@ -154,8 +154,34 @@ export default function SellerOrdersPage() {
     },
     {
       title: '商品名称',
-      width: 200,
-      render: (_, record) => record.item?.product_name ?? '—',
+      width: 220,
+      render: (_, record) => {
+        // 发货地 = 商品所在地快照；与收货城市一致就标「同城」，便于判断时效
+        const location = record.item?.location;
+        const receiverCity = record.order.receiver_city;
+        const sameCity =
+          Boolean(location) &&
+          Boolean(receiverCity) &&
+          record.item?.location_city === receiverCity;
+        return (
+          <div>
+            <div>{record.item?.product_name ?? '—'}</div>
+            <div
+              style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}
+            >
+              发货地：{location || '—'}
+              {location && receiverCity ? (
+                <Tag
+                  style={{ marginInlineStart: 6 }}
+                  color={sameCity ? 'green' : 'orange'}
+                >
+                  {sameCity ? '同城' : '跨城'}
+                </Tag>
+              ) : null}
+            </div>
+          </div>
+        );
+      },
     },
     {
       title: '商品规格',

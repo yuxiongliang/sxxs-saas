@@ -43,6 +43,13 @@ async def public_products(
     max_price_cents: int | None = Query(default=None, ge=0),
     seller_id: int | None = Query(default=None),
     sort: str = Query(default=public_catalog_service.SORT_DEFAULT, max_length=16),
+    # 同城筛选（结构化 city，精确匹配；买家不需要定位也能用）
+    city: str | None = Query(default=None, max_length=32),
+    # 距离范围（公里）：必须同时给 buyer_lat/buyer_lng，否则忽略
+    radius_km: float | None = Query(default=None, gt=0, le=500),
+    # 买家坐标：只用于服务端算距离，**不会被回传**
+    buyer_lat: float | None = Query(default=None, ge=-90, le=90),
+    buyer_lng: float | None = Query(default=None, ge=-180, le=180),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=public_catalog_service.DEFAULT_PAGE_SIZE, ge=1, le=60),
     db: AsyncSession = Depends(get_db),
@@ -56,6 +63,10 @@ async def public_products(
         await public_catalog_service.list_public_products(
             db,
             slug,
+            city=city,
+            radius_km=radius_km,
+            buyer_lat=buyer_lat,
+            buyer_lng=buyer_lng,
             keyword=keyword,
             category_id=category_id,
             min_price_cents=min_price_cents,
@@ -160,6 +171,9 @@ async def public_product_detail(
         max_length=64,
         description="租户 slug（仅 Host 解析不出来时的兜底）",
     ),
+    # 买家坐标：只用于服务端算「距您 x km」，不会回传给前端
+    buyer_lat: float | None = Query(default=None, ge=-90, le=90),
+    buyer_lng: float | None = Query(default=None, ge=-180, le=180),
     db: AsyncSession = Depends(get_db),
     viewer: AuthContext | None = Depends(get_optional_context),
 ):
@@ -170,8 +184,53 @@ async def public_product_detail(
     slug = await _tenant_slug(request, tenant, db)
     return ok(
         await public_catalog_service.get_public_product(
-            db, product_id, slug, viewer_id=viewer.user.id if viewer else None
+            db,
+            product_id,
+            slug,
+            viewer_id=viewer.user.id if viewer else None,
+            buyer_lat=buyer_lat,
+            buyer_lng=buyer_lng,
         )
+    )
+
+
+@router.get("/geo/reverse")
+async def public_geo_reverse(
+    request: Request,
+    tenant: str | None = Query(default=None, max_length=64),
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    db: AsyncSession = Depends(get_db),
+):
+    """坐标 → 行政区（省/市/区）。
+
+    为什么买家要用它：买家角色**没有** `amap:read` 权限，拿不到高德客户端配置；
+    而"同城"筛选需要知道自己在哪个市。这里由服务端用租户自己的高德 webKey 代查，
+    只返回行政区名（不给详细地址），失败时返回空对象而不是 500 ——
+    定位/反查失败不应该让整个列表白屏。
+    """
+    from app.services import amap as amap_service
+    from app.services import geo as geo_service
+    from app.services import setting_resolver
+
+    slug = await _tenant_slug(request, tenant, db)
+    tenant_row = await public_catalog_service._resolve_tenant(db, slug)
+    config = await setting_resolver.resolve_for_runtime(db, tenant_row.id, "amap")
+    try:
+        result = await amap_service.regeo(
+            str(config.get("webKey") or ""), lng, lat, "base"
+        )
+    except Exception:  # noqa: BLE001 - 反查失败降级为空，不阻塞列表
+        return ok({"province": None, "city": None, "district": None})
+    return ok(
+        {
+            "province": result.get("province") or None,
+            "city": result.get("city") or None,
+            "district": result.get("district") or None,
+            "location": geo_service.location_summary(
+                result.get("province"), result.get("city"), result.get("district")
+            ),
+        }
     )
 
 

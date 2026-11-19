@@ -20,6 +20,7 @@ from app.services import audit as audit_service
 from app.services import catalog_specs, catalog_stats, rich_text
 from app.services import category as category_service
 from app.services import finance as finance_service
+from app.services import geo
 from app.services import order as order_service
 from app.services import time_control
 from app.services.auth import AuthContext
@@ -84,6 +85,13 @@ async def seller_products(
                 "description_doc": product.description_doc,
                 "description_html": product.description_html,
                 "main_image": product.main_image,
+                # 商品所在地：编辑页回显 + 卖家列表自查
+                "province": product.province,
+                "city": product.city,
+                "district": product.district,
+                "address": product.address,
+                "latitude": float(product.latitude) if product.latitude is not None else None,
+                "longitude": product.longitude if product.longitude is not None else None,
                 "video_url": product.video_url,
                 "delivery_methods": product.delivery_methods or [],
                 "status": product.status,
@@ -147,6 +155,13 @@ async def seller_product_detail(
         "description_html": product.description_html,
         "status": product.status,
         "main_image": product.main_image,
+        # 商品所在地：编辑页回显（与运营端详情同一形状）
+        "province": product.province,
+        "city": product.city,
+        "district": product.district,
+        "address": product.address,
+        "latitude": float(product.latitude) if product.latitude is not None else None,
+        "longitude": float(product.longitude) if product.longitude is not None else None,
         "images": product.images or [],
         "video_url": product.video_url,
         "delivery_methods": product.delivery_methods or [],
@@ -233,7 +248,7 @@ async def update_shop_profile(
     if shop is None:
         raise HTTPException(status_code=400, detail="卖家店铺不存在")
     data = payload.model_dump(exclude_unset=True)
-    for key in ("name", "description", "address", "pickup_note"):
+    for key in ("name", "description", "address", "pickup_note", "latitude", "longitude"):
         if key in data:
             setattr(shop, key, data[key] or None)
     await db.commit()
@@ -245,6 +260,17 @@ async def update_shop_profile(
         "address": shop.address,
         "pickup_note": shop.pickup_note,
     }
+
+
+#: 商品所在地字段：更新时整组一起写（见 update_seller_product）
+_LOCATION_FIELDS = (
+    "province",
+    "city",
+    "district",
+    "address",
+    "latitude",
+    "longitude",
+)
 
 
 async def update_seller_product(
@@ -276,6 +302,18 @@ async def update_seller_product(
         if key in data and getattr(product, key) != data[key]:
             setattr(product, key, data[key])
             content_changed = True
+    # ---- 商品所在地（LBS）----
+    # 位置也算"内容"：改个城市等于换了一批同城买家，必须重新过审。
+    # 六个字段一起写：只改省市区不清坐标会留下"地址 A + 坐标 B"的脏数据
+    if any(key in data for key in _LOCATION_FIELDS):
+        for key in _LOCATION_FIELDS:
+            if key in data:
+                value = data[key]
+                if value == "":
+                    value = None
+                if getattr(product, key) != value:
+                    setattr(product, key, value)
+                    content_changed = True
     # ---- 富文本描述：与运营端同一条口径，服务端重新清洗 ----
     if "description_doc" in data or "description_html" in data:
         doc, html, text = rich_text.prepare_payload(
@@ -517,6 +555,13 @@ async def create_seller_product(
         delivery_methods=delivery,
         main_image=payload.main_image or None,
         video_url=payload.video_url or None,
+        # 商品所在地：省市区结构化 + 坐标（没有就留空，不猜）
+        province=payload.province or None,
+        city=payload.city or None,
+        district=payload.district or None,
+        address=payload.address or None,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
         status="pending_review",
         created_by=context.user.id,
     )
@@ -681,6 +726,12 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
             "commission_amount_cents": item.commission_amount_cents,
             "payable_to_seller_cents": item.payable_to_seller_cents,
             "created_at": item.created_at.isoformat() if item.created_at else None,
+            # 收货城市：卖家判断同城/跨城（老订单没有这层信息就是 None）
+            "receiver_city": (
+                (parent_orders.get(item.order_id).receiver_address or {}).get("city")
+                if parent_orders.get(item.order_id) is not None
+                else None
+            ),
             **_deadlines(item, items_map.get(item.id) or []),
             "items": [
                 {
@@ -693,6 +744,14 @@ async def seller_orders(db: AsyncSession, context: AuthContext) -> list[dict]:
                     "price_cents": row.price_cents,
                     "quantity": row.quantity,
                     "subtotal_cents": row.subtotal_cents,
+                    # 商品所在地快照（下单时冻结）：卖家发货时看「从哪儿发」
+                    "location": geo.location_summary(
+                        row.location_province,
+                        row.location_city,
+                        row.location_district,
+                    ),
+                    "location_city": row.location_city,
+                    "location_address": row.location_address,
                 }
                 for row in items_map.get(item.id, [])
             ],

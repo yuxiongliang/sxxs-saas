@@ -94,6 +94,9 @@ src/
 | 门户布局间距 | 内容区**四周 10px、铺满可用宽度**（以前 20px + 1080 居中，大屏大片留白、表格还得在窄列里横滚）。表单/阅读页（如店铺管理）用 `narrow` 收窄到 960 | `PortalLayout`/`PortalShell`/`SellerShell` |
 | 门户外壳 | 买家/卖家中心共用 `PortalLayout`（一套实现两套菜单）。内容区顶部是**标签栏**（`components/PageTabs` 菜单驱动模式）：概览常驻不可关、单关回相邻/概览、「关闭全部」回概览、按中心分 `sessionStorage`。顶栏用户名是 `components/UserMenu`：**hover** 出「个人设置（新窗口 `/account/settings`）/ 退出登录」 | `PageTabs`、`UserMenu`、`portal/components` |
 | 卖家店铺管理 | `/portal/seller/shop`：店铺信息（名/简介）+ **自提门店**（原「自提点」，地址/说明）。概览页只留入口与数据，不再放表单 | `portal/seller/shop`、`PUT /portal/seller/shop` |
+| 商品编辑页 | 编辑/新增商品是**独立页面**（不再弹窗）：运营 `/commerce/products/:id/edit`、卖家 `/portal/seller/products/create` 与 `/:id/edit`。向导抽成 `ProductWizard`（adapter 机制不变），未保存离开要确认（返回按钮 Popconfirm + `beforeunload`），保存后回列表 |
+| 商品所在地（LBS） | `products.province/city/district/address/latitude/longitude`；**下单快照**进 `order_items.location_*`；`shops.latitude/longitude` 是自提门店坐标。公开接口**只返回省市区 + `distance_m`，绝不返回坐标**（服务端 haversine，直线距离） |
+| 距离筛选与排序 | `/public/products` 支持 `city`（同城，按结构化城市）、`radius_km`（半径）、`sort=distance`、`buyer_lat/buyer_lng`（只用于算距离）。无坐标商品不参与距离排序/半径过滤 |
 | 商品图片优先级 | **成交图 = SKU 覆盖图 > 规格值图 > 主图**，只在 `catalog_media.py` 一处算（详情页 / 购物车 / 确认页 / 订单快照共用）；列表卡片、收藏、评价固定用主图（那是「商品封面」）。规格值的「图/视频」是**一个入口**（附件类型决定落 `image_url` 还是 `video_url`），两处都能清除 | `services/catalog_media.py`、`utils/specUtils.resolveMedia` |
 | 商品软删除 | 卖家/运营删商品 = `status='deleted'`（**不物理删**：订单快照、收藏、评价、审计还引用它）。删后卖家列表/买家商城/收藏/确认页全部不见，购物车行标失效；运营端默认不列，显式筛「已删除」可追溯 | `seller_center.delete_seller_product`、`PRODUCT_STATUS_FLOW` |
 | 商品类型 | 只有 `physical` 开放；创建后不可改；非实物后端 400 | `schemas/commerce.py`、`order_state` 无关 |
@@ -262,6 +265,8 @@ E2E_PORT=8010 npx playwright test --config playwright.e2e.config.ts e2e/portal.e
 | 现象 | 病根 | 口诀 |
 | --- | --- | --- |
 | 自定义控件「选了值但保存后是空的」 | 控件不是 `Form.Item` 的**注册字段**（用隐藏字段 + setFieldsValue），`validateFields()` 拿不到 | 自定义控件必须挂在 `Form.Item name=...` 上；后端 schema 也别给默认空串，空值要 422 拒绝 |
+| 列表有「距您」但详情没有（或反过来） | 列表请求没带买家坐标 / 查询 key 没带坐标，定位到位后不重算 | **买家坐标必须进 queryKey**，否则定位完成后不会重新取数；距离一律由服务端算，前端别自己算 |
+| 商品加了所在地却不在同城结果里 | 只填了坐标没填「市」 | 同城筛选按**结构化 `city`** 精确匹配，省市区必须选；`location_name` 文本不参与筛选 |
 | 改了时间控制，老订单的倒计时没变 | 期望它「立刻重排」 | **配置只影响新任务**：截止时间在下单/发货时已落库（`expires_at` / 任务 `meta`），这是刻意设计，避免买家看到的倒计时被运营改设置跳变 |
 | 已完成订单申请售后被拒 | 售后窗口默认 0 天 = 确认收货即结束交易 | 要放开就配「确认收货后可申请售后 N 天」；判断统一走 `time_control.refund_window_open`，别在前端按状态猜 |
 | 标签栏关掉的标签「又回来了」 | 门户每个页面各自渲染一次外壳，导航时 PageTabs 会重挂；`setState` + `history.push` 同一 tick，持久化 effect 来不及跑 | **门户类组件不能只靠 useState**：状态写进模块级缓存 + `sessionStorage`，且**在事件里同步写**，别等 effect |

@@ -187,6 +187,13 @@ async def create_order(
                 # 订单快照的图取**成交图**（SKU 覆盖图 > 规格值图 > 主图），
                 # 与详情页/确认页同一口径，否则买家收到的图和买的对不上
                 image=await catalog_media.effective_image(db, product, sku),
+                # 商品所在地快照：商品之后改位置不影响历史订单（物流/自提追溯要用）
+                location_province=product.province,
+                location_city=product.city,
+                location_district=product.district,
+                location_address=product.address,
+                location_latitude=product.latitude,
+                location_longitude=product.longitude,
                 price_cents=sku.price_cents,
                 quantity=quantity,
                 subtotal_cents=subtotal,

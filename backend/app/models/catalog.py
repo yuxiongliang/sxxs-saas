@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Numeric, JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -56,6 +57,15 @@ class Product(Base, TimestampMixin):
         String(8), default="text", server_default="text"
     )
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    # ---- 商品所在地（LBS）----
+    # 省市区**结构化存储**：同城筛选靠 `city` 精确匹配，解析文本地址是不可靠的
+    province: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    district: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 全精度坐标（≈1cm）；**不通过公开接口外发**，只用于服务端算距离
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     # 商品类型：physical（实物，唯一已开放）/ virtual / knowledge / event。
     # **创建后不可修改**：已有订单、库存、发货都按创建时的语义跑，改了会语义断层。
     # 类 Default 与迁移里的 server_default 必须一致（test_migrations 会校对）。

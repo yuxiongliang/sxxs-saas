@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { ADMIN, loginAs } from './helpers/auth';
 
 /**
- * 商品编辑器（运营端弹窗）回归。
+ * 商品编辑器（运营端，独立页面）回归。
  *
  * 这里锁的是一个**已经复发过两次**的 bug：编辑器是两步表单，
  * 切到第 2 步（规格）时如果 `<Form>` 被卸载，antd 的字段 store 就没了，
@@ -22,24 +22,32 @@ test.describe('product editor (admin)', () => {
     const editButton = page.getByRole('button', { name: /编\s*辑/ }).first();
     await expect(editButton).toBeVisible({ timeout: 30_000 });
     await editButton.click();
-    await page.waitForTimeout(3000);
 
-    const modal = page.getByRole('dialog', { name: /编辑商品/ }).first();
-    await expect(modal).toBeVisible({ timeout: 30_000 });
+    // 编辑器是**独立页面**（不再是弹窗）：URL 要跳到 /commerce/products/:id/edit
+    await expect(page).toHaveURL(/\/commerce\/products\/\d+\/edit/, {
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('product-wizard')).toBeVisible({
+      timeout: 30_000,
+    });
 
     // 第 1 步是「类型」：只有实物可选，其余三类带「待开发」且禁用。
     // 类型创建后不可改，所以这里是只读展示。
     await expect(page.getByTestId('product-type-step')).toBeVisible({
       timeout: 20_000,
     });
-    await expect(modal.getByText('实物商品')).toBeVisible();
-    await expect(modal.getByText('待开发').first()).toBeVisible();
-    const disabledType = modal.locator('.ant-radio-wrapper-disabled').first();
+    await expect(page.getByText('实物商品').first()).toBeVisible();
+    await expect(page.getByText('待开发').first()).toBeVisible();
+    const disabledType = page.locator('.ant-radio-wrapper-disabled').first();
     await expect(disabledType).toBeVisible();
 
     // 进「基础信息」
     await page.getByTestId('product-editor-next').click();
     await page.waitForTimeout(800);
+
+    // 商品所在地（LBS）：省市区 + 「使用我的位置」必须在基础信息里
+    await expect(page.getByText('商品所在地')).toBeVisible();
+    await expect(page.getByTestId('location-use-my-position')).toBeVisible();
 
     // 选一张图（附件中心：单击选中 → 使用选中的图片）
     // 已有主图时按钮文案是「更换」，两种都要能点
@@ -112,6 +120,10 @@ test.describe('product editor (admin)', () => {
       .click();
     const response = await saved;
     expect(response.status()).toBe(200);
+    // 保存成功会回到列表页（页面化之后不再"关弹窗"）
+    await expect(page).toHaveURL(/\/commerce\/products\/list/, {
+      timeout: 30_000,
+    });
 
     // 请求体里必须真的带上 main_image 与富文本 doc，而不是空串
     const body = JSON.parse(response.request().postData() ?? '{}');

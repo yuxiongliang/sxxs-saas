@@ -67,6 +67,12 @@ async def seller_profile(
                     "description": shop.description,
                     # 自提门店信息：买家选自提时要看到
                     "address": shop.address,
+                    "latitude": float(shop.latitude)
+                    if shop.latitude is not None
+                    else None,
+                    "longitude": float(shop.longitude)
+                    if shop.longitude is not None
+                    else None,
                     "pickup_note": shop.pickup_note,
                 }
                 if shop

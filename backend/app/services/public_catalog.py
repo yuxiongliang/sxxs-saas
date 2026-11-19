@@ -22,7 +22,7 @@ from app.models.order import OrderItem, SellerOrder
 from app.models.seller import Seller, Shop
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.services import catalog_specs, catalog_stats
+from app.services import catalog_specs, catalog_stats, geo
 
 DEFAULT_TENANT_SLUG = "demo"
 DEFAULT_LIMIT = 48
@@ -34,12 +34,14 @@ SORT_SOLD_DESC = "sold_desc"
 SORT_NEWEST = "newest"
 SORT_PRICE_ASC = "price_asc"
 SORT_PRICE_DESC = "price_desc"
+SORT_DISTANCE = "distance"
 SORT_OPTIONS = (
     SORT_DEFAULT,
     SORT_SOLD_DESC,
     SORT_NEWEST,
     SORT_PRICE_ASC,
     SORT_PRICE_DESC,
+    SORT_DISTANCE,
 )
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 60
@@ -77,6 +79,13 @@ def _product_public_dict(product, shop, seller, sku) -> dict:
         # 交付方式：买家下单要按卖家选快递/自提，详情页先告诉他能选什么
         "delivery_methods": product.delivery_methods or [],
         "main_image": product.main_image,
+        # 商品所在地：只给「省市区」这层（门牌属于卖家地址，不给买家）
+        "province": product.province,
+        "city": product.city,
+        "district": product.district,
+        "location": geo.location_summary(
+            product.province, product.city, product.district
+        ),
         "shop_name": shop.name,
         "seller_name": seller.display_name,
         "sku": (
@@ -114,6 +123,9 @@ def _product_filters(
     min_price_cents: int | None,
     max_price_cents: int | None,
     seller_id: int | None = None,
+    city: str | None = None,
+    radius_km: float | None = None,
+    buyer_coords: tuple[float, float] | None = None,
 ):
     """列表与 count 共用的过滤条件（两处必须一模一样，否则总数对不上）。"""
     filters = [
@@ -143,6 +155,15 @@ def _product_filters(
         filters.append(_price_min_sq.c.price_min >= min_price_cents)
     if max_price_cents is not None:
         filters.append(_price_min_sq.c.price_min <= max_price_cents)
+    # 同城：按结构化 city 精确匹配（不解析文本地址）
+    if city:
+        filters.append(Product.city == city.strip())
+    # 半径：没有买家坐标时忽略（不能让「传了半径但没定位」变成空列表）
+    if radius_km is not None and buyer_coords is not None:
+        expr = geo.distance_sql(
+            Product.latitude, Product.longitude, buyer_coords[0], buyer_coords[1]
+        )
+        filters.append(expr <= radius_km * 1000)
     return filters
 
 
@@ -189,7 +210,7 @@ _favorite_sq = (
 )
 
 
-def _order_by(sort: str):
+def _order_by(sort: str, buyer_coords: tuple[float, float] | None = None):
     """排序表达式。未知值一律回落到综合排序，不报 400 —— 链接被人手改不应该白屏。"""
     sold = func.coalesce(_sold_sq.c.sold, 0)
     favorites = func.coalesce(_favorite_sq.c.favorites, 0)
@@ -208,6 +229,12 @@ def _order_by(sort: str):
             _price_min_sq.c.price_min.desc().nulls_last(),
             Product.created_at.desc(),
         )
+    if sort == SORT_DISTANCE and buyer_coords is not None:
+        # 距离升序；没有坐标的商品排最后（NULLS LAST），不让它们插在近处商品中间
+        expr = geo.distance_sql(
+            Product.latitude, Product.longitude, buyer_coords[0], buyer_coords[1]
+        )
+        return (expr.asc().nulls_last(), Product.created_at.desc())
     # 综合：有货优先 → 销量 → 收藏 → 发布时间。
     # 故意不用加权打分：权重一变结果就漂，没法解释也没法验收。
     return (
@@ -231,6 +258,10 @@ async def list_public_products(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     seller_id: int | None = None,
+    city: str | None = None,
+    radius_km: float | None = None,
+    buyer_lat: float | None = None,
+    buyer_lng: float | None = None,
 ) -> dict:
     """在售商品列表（公开）：搜索 + 分类 + 价格区间 + 排序 + 分页。
 
@@ -245,6 +276,13 @@ async def list_public_products(
     bounded_page = max(1, page)
     bounded_size = max(1, min(page_size, MAX_PAGE_SIZE))
     category_ids = await _category_scope_ids(db, category_id)
+    # 买家坐标：两个都给且合法才算（只给一个 = 前端 bug，忽略而不是报错）
+    buyer_coords = (
+        (float(buyer_lat), float(buyer_lng))
+        if geo.valid_coords(buyer_lat, buyer_lng)
+        else None
+    )
+    radius = geo.parse_radius_km(radius_km)
     filters = _product_filters(
         tenant.id,
         keyword=keyword,
@@ -252,6 +290,9 @@ async def list_public_products(
         min_price_cents=min_price_cents,
         max_price_cents=max_price_cents,
         seller_id=seller_id,
+        city=city,
+        radius_km=radius,
+        buyer_coords=buyer_coords,
     )
 
     base = (
@@ -270,7 +311,7 @@ async def list_public_products(
             base.join(_in_stock_sq, _in_stock_sq.c.product_id == Product.id, isouter=True)
             .join(_sold_sq, _sold_sq.c.product_id == Product.id, isouter=True)
             .join(_favorite_sq, _favorite_sq.c.product_id == Product.id, isouter=True)
-            .order_by(*_order_by(sort))
+            .order_by(*_order_by(sort, buyer_coords))
             .offset((bounded_page - 1) * bounded_size)
             .limit(bounded_size)
         )
@@ -320,6 +361,14 @@ async def list_public_products(
         payload["sku_count"] = len(skus)
         # 列表卡片用：是否还有可买的 SKU（多规格时引导去详情选）
         payload["in_stock"] = any(sku.stock > 0 for sku in skus)
+        # 距离：服务端算好给前端，**不下发坐标**
+        if buyer_coords is not None:
+            payload["distance_m"] = geo.distance_between(
+                product.latitude,
+                product.longitude,
+                buyer_coords[0],
+                buyer_coords[1],
+            )
         result.append(payload)
 
     # 卡片上的「已售 N / ★4.8」：与运营端、卖家端同一份口径
@@ -346,6 +395,8 @@ async def get_public_product(
     product_id: int,
     slug: str = DEFAULT_TENANT_SLUG,
     viewer_id: int | None = None,
+    buyer_lat: float | None = None,
+    buyer_lng: float | None = None,
 ) -> dict:
     """公开商品详情。非在售 / 卖家非 active / 跨租户一律 404，不区分原因。"""
     tenant = await _resolve_tenant(db, slug)
@@ -380,6 +431,11 @@ async def get_public_product(
         ).all()
     )
     payload = _product_public_dict(product, shop, seller, skus[0] if skus else None)
+    # 详情页的「距您 x km」：服务端算，坐标不出库
+    if geo.valid_coords(buyer_lat, buyer_lng):
+        payload["distance_m"] = geo.distance_between(
+            product.latitude, product.longitude, float(buyer_lat), float(buyer_lng)
+        )
     payload["skus"] = [
         {
             "id": sku.id,

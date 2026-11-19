@@ -874,6 +874,43 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 4. **槽位类型必须匹配**：主图槽选了视频直接提示拒绝，**不能静默清空主图**
    （以前会把 `main_image` 至于空，用户以为存上了，回前台发现图没了）。
 
+### 商品编辑：独立页面（不再弹窗）
+
+「编辑商品」原来是 960px 弹窗里塞 5 步表单（规格表格 + 富文本 + 图片选择三层嵌套），
+滚动冲突、校验出错要滚很远才能看到、一按 ESC 全丢。现在：
+
+| 入口 | 路由 |
+| --- | --- |
+| 运营端编辑 | `/commerce/products/:id/edit` |
+| 卖家新增 | `/portal/seller/products/create` |
+| 卖家编辑 | `/portal/seller/products/:id/edit` |
+
+- 向导主体抽成 `ProductWizard`，**adapter 机制不变**（运营/卖家差异仍只有 load/save/佣金三处）
+- 「返回列表」在脏数据时弹确认；关标签/刷新走 `beforeunload`
+- 保存成功回列表并 toast
+
+### 商品所在地（LBS）
+
+字段：`products.province/city/district/address/latitude/longitude`（迁移 `c4d7e10a8f52`）。
+录入组件 `components/LocationPicker`：省市区级联 + 地图点选 + 「使用我的位置」（浏览器定位 →
+服务端逆地理编码）。**高德未配置时自动降级**为「省市区 + 地址」，不影响保存。
+
+口径（必须遵守）：
+
+1. **坐标不出公开接口**：列表/详情只返回 `province/city/district/location` 与 `distance_m`
+   （服务端 haversine 直线距离）。否则等于把卖家精确位置挂到全网可爬。
+2. 距离排序与半径过滤都在 **SQL 层**用同一个 haversine 表达式（否则分页会错）；
+   无坐标商品 `NULLS LAST`、不参与半径过滤。
+3. 同城筛选按 `products.city` 精确匹配 —— 依赖卖家把「市」选上，只有坐标不够。
+4. 下单时把位置**快照**进 `order_items.location_*`：商品之后改位置不影响历史订单；
+   买家订单列表显示「发货地」。
+5. 自提门店坐标存 `shops.latitude/longitude`（店铺管理页设置），确认页显示「门店距您 x km」；
+   当商品所在地与门店距离 > 5km 时提示「商品所在地与自提门店不同，建议先联系卖家确认备货时间」。
+6. 买家定位：`hooks/useBuyerLocation`（10 分钟缓存，拒绝授权静默降级）；
+   只有用户真的用「距离排序 / 半径 / 同城」时才请求定位。
+7. 公开反查：`GET /public/geo/reverse?lat&lng`（服务端用租户高德 key，返回省市district），
+   买家角色没有 `amap:read` 也能量出「同城」；失败返回空对象，不阻塞列表。
+
 ### 时间控制（系统设置 → 基础设置 → 时间控制）
 
 订单链路上「等多久自动做什么」全部收在一页，按**商品类型**配置（目前只有实物商品）：

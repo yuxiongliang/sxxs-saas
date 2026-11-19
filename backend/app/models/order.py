@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Numeric, JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -91,6 +92,14 @@ class OrderItem(Base):
     # 下单时的抽佣快照：卖家之后改了商品比例，历史订单也能说清当时按什么扣的
     commission_rate_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     commission_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # ---- 商品位置快照（下单时冻结）----
+    # 商品之后改所在地不影响历史订单：买家/卖家看到的应是"当时商品在哪"
+    location_province: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    location_city: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    location_district: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    location_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location_latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    location_longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
 
 
 class Payment(Base):

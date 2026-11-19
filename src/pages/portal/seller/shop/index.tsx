@@ -2,6 +2,9 @@ import { ShopOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Form, Input, Space, Spin } from 'antd';
 import { useEffect, useState } from 'react';
+import LocationPicker, {
+  type LocationValue,
+} from '@/components/LocationPicker';
 import { getSellerProfile, updateSellerShop } from '@/services/commerce/api';
 import SellerShell from '../components/SellerShell';
 
@@ -25,6 +28,7 @@ export default function SellerShopPage() {
     description?: string;
     address?: string;
     pickup_note?: string;
+    location?: LocationValue;
   }>();
   const [saving, setSaving] = useState(false);
   const [address, setAddress] = useState('');
@@ -42,6 +46,11 @@ export default function SellerShopPage() {
       description: shop.description ?? '',
       address: shop.address ?? '',
       pickup_note: shop.pickup_note ?? '',
+      location: {
+        latitude: shop.latitude ?? null,
+        longitude: shop.longitude ?? null,
+        address: shop.address ?? undefined,
+      },
     });
     setAddress(shop.address ?? '');
   }, [form, shop]);
@@ -62,11 +71,15 @@ export default function SellerShopPage() {
     const values = await form.validateFields();
     setSaving(true);
     try {
+      const location = values.location ?? {};
       await updateSellerShop({
         name: values.name ?? '',
         description: values.description ?? '',
-        address: values.address ?? '',
+        // 门牌以「自提地址」为准；地图选点回填时会把地址一起带回来
+        address: values.address ?? location.address ?? '',
         pickup_note: values.pickup_note ?? '',
+        latitude: location.latitude ?? null,
+        longitude: location.longitude ?? null,
       });
       message.success('店铺信息已保存');
       await queryClient.invalidateQueries({ queryKey: ['seller-profile'] });
@@ -134,6 +147,15 @@ export default function SellerShopPage() {
             </Form.Item>
             <Form.Item label="自提说明" name="pickup_note">
               <Input placeholder="如：工作日 10:00-18:00，请出示订单号" />
+            </Form.Item>
+            {/* 门店坐标：买家选自提时显示「门店距您 x km」；
+                地址复用「自提地址」那一栏，这里只补坐标（省市区仅用于展示） */}
+            <Form.Item
+              label="门店位置（可选）"
+              name="location"
+              extra="选定后买家能看到自提门店离自己多远；不选也能自提，只是不显示距离"
+            >
+              <LocationPicker />
             </Form.Item>
           </Card>
 

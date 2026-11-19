@@ -1,4 +1,6 @@
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from decimal import Decimal
+
+from sqlalchemy import Numeric, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -32,6 +34,9 @@ class Shop(Base, TimestampMixin):
     # 自提门店信息：选了「自提」交付的商品，买家要知道去哪儿取
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pickup_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 自提门店坐标：买家选「自提」时显示「门店距您 x km」
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)
     rating: Mapped[int] = mapped_column(Integer, default=0)
     sales_count: Mapped[int] = mapped_column(Integer, default=0)

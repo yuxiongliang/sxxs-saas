@@ -1,4 +1,5 @@
 import {
+  ArrowLeftOutlined,
   LeftOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
@@ -16,7 +17,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Radio,
   Row,
   Select,
@@ -27,8 +27,11 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AttachmentPicker from '@/components/AttachmentPicker';
+import LocationPicker, {
+  type LocationValue,
+} from '@/components/LocationPicker';
 import MediaField from '@/components/MediaField';
 import type { RichTextValue } from '@/components/RichTextEditor';
 import RichTextEditor from '@/components/RichTextEditor';
@@ -149,15 +152,15 @@ export interface ProductWizardAdapter {
   showCommission?: boolean;
 }
 
-interface ProductEditorProps {
-  open: boolean;
+interface ProductWizardProps {
   productId?: number;
   /** create = 新建商品（卖家中心用），edit = 编辑（默认） */
   mode?: 'create' | 'edit';
   /** 不传则用运营端适配器 */
   adapter?: ProductWizardAdapter;
-  onClose: () => void;
-  onSaved: () => void;
+  /** 返回列表（未保存时会先确认） */
+  onCancel: () => void;
+  onSaved: (id?: number) => void;
 }
 
 /**
@@ -167,14 +170,13 @@ interface ProductEditorProps {
  * 每个规格值可挂 1 图或 1 视频，SKU 还能再挂一层覆盖图（优先级最高）。
  * 展示区：**滑动切组合**（左右箭头/触摸滑动），点缩略图切当前组合的图。
  */
-export default function ProductEditor({
-  open,
+export default function ProductWizard({
   productId,
   mode = 'edit',
   adapter,
-  onClose,
+  onCancel,
   onSaved,
-}: ProductEditorProps) {
+}: ProductWizardProps) {
   // 不传适配器 = 运营端（保持原来的调用方式不变）
   const activeAdapter = adapter ?? adminAdapter;
   const showCommission = activeAdapter.showCommission ?? false;
@@ -198,9 +200,38 @@ export default function ProductEditor({
   const [richLoaded, setRichLoaded] = useState(false);
 
   const [categoryList, setCategoryList] = useState<CategoryRecord[]>([]);
+  // 未保存拦截：初始化（回填）阶段不置脏，回填完成后任何编辑都算脏
+  const hydrated = useRef(isCreate);
+  const [dirty, setDirty] = useState(false);
+  const { modal } = App.useApp();
+
+  const handleBack = () => {
+    if (!dirty) {
+      onCancel();
+      return;
+    }
+    modal.confirm({
+      title: '放弃未保存的修改？',
+      content: '返回列表后，这次填写的商品信息不会保留。',
+      okText: '放弃并返回',
+      cancelText: '继续编辑',
+      okButtonProps: { danger: true },
+      onOk: onCancel,
+    });
+  };
+
+  // 刷新/关标签页也拦一下（浏览器原生确认，无法自定义文案）
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   useEffect(() => {
-    if (!open) return;
     setStep(0);
     setProductType('physical');
     setDeliveryMethods([]);
@@ -219,10 +250,10 @@ export default function ProductEditor({
       .categories()
       .then(setCategoryList)
       .catch(() => setCategoryList([]));
-  }, [open]);
+  }, []);
 
   useEffect(() => {
-    if (!open || !productId) return;
+    if (!productId) return;
     if (!activeAdapter.load) return;
     activeAdapter
       .load(productId)
@@ -245,6 +276,15 @@ export default function ProductEditor({
           name: data.name,
           description: data.description ?? '',
           category_id: data.category_id ?? undefined,
+          // 位置回显：省市区/地址/坐标一起给（任何一个缺都不影响其它）
+          location: {
+            province: data.province ?? undefined,
+            city: data.city ?? undefined,
+            district: data.district ?? undefined,
+            address: data.address ?? undefined,
+            latitude: data.latitude ?? null,
+            longitude: data.longitude ?? null,
+          },
           main_image: data.main_image ?? '',
           video_url: data.video_url ?? '',
           commission_percent:
@@ -277,10 +317,16 @@ export default function ProductEditor({
         setActiveKey(
           comboKey((data.skus?.[0]?.specs as Record<string, string>) ?? {}),
         );
+        hydrated.current = true;
       })
       .catch((error: Error) => message.error(error.message));
     // activeAdapter 是模块常量或父级稳定引用，不放进依赖避免每次渲染重拉
-  }, [open, productId, form, message]);
+  }, [productId, form, message]);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    setDirty(true);
+  }, [groups, skuDraft, deliveryMethods, richText, productType]);
 
   const combos = useMemo(() => buildCombos(groups), [groups]);
   /** 是否真的有多规格（有组名 + 至少一个值）。只有多规格才有"按组合换图"的意义。 */
@@ -482,9 +528,18 @@ export default function ProductEditor({
         return;
       }
 
+      const location = (values.location ?? {}) as LocationValue;
       const payload: Record<string, unknown> = {
         delivery_methods: deliveryMethods,
         name: values.name,
+        // 位置：省市区 + 地址 + 坐标（空值传 null，后端归一成 NULL；
+        // 坐标用 ?? null 而不是 '' —— 数字字段传空串会 422）
+        province: location.province ?? null,
+        city: location.city ?? null,
+        district: location.district ?? null,
+        address: location.address ?? null,
+        latitude: location.latitude ?? null,
+        longitude: location.longitude ?? null,
         description: values.description,
         category_id: values.category_id ?? null,
         main_image: values.main_image ?? '',
@@ -513,8 +568,10 @@ export default function ProductEditor({
       await activeAdapter.saveSpecs(targetId, specsPayload);
 
       message.success(isCreate ? '商品已提交审核' : '商品已保存');
-      onSaved();
-      onClose();
+      // 保存成功就不再拦离开
+      setDirty(false);
+      hydrated.current = false;
+      onSaved(targetId);
     } catch (error) {
       if ((error as { errorFields?: unknown }).errorFields) {
         // 必填项都在「基础信息」：跳回去，但别跳回类型步
@@ -535,39 +592,63 @@ export default function ProductEditor({
   // 第 0 步必须"看过并选了类型"才能往下走；目前只有实物可选中
   const canLeaveTypeStep = Boolean(productType);
 
-  return (
-    <Modal
-      title={isCreate ? '新建商品' : '编辑商品'}
-      open={open}
-      onCancel={onClose}
-      width={960}
-      destroyOnHidden
-      forceRender
-      footer={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          {step > 0 ? (
-            <Button onClick={() => setStep(step - 1)}>上一步</Button>
-          ) : null}
-          {isLastStep ? (
-            <Button type="primary" loading={saving} onClick={handleSave}>
-              保存
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              onClick={() => setStep(step + 1)}
-              disabled={step === 0 && !canLeaveTypeStep}
-              data-testid="product-editor-next"
-            >
-              {step === 0
-                ? '下一步：基础信息'
-                : `下一步：${STEP_LABELS[flowSteps[step] ?? 'detail']}`}
-            </Button>
-          )}
-        </Space>
-      }
+  const nextButton = isLastStep ? (
+    <Button
+      type="primary"
+      loading={saving}
+      onClick={handleSave}
+      data-testid="product-editor-save"
     >
+      保存
+    </Button>
+  ) : (
+    <Button
+      type="primary"
+      onClick={() => setStep(step + 1)}
+      disabled={step === 0 && !canLeaveTypeStep}
+      data-testid="product-editor-next"
+    >
+      {step === 0
+        ? '下一步：基础信息'
+        : `下一步：${STEP_LABELS[flowSteps[step] ?? 'detail']}`}
+    </Button>
+  );
+  const prevButton =
+    step > 0 ? <Button onClick={() => setStep(step - 1)}>上一步</Button> : null;
+
+  return (
+    <div data-testid="product-wizard">
+      <Flex
+        justify="space-between"
+        align="center"
+        wrap
+        gap={12}
+        style={{ marginBottom: 16 }}
+      >
+        <Space size={12}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={handleBack}
+            data-testid="product-editor-back"
+          >
+            返回列表
+          </Button>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {isCreate ? '新建商品' : '编辑商品'}
+            {detail?.name ? (
+              <Typography.Text type="secondary" style={{ fontSize: 14 }}>
+                {' '}
+                · {detail.name}
+              </Typography.Text>
+            ) : null}
+          </Typography.Title>
+        </Space>
+        <Space>
+          {prevButton}
+          {nextButton}
+        </Space>
+      </Flex>
+
       <Steps
         size="small"
         current={step}
@@ -657,6 +738,15 @@ export default function ProductEditor({
                 value: item.id,
               }))}
             />
+          </Form.Item>
+          {/* 商品所在地：同城筛选 + 买家「距您 x km」都靠它。
+              必须注册成 Form.Item（不注册就会出现"选了地址保存后是空的"那个老坑） */}
+          <Form.Item
+            label="商品所在地"
+            name="location"
+            extra="用于买家按「同城」筛选与计算距离；买家只能看到省市区，详细地址不公开"
+          >
+            <LocationPicker />
           </Form.Item>
           {/* 佣金是运营端概念：卖家中心不显示（后端也会忽略这个字段） */}
           {showCommission ? (
@@ -1160,6 +1250,30 @@ export default function ProductEditor({
         </Space>
       </div>
 
+      {/* 页脚按钮与页头同源，长表单滚到底也能直接下一步/保存。
+          注意：页脚的按钮**不带 testid** —— 同一个 testid 出现两次会让 e2e 的
+          getByTestId 报 strict mode violation（页头和页脚各一个）。 */}
+      <Flex justify="flex-end" gap={8} style={{ marginTop: 24 }}>
+        {step > 0 ? (
+          <Button onClick={() => setStep(step - 1)}>上一步</Button>
+        ) : null}
+        {isLastStep ? (
+          <Button type="primary" loading={saving} onClick={handleSave}>
+            保存
+          </Button>
+        ) : (
+          <Button
+            type="primary"
+            onClick={() => setStep(step + 1)}
+            disabled={step === 0 && !canLeaveTypeStep}
+          >
+            {step === 0
+              ? '下一步：基础信息'
+              : `下一步：${STEP_LABELS[flowSteps[step] ?? 'detail']}`}
+          </Button>
+        )}
+      </Flex>
+
       <AttachmentPicker
         open={Boolean(picker)}
         // 规格值：图或视频都收（拉全部附件）；覆盖图：只收图片
@@ -1176,6 +1290,6 @@ export default function ProductEditor({
           )
         }
       />
-    </Modal>
+    </div>
   );
 }

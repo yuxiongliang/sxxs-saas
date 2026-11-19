@@ -42,6 +42,16 @@ class ProductUpdate(BaseModel):
     delivery_methods: list[str] | None = None
     # 租户向卖家抽佣的比例（万分比）：>=100 即 1%；不传 = 保持原值
     commission_bps: int | None = Field(default=None, ge=100, le=100_000)
+    # ---- 商品所在地（LBS）----
+    # 省市区结构化存（同城筛选靠 city），address 是给卖家自己看的门牌/地标，
+    # 经纬度由前端地图选点或浏览器定位得到；不传 = 保持原值，传空串/None = 清空
+    province: str | None = Field(default=None, max_length=32)
+    city: str | None = Field(default=None, max_length=32)
+    district: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=255)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
 
 
 class ProductStatusRequest(BaseModel):
@@ -81,6 +91,15 @@ class SellerProductCreate(BaseModel):
     # 交付方式：向导第 5 步。express 物流快递 / pickup 自提，可多选；
     # 一个都没选 = 未完成发布条件（服务层会拒绝提交审核）
     delivery_methods: list[str] | None = None
+    # ---- 商品所在地（LBS）----
+    # 省市区结构化存（同城筛选靠 city），address 是给卖家自己看的门牌/地标，
+    # 经纬度由前端地图选点或浏览器定位得到；不传 = 保持原值，传空串/None = 清空
+    province: str | None = Field(default=None, max_length=32)
+    city: str | None = Field(default=None, max_length=32)
+    district: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=255)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class SellerProductUpdate(BaseModel):
@@ -106,6 +125,15 @@ class SellerProductUpdate(BaseModel):
     stock: int | None = Field(default=None, ge=0, le=1_000_000)
     # 卖家自填的佣金比例（万分比，下限 1%）；商品被运营锁定后不可再改
     commission_bps: int | None = Field(default=None, ge=100, le=100_000)
+    # ---- 商品所在地（LBS）----
+    # 省市区结构化存（同城筛选靠 city），address 是给卖家自己看的门牌/地标，
+    # 经纬度由前端地图选点或浏览器定位得到；不传 = 保持原值，传空串/None = 清空
+    province: str | None = Field(default=None, max_length=32)
+    city: str | None = Field(default=None, max_length=32)
+    district: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=255)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     # 交付方式（向导第 5 步）
     delivery_methods: list[str] | None = None
 
@@ -193,6 +221,9 @@ class ShopProfileUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=512)
     address: str | None = Field(default=None, max_length=255)
     pickup_note: str | None = Field(default=None, max_length=255)
+    # 自提门店坐标：买家选自提时要显示「门店距您 x km」
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class SellerApplyRequest(BaseModel):

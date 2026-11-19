@@ -261,6 +261,10 @@ export default function PortalOrdersPage() {
             <div style={{ color: 'var(--ant-color-text-secondary)' }}>
               {area || '—'}
             </div>
+            {/* 发货地 = 商品所在地快照（下单时冻结）；同城/跨城只做提示 */}
+            <div style={{ color: 'var(--ant-color-text-tertiary)' }}>
+              发货地：{record.item?.location || '—'}
+            </div>
           </div>
         );
       },

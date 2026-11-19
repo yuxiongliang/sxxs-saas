@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useIntl, useSearchParams } from '@umijs/max';
 import { Empty, Pagination, Spin } from 'antd';
 import { useCallback, useMemo } from 'react';
+import { useBuyerLocation } from '@/hooks/useBuyerLocation';
 import useStyles from '@/pages/site/style';
-import { listPublicProducts } from '@/services/commerce/api';
+import { listPublicProducts, reverseGeo } from '@/services/commerce/api';
 import type { ProductFilters } from './components/FilterBar';
 import FilterBar from './components/FilterBar';
 import MallShell from './components/MallShell';
@@ -12,6 +13,7 @@ import ProductMasonry from './components/ProductMasonry';
 const PAGE_SIZE = 20;
 
 const SORTS = [
+  'distance',
   'default',
   'sold_desc',
   'newest',
@@ -45,6 +47,9 @@ export default function ProductsPage() {
       categoryId: parseNumber(searchParams.get('category')),
       minPrice: parseNumber(searchParams.get('min')),
       maxPrice: parseNumber(searchParams.get('max')),
+      // 同城（城市名，不需要定位）与距离范围（公里，需要买家坐标）
+      city: searchParams.get('city') || undefined,
+      radiusKm: parseNumber(searchParams.get('radius')),
       sort: (SORTS as readonly string[]).includes(sort ?? '')
         ? (sort as SortValue)
         : 'default',
@@ -52,6 +57,30 @@ export default function ProductsPage() {
   }, [searchParams]);
 
   const page = Math.max(1, parseNumber(searchParams.get('page')) ?? 1);
+
+  // 只有用户真的用到「距离/同城」时才请求定位，避免一进列表就弹权限框
+  const needsLocation =
+    filters.sort === 'distance' ||
+    filters.radiusKm !== undefined ||
+    Boolean(filters.city);
+  const {
+    location: buyerLocation,
+    pending,
+    denied,
+    request,
+  } = useBuyerLocation(needsLocation);
+
+  // 反查「我在哪个市」：同城按钮要用城市名（买家没有高德权限，走服务端代查）
+  const geo = useQuery({
+    queryKey: ['buyer-city', buyerLocation?.latitude, buyerLocation?.longitude],
+    // enabled 保证了 buyerLocation 存在；这里显式兜底，避免非空断言
+    queryFn: () =>
+      reverseGeo(buyerLocation?.latitude ?? 0, buyerLocation?.longitude ?? 0),
+    enabled: Boolean(buyerLocation),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const buyerCity = geo.data?.city ?? null;
 
   /** 改筛选一律回第 1 页：否则「第 3 页 + 筛完只剩 1 页」会看到空列表 */
   const patchFilters = useCallback(
@@ -65,6 +94,8 @@ export default function ProductsPage() {
       if ('categoryId' in patch) write('category', patch.categoryId);
       if ('minPrice' in patch) write('min', patch.minPrice);
       if ('maxPrice' in patch) write('max', patch.maxPrice);
+      if ('city' in patch) write('city', patch.city);
+      if ('radiusKm' in patch) write('radius', patch.radiusKm);
       if ('sort' in patch) {
         if (!patch.sort || patch.sort === 'default') next.delete('sort');
         else next.set('sort', patch.sort);
@@ -80,7 +111,14 @@ export default function ProductsPage() {
   }, [setSearchParams]);
 
   const productsQuery = useQuery({
-    queryKey: ['public-products', filters, page],
+    // 买家坐标要进 queryKey：否则定位完成后 key 没变，列表不会用新坐标重算距离
+    queryKey: [
+      'public-products',
+      filters,
+      page,
+      buyerLocation?.latitude,
+      buyerLocation?.longitude,
+    ],
     queryFn: () =>
       listPublicProducts({
         keyword: filters.keyword,
@@ -91,6 +129,11 @@ export default function ProductsPage() {
         max_price_cents:
           filters.maxPrice === undefined ? undefined : filters.maxPrice * 100,
         sort: filters.sort,
+        // 同城 / 半径 / 距离排序：坐标只用于服务端算距离，不会回传
+        city: filters.city,
+        radius_km: filters.radiusKm,
+        buyer_lat: buyerLocation?.latitude,
+        buyer_lng: buyerLocation?.longitude,
         page,
         page_size: PAGE_SIZE,
       }),
@@ -111,6 +154,17 @@ export default function ProductsPage() {
             onReset={resetFilters}
             total={total}
             loading={productsQuery.isLoading}
+            buyerCity={buyerCity}
+            locationState={
+              pending
+                ? 'pending'
+                : buyerLocation
+                  ? 'ready'
+                  : denied
+                    ? 'denied'
+                    : 'idle'
+            }
+            onRequestLocation={request}
           />
 
           {productsQuery.isLoading ? (

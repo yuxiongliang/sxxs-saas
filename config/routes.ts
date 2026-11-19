@@ -324,6 +324,13 @@ export default [
         component: './commerce/products',
       },
       {
+        // 编辑商品改成独立页面（弹窗塞 5 步表单太挤），不进菜单
+        path: '/commerce/products/:id/edit',
+        access: 'canProductManage',
+        component: './commerce/products/edit',
+        hideInMenu: true,
+      },
+      {
         // 分类是平台定的，租户只能看/选；放这里只是让运营知道商品能归哪几类
         path: '/commerce/products/categories',
         name: 'productCategories',
@@ -580,6 +587,16 @@ export default [
     path: '/portal/seller/shop',
     layout: false,
     component: './portal/seller/shop',
+  },
+  {
+    path: '/portal/seller/products/create',
+    layout: false,
+    component: './portal/seller/products/create',
+  },
+  {
+    path: '/portal/seller/products/:id/edit',
+    layout: false,
+    component: './portal/seller/products/edit',
   },
   {
     path: '/portal/seller/products',

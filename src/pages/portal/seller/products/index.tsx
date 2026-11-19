@@ -1,5 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@umijs/max';
 import {
   App,
   Button,
@@ -13,18 +14,10 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
-import ProductEditor, {
-  type ProductWizardAdapter,
-} from '@/pages/commerce/products/components/ProductEditor';
 import {
   changeSellerProductStatus,
-  createSellerProduct,
   deleteSellerProduct,
-  getSellerProduct,
-  listSellerCategories,
   listSellerProducts,
-  saveSellerProductSpecs,
-  updateSellerProduct,
 } from '@/services/commerce/api';
 import type { SellerProductRecord } from '@/services/commerce/types';
 import {
@@ -41,36 +34,12 @@ import SellerShell from '../components/SellerShell';
  * 归属校验在后端（`current_seller()`），所以这里不需要传权限码；
  * 卖家改在售商品会被后端打回待审核，前端只负责提示。
  */
-const sellerAdapter: ProductWizardAdapter = {
-  load: getSellerProduct,
-  categories: () => listSellerCategories(),
-  saveBasic: async (id, payload) => {
-    const body = payload as Parameters<typeof updateSellerProduct>[1];
-    if (id) {
-      const result = await updateSellerProduct(id, body);
-      if (result.bounced_to_review) {
-        // 由调用方的 message 提示，这里只回传
-      }
-      return id;
-    }
-    const created = await createSellerProduct(
-      payload as Parameters<typeof createSellerProduct>[0],
-    );
-    return created.id;
-  },
-  saveSpecs: async (id, payload) => {
-    await saveSellerProductSpecs(id, payload);
-  },
-  // 卖家没有佣金设置与解锁能力：showCommission 默认 false
-};
 
 /** 我的商品：列表 + 新增/编辑（与运营端同一套四步向导）。 */
 export default function SellerProductsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState<SellerProductRecord>();
+  const navigate = useNavigate();
   const [productType, setProductType] = useState<string>();
 
   const products = useQuery({
@@ -152,6 +121,21 @@ export default function SellerProductsPage() {
         ),
     },
     {
+      title: '所在地',
+      width: 150,
+      render: (_, record) => {
+        const location = [record.province, record.city, record.district]
+          .filter(Boolean)
+          .join(' ');
+        return location ? (
+          <span style={{ fontSize: 12 }}>{location}</span>
+        ) : (
+          // 没设所在地 = 不会出现在同城筛选/距离排序里，提醒卖家补
+          <Tag color="orange">未设置</Tag>
+        );
+      },
+    },
+    {
       title: '类型',
       dataIndex: 'product_type',
       width: 110,
@@ -194,10 +178,9 @@ export default function SellerProductsPage() {
           <Button
             type="link"
             size="small"
-            onClick={() => {
-              setEditing(record);
-              setEditOpen(true);
-            }}
+            onClick={() =>
+              navigate(`/portal/seller/products/${record.id}/edit`)
+            }
           >
             编辑
           </Button>
@@ -240,7 +223,7 @@ export default function SellerProductsPage() {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setCreateOpen(true)}
+            onClick={() => navigate('/portal/seller/products/create')}
             data-testid="seller-create-product"
           >
             新增商品
@@ -265,26 +248,6 @@ export default function SellerProductsPage() {
           pagination={false}
         />
       </Card>
-
-      {/* 与运营端「编辑商品」同一套四步向导：类型 → 基础信息 → 规格 → 详情 */}
-      <ProductEditor
-        open={createOpen}
-        mode="create"
-        adapter={sellerAdapter}
-        onClose={() => setCreateOpen(false)}
-        onSaved={refresh}
-      />
-
-      <ProductEditor
-        open={editOpen}
-        productId={editing?.id}
-        adapter={sellerAdapter}
-        onClose={() => {
-          setEditOpen(false);
-          setEditing(undefined);
-        }}
-        onSaved={refresh}
-      />
     </SellerShell>
   );
 }

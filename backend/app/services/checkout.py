@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import Product, ProductSku
 from app.models.seller import Seller, Shop
 from app.services import cart as cart_service
-from app.services import catalog_media
+from app.services import catalog_media, geo
 from app.services import time_control
 from app.services.auth import AuthContext
 
@@ -44,6 +44,8 @@ async def build_preview(
     mode: str,
     sku_id: int | None = None,
     quantity: int = 1,
+    buyer_lat: float | None = None,
+    buyer_lng: float | None = None,
 ) -> dict:
     """`mode='buy'` 用 sku_id+quantity；`mode='cart'` 用购物车里已勾选的行。"""
     if mode == "buy":
@@ -118,6 +120,19 @@ async def build_preview(
                 "delivery_methods": product.delivery_methods or [EXPRESS],
                 "pickup_address": shop.address if shop else None,
                 "pickup_note": shop.pickup_note if shop else None,
+                # 自提门店距离：服务端算（坐标不下发），没定位/没门店坐标就是 None
+                "pickup_distance_m": (
+                    geo.distance_between(
+                        shop.latitude if shop else None,
+                        shop.longitude if shop else None,
+                        float(buyer_lat) if buyer_lat is not None else None,
+                        float(buyer_lng) if buyer_lng is not None else None,
+                    )
+                ),
+                # 商品所在地（取自本次结算的第一件商品；同店多商品以首个为准）
+                "location": geo.location_summary(
+                    product.province, product.city, product.district
+                ),
             },
         )
 

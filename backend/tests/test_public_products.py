@@ -86,6 +86,11 @@ async def test_response_is_whitelisted(client):
         "review_count",
         # 卡片上的热度展示：浏览数（详情页 PV）
         "view_count",
+        # 商品所在地：只给省市区 + 合并地名（**不含**经纬度，坐标不出服务端）
+        "province",
+        "city",
+        "district",
+        "location",
     }
     assert set(item) == allowed
     assert set(item["sku"] or {}) <= {"id", "name", "price_cents", "stock"}

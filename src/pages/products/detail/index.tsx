@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import RichTextViewer from '@/components/RichTextViewer';
+import { useBuyerLocation } from '@/hooks/useBuyerLocation';
 import {
   isComboComplete,
   isSellable,
@@ -68,9 +69,21 @@ export default function ProductDetailPage() {
   // 多规格：每个规格组选中的值（未选全 = 还没确定 SKU）
   const [selected, setSelected] = useState<Record<string, string>>({});
 
+  // 买家定位只用于「距您 x km」：有缓存直接用，没有就静默尝试一次，
+  // 被拒绝也不影响浏览（详情页绝不因此弹权限框挡住内容）
+  const { location: buyerLocation } = useBuyerLocation(true);
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['public-product-detail', productId],
-    queryFn: () => getPublicProductDetail(productId),
+    queryKey: [
+      'public-product-detail',
+      productId,
+      buyerLocation?.latitude,
+      buyerLocation?.longitude,
+    ],
+    queryFn: () =>
+      getPublicProductDetail(productId, {
+        buyer_lat: buyerLocation?.latitude,
+        buyer_lng: buyerLocation?.longitude,
+      }),
     enabled: Number.isFinite(productId),
   });
 

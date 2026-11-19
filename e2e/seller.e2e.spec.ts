@@ -48,7 +48,11 @@ test.describe('seller centre', () => {
     await page.waitForTimeout(4000);
 
     await page.getByTestId('seller-create-product').click();
-    const modal = page.getByRole('dialog', { name: /新建商品/ }).first();
+    // 新建商品也是独立页面（不再弹窗）
+    await expect(page).toHaveURL(/\/portal\/seller\/products\/create/, {
+      timeout: 30_000,
+    });
+    const modal = page.getByTestId('product-wizard');
     await expect(modal).toBeVisible({ timeout: 30_000 });
 
     // 第 1 步：类型
@@ -85,7 +89,10 @@ test.describe('seller centre', () => {
       .locator('button:has-text("保 存"), button:has-text("保存")')
       .first()
       .click();
-    await expect(modal).toBeHidden({ timeout: 30_000 });
+    // 保存后回列表
+    await expect(page).toHaveURL(/\/portal\/seller\/products$/, {
+      timeout: 30_000,
+    });
 
     // 新商品出现在列表里
     await expect(page.getByText(name).first()).toBeVisible({

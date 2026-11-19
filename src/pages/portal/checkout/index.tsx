@@ -24,6 +24,7 @@ import {
 } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useMemo, useState } from 'react';
+import { useBuyerLocation } from '@/hooks/useBuyerLocation';
 import {
   checkoutCart,
   createOrderPayment,
@@ -34,6 +35,7 @@ import {
   queryOrderPayment,
 } from '@/services/commerce/api';
 import { getWallet } from '@/services/wallet/api';
+import { formatDistance } from '@/utils/distance';
 import PortalPlainShell from '../components/PortalPlainShell';
 
 /**
@@ -73,13 +75,24 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
 
+  // 买家定位：用于「自提门店距您 x km」。没定位也能正常下单，只是不显示距离
+  const { location: buyerLocation } = useBuyerLocation(true);
   const preview = useQuery({
-    queryKey: ['checkout-preview', fromCart, skuId, quantity],
+    queryKey: [
+      'checkout-preview',
+      fromCart,
+      skuId,
+      quantity,
+      buyerLocation?.latitude,
+      buyerLocation?.longitude,
+    ],
     queryFn: () =>
       previewCheckout({
         mode: fromCart ? 'cart' : 'buy',
         sku_id: fromCart ? undefined : skuId,
         quantity,
+        buyer_lat: buyerLocation?.latitude,
+        buyer_lng: buyerLocation?.longitude,
       }),
   });
   const addresses = useQuery({
@@ -353,11 +366,27 @@ export default function CheckoutPage() {
                     </Radio.Group>
                   </Space>
                   {deliveryBySeller[group.seller_id] === 'pickup' ? (
-                    <div
-                      style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}
-                    >
-                      自提门店：{group.pickup_address || '卖家未填写'}
-                      {group.pickup_note ? ` · ${group.pickup_note}` : ''}
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                        自提门店：{group.pickup_address || '卖家未填写'}
+                        {formatDistance(group.pickup_distance_m)
+                          ? ` · 距您 ${formatDistance(group.pickup_distance_m)}`
+                          : ''}
+                        {group.pickup_note ? ` · ${group.pickup_note}` : ''}
+                      </div>
+                      {/* 商品所在地与自提门店可能不是一处（多仓/调货）：
+                          超过 5km 就明确提示，避免买家白跑一趟 */}
+                      {group.location && group.pickup_address ? (
+                        (group.pickup_distance_m ?? 0) > 5000 ? (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            style={{ marginTop: 6 }}
+                            title="商品所在地与自提门店不同"
+                            description={`商品所在地：${group.location}。自提门店较远，建议先联系卖家确认备货与调货时间。`}
+                          />
+                        ) : null
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

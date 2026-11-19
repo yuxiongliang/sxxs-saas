@@ -29,6 +29,7 @@ from app.services import category as category_service
 from app.services import finance as finance_service
 from app.services import order as order_service
 from app.services import seller_center as seller_center_service
+from app.services import geo
 from app.services import time_control
 from app.services import wallet as wallet_service
 from app.services.auth import AuthContext
@@ -75,6 +76,12 @@ def _item_dict(item: OrderItem) -> dict:
         "price_cents": item.price_cents,
         "quantity": item.quantity,
         "subtotal_cents": item.subtotal_cents,
+        # 商品所在地快照（下单时冻结）：买家/卖家列表里显示「发货地」
+        "location": geo.location_summary(
+            item.location_province, item.location_city, item.location_district
+        ),
+        "location_city": item.location_city,
+        "location_address": item.location_address,
     }
 
 
@@ -154,6 +161,13 @@ def _product_dict(
         "description_html": product.description_html,
         "status": product.status,
         "main_image": product.main_image,
+        # 商品所在地：编辑页回显 + 列表自查
+        "province": product.province,
+        "city": product.city,
+        "district": product.district,
+        "address": product.address,
+        "latitude": float(product.latitude) if product.latitude is not None else None,
+        "longitude": float(product.longitude) if product.longitude is not None else None,
         "images": product.images or [],
         "video_url": product.video_url,
         # 交付方式：买家能选快递还是自提，列表/详情都要能看出来
@@ -583,6 +597,16 @@ async def save_product_specs(
 # 只有这些字段允许自助改；状态必须走 /status（见 ProductUpdate 注释）。
 PRODUCT_EDITABLE_FIELDS = ("name", "description", "main_image", "video_url", "images")
 
+#: 商品所在地字段：更新时**整组一起写**（见 update_product 注释）
+LOCATION_FIELDS = (
+    "province",
+    "city",
+    "district",
+    "address",
+    "latitude",
+    "longitude",
+)
+
 
 @router.put("/admin/products/{product_id}")
 async def update_product(
@@ -613,6 +637,15 @@ async def update_product(
         )
         product.delivery_methods = cleaned or []
         applied["delivery_methods"] = product.delivery_methods
+    # ---- 商品所在地（LBS）----
+    # 六个字段一起写：只改省市区不清坐标会留下"地址 A + 坐标 B"的脏数据
+    if any(k in data for k in LOCATION_FIELDS):
+        for key in LOCATION_FIELDS:
+            if key in data:
+                value = data[key]
+                # 前端「清除」传空串：统一归一成 NULL
+                setattr(product, key, value if value not in ("",) else None)
+                applied[key] = getattr(product, key)
     # ---- 富文本描述：服务端重新清洗 html，不信任前端传来的 html ----
     if "description_doc" in data or "description_html" in data:
         doc, html, text = rich_text.prepare_payload(

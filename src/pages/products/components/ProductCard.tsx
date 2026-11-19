@@ -1,8 +1,13 @@
-import { ShoppingCartOutlined, ShoppingOutlined } from '@ant-design/icons';
+import {
+  EnvironmentOutlined,
+  ShoppingCartOutlined,
+  ShoppingOutlined,
+} from '@ant-design/icons';
 import { useModel } from '@umijs/max';
 import { App, Button, Card, Tag } from 'antd';
 import type { PublicProduct } from '@/services/commerce/api';
 import { addCartItem } from '@/services/commerce/api';
+import { formatDistance } from '@/utils/distance';
 
 function yuan(cents: number) {
   return (cents / 100).toFixed(2);
@@ -193,6 +198,18 @@ export default function ProductCard({
       >
         <span>已售 {product.sold_count ?? 0}</span>
         <span>浏览 {product.view_count ?? 0}</span>
+        {/* 距离/地名：服务端算好 distance_m；没定位就只显示「省 市」 */}
+        {product.distance_m !== null &&
+        product.distance_m !== undefined &&
+        formatDistance(product.distance_m) ? (
+          <span data-testid="product-card-distance">
+            <EnvironmentOutlined /> 距您 {formatDistance(product.distance_m)}
+          </span>
+        ) : product.location ? (
+          <span data-testid="product-card-location">
+            <EnvironmentOutlined /> {product.location}
+          </span>
+        ) : null}
       </div>
 
       {showActions ? (

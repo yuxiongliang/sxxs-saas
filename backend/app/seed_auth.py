@@ -281,7 +281,15 @@ ROLE_PERMISSIONS = {
 
 
 # 高德地图：除 admin/platform_admin（自动拿到全部权限）外，管理端角色都需要这两项。
-for _amap_role in ("tenant_owner", "tenant_admin", "operator", "viewer"):
+# 卖家也要能用地地图选点（商品所在地/自提门店定位），所以 seller_* 也算进管理端角色
+for _amap_role in (
+    "tenant_owner",
+    "tenant_admin",
+    "operator",
+    "viewer",
+    "seller_owner",
+    "seller_staff",
+):
     for _amap_code in ("setting:amap", "amap:read"):
         if _amap_role in ROLE_PERMISSIONS and _amap_code not in ROLE_PERMISSIONS[_amap_role]:
             ROLE_PERMISSIONS[_amap_role].append(_amap_code)

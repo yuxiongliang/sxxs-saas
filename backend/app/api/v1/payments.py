@@ -145,6 +145,9 @@ async def checkout_preview(
             mode=str(payload.get("mode") or "buy"),
             sku_id=payload.get("sku_id"),
             quantity=int(payload.get("quantity") or 1),
+            # 买家坐标只用来算「自提门店距您多远」，不落库、不回传
+            buyer_lat=payload.get("buyer_lat"),
+            buyer_lng=payload.get("buyer_lng"),
         )
     )
 
