@@ -179,6 +179,18 @@ export default function LocationPicker({
               config={amap.data}
               height={240}
               onPick={(lng, lat) => void pickOnMap(lng, lat)}
+              // 受控：点「使用我的位置」/ 地图点选后，地图跟着走并显示标注
+              center={
+                current.longitude != null && current.latitude != null
+                  ? [Number(current.longitude), Number(current.latitude)]
+                  : null
+              }
+              marker={
+                current.longitude != null && current.latitude != null
+                  ? [Number(current.longitude), Number(current.latitude)]
+                  : null
+              }
+              markerTitle="商品所在地"
             />
           </div>
         </div>

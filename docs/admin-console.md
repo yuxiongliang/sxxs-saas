@@ -895,6 +895,12 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 录入组件 `components/LocationPicker`：省市区级联 + 地图点选 + 「使用我的位置」（浏览器定位 →
 服务端逆地理编码）。**高德未配置时自动降级**为「省市区 + 地址」，不影响保存。
 
+地图是**受控**的（`AMapView` 的 `center` / `marker` props）：
+点「使用我的位置」或在图上点选后，地图会 `setZoomAndCenter` 移到该点并在那里显示标注，
+不会停在 `defaultCenter`。注意地图是异步加载的：**创建完成前到达的 center/marker
+必须暂存并在就绪后补一次**（`mapReady`），否则会出现「坐标变了地图不动」。
+表单里这块放在**主图/视频下方**（先看货，再标位置）。
+
 口径（必须遵守）：
 
 1. **坐标不出公开接口**：列表/详情只返回 `province/city/district/location` 与 `distance_m`

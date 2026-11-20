@@ -739,15 +739,6 @@ export default function ProductWizard({
               }))}
             />
           </Form.Item>
-          {/* 商品所在地：同城筛选 + 买家「距您 x km」都靠它。
-              必须注册成 Form.Item（不注册就会出现"选了地址保存后是空的"那个老坑） */}
-          <Form.Item
-            label="商品所在地"
-            name="location"
-            extra="用于买家按「同城」筛选与计算距离；买家只能看到省市区，详细地址不公开"
-          >
-            <LocationPicker />
-          </Form.Item>
           {/* 佣金是运营端概念：卖家中心不显示（后端也会忽略这个字段） */}
           {showCommission ? (
             <Form.Item
@@ -787,6 +778,15 @@ export default function ProductWizard({
               <MediaField kind="video" title="选择商品视频" boxSize={104} />
             </Form.Item>
           </Flex>
+          {/* 商品所在地：同城筛选 + 买家「距您 x km」都靠它。
+              必须注册成 Form.Item（不注册就会出现"选了地址保存后是空的"那个老坑） */}
+          <Form.Item
+            label="商品所在地"
+            name="location"
+            extra="用于买家按「同城」筛选与计算距离；买家只能看到省市区，详细地址不公开"
+          >
+            <LocationPicker />
+          </Form.Item>
         </div>
       </Form>
 
