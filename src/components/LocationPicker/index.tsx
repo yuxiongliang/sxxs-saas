@@ -1,11 +1,25 @@
 import { AimOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, Space, Spin, Typography } from 'antd';
-import { useState } from 'react';
+import {
+  Alert,
+  App,
+  AutoComplete,
+  Button,
+  Form,
+  Space,
+  Spin,
+  Typography,
+} from 'antd';
+import { useRef, useState } from 'react';
 import AMapView from '@/components/AMapView';
 import RegionCascader from '@/components/RegionCascader';
 import { cacheBuyerLocation } from '@/hooks/useBuyerLocation';
-import { getAMapFrontendConfig, regeo } from '@/services/amap/api';
+import {
+  type AMapPlace,
+  getAMapFrontendConfig,
+  regeo,
+  searchPlace,
+} from '@/services/amap/api';
 
 /**
  * 商品/门店所在地选择器（表单控件）。
@@ -40,6 +54,10 @@ export default function LocationPicker({
 }) {
   const { message } = App.useApp();
   const [locating, setLocating] = useState(false);
+  // POI 联想：定位常偏几十米（小区门口 vs 3 号门），让卖家直接搜具体地点
+  const [poiOptions, setPoiOptions] = useState<AMapPlace[]>([]);
+  const [poiLoading, setPoiLoading] = useState(false);
+  const poiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const current = value ?? {};
 
   const amap = useQuery({
@@ -111,6 +129,39 @@ export default function LocationPicker({
     }
   };
 
+  /** 输入防抖搜索 POI（≥2 个字才查，避免每个字符都打一次高德） */
+  const searchPoi = (keywords: string) => {
+    if (poiTimer.current) clearTimeout(poiTimer.current);
+    if (keywords.trim().length < 2) {
+      setPoiOptions([]);
+      return;
+    }
+    poiTimer.current = setTimeout(() => {
+      setPoiLoading(true);
+      searchPlace(keywords.trim(), current.city)
+        .then((rows) => setPoiOptions(rows))
+        .catch(() => setPoiOptions([]))
+        .finally(() => setPoiLoading(false));
+    }, 350);
+  };
+
+  /** 选中某个 POI：地址、省市区、坐标一起回填，地图跟着跳过去 */
+  const pickPoi = (place: AMapPlace) => {
+    const [lng, lat] = place.location.split(',').map((item) => Number(item));
+    const label = place.address
+      ? `${place.name} · ${place.address}`
+      : place.name;
+    patch({
+      address: label,
+      province: place.province || current.province,
+      city: place.city || current.city,
+      district: place.district || current.district,
+      latitude: Number.isFinite(lat) ? lat : current.latitude,
+      longitude: Number.isFinite(lng) ? lng : current.longitude,
+    });
+    setPoiOptions([]);
+  };
+
   const region = [current.province, current.city, current.district].filter(
     Boolean,
   ) as string[];
@@ -153,13 +204,48 @@ export default function LocationPicker({
       <Form.Item
         label="详细地址 / 地标"
         style={{ marginBottom: 0 }}
-        extra="买家只会看到「省 市 区」，详细地址仅你和平台可见"
+        extra="买家只会看到「省 市 区」，详细地址仅你和平台可见。输入 2 个字以上会给出周边地点建议，选中即精确定位"
       >
-        <Input
+        <AutoComplete
           value={current.address}
           placeholder="如：椒江区 XX 路 XX 号（选填）"
           allowClear
-          onChange={(event) => patch({ address: event.target.value })}
+          // 高德没配置时没有联想，退化成普通输入框（仍可手填）
+          options={
+            mapReady
+              ? poiOptions.map((place) => ({
+                  value: place.address
+                    ? `${place.name} · ${place.address}`
+                    : place.name,
+                  label: (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <span style={{ fontWeight: 600 }}>{place.name}</span>
+                      <span
+                        style={{
+                          color: 'var(--ant-color-text-tertiary)',
+                          fontSize: 12,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {place.address || place.city}
+                      </span>
+                    </div>
+                  ),
+                  place,
+                }))
+              : undefined
+          }
+          onChange={(text) => {
+            patch({ address: text });
+            searchPoi(text);
+          }}
+          onSelect={(_text, option) => {
+            const place = (option as { place?: AMapPlace }).place;
+            if (place) pickPoi(place);
+          }}
+          notFoundContent={poiLoading ? <Spin size="small" /> : null}
+          data-testid="location-address-input"
         />
       </Form.Item>
 

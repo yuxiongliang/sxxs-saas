@@ -94,6 +94,55 @@ async def geocode(web_key: str, address: str, city: str = "") -> list[dict[str, 
     ]
 
 
+async def place_text(
+    web_key: str, keywords: str, city: str = "", offset: int = 10
+) -> list[dict[str, Any]]:
+    """POI 关键词搜索（周边可选地点）。
+
+    为什么需要它：浏览器定位只给一个坐标，逆地理出来的地址常有偏差
+    （定位到小区门口/隔壁楼）。卖家真正想标的是"XX 大厦 3 号门"这种**具体地点**，
+    所以地址输入框要给 POI 候选，选中即拿到该 POI 的精确坐标。
+
+    高德 `/v3/place/text` 返回 pois：name / address / location("lng,lat") /
+    pname / cityname / adname / adcode。
+    """
+    payload = await _call(
+        web_key,
+        "/v3/place/text",
+        {
+            "keywords": keywords,
+            # city 只做**加权**（不传 citylimit=true），跨城搜也能出结果
+            "city": city,
+            "citylimit": "false",
+            "offset": offset,
+            "page": 1,
+            "extensions": "base",
+        },
+        "place",
+    )
+    pois = payload.get("pois") or []
+    result: list[dict[str, Any]] = []
+    for item in pois:
+        if not isinstance(item, dict):
+            continue
+        location = _s(item.get("location"))
+        if not location:
+            continue
+        result.append(
+            {
+                "name": _s(item.get("name")),
+                "address": _s(item.get("address")),
+                # "lng,lat"：前端拆分后写进 latitude/longitude
+                "location": location,
+                "province": _s(item.get("pname")),
+                "city": _s(item.get("cityname")),
+                "district": _s(item.get("adname")),
+                "adcode": _s(item.get("adcode")),
+            }
+        )
+    return result
+
+
 async def regeo(
     web_key: str, longitude: float, latitude: float, extensions: str = "base"
 ) -> dict[str, Any]:

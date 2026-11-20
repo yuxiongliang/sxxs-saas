@@ -60,6 +60,34 @@ async def geocode(
     return ok(result)
 
 
+@router.get("/place")
+async def place_search(
+    keywords: str = Query(min_length=2, max_length=100),
+    city: str = Query(default="", max_length=64),
+    context: AuthContext = Depends(require_permission("amap:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """POI 关键词搜索：地址输入框的「周边可选地点」。
+
+    查不到/没配 key 都返回空列表而不是 500 —— 联想失败不该挡住卖家填地址
+    （地址文本照样能手填）。
+    """
+    config = await _amap_config(db, context.tenant.id)
+    try:
+        result = await amap_service.place_text(
+            config.get("webKey", ""), keywords, city
+        )
+    except amap_service.AmapError as exc:
+        # 记日志便于排查配额/key 问题；对前端降级成"没有建议"
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "amap_place_failed", infocode=exc.infocode, info=exc.info
+        )
+        return ok([])
+    return ok(result)
+
+
 @router.get("/regeo")
 async def regeo(
     lng: float = Query(ge=-180, le=180),

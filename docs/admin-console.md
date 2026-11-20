@@ -901,6 +901,12 @@ const TYPE_FLOWS = { physical: ['basic', 'specs', 'detail'] };
 必须暂存并在就绪后补一次**（`mapReady`），否则会出现「坐标变了地图不动」。
 表单里这块放在**主图/视频下方**（先看货，再标位置）。
 
+**地址输入框是 POI 联想**：定位常常偏几十米（小区门口 vs 3 号门），所以输入 ≥2 个字
+会调 `GET /amap/place?keywords=&city=`（服务端用租户/平台 webKey 调高德
+`/v3/place/text`）给出周边地点候选；选中后一次回填**地址文本 + 省市区 + 坐标**，
+地图随即跳到该点。查不到或没配 key 时接口返回空列表（前端降级为普通输入），
+不能让联想失败挡住卖家填地址。
+
 口径（必须遵守）：
 
 1. **坐标不出公开接口**：列表/详情只返回 `province/city/district/location` 与 `distance_m`

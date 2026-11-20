@@ -87,6 +87,27 @@ export async function getAMapFrontendConfig() {
 }
 
 /** 逆地理编码：坐标 -> 地址。 */
+/** POI 关键词搜索：地址输入框的「周边可选地点」候选。 */
+export interface AMapPlace {
+  name: string;
+  address: string;
+  /** "lng,lat"（高德格式，注意经度在前） */
+  location: string;
+  province: string;
+  city: string;
+  district: string;
+  adcode: string;
+}
+
+export async function searchPlace(keywords: string, city?: string) {
+  return unwrap<AMapPlace[]>(
+    request('/api/v1/amap/place', {
+      method: 'GET',
+      params: { keywords, city: city || undefined },
+    }),
+  );
+}
+
 export async function regeo(lng: number, lat: number) {
   return unwrap<AMapRegeo>(
     request('/api/v1/amap/regeo', { method: 'GET', params: { lng, lat } }),
