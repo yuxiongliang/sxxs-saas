@@ -1,4 +1,9 @@
-import { ShoppingOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
+import {
+  EnvironmentOutlined,
+  ShoppingOutlined,
+  StarFilled,
+  StarOutlined,
+} from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntl, useNavigate, useParams, useSearchParams } from '@umijs/max';
 import {
@@ -30,6 +35,7 @@ import {
   getPublicProductDetail,
   removeFavorite,
 } from '@/services/commerce/api';
+import { formatDistance } from '@/utils/distance';
 import {
   DELIVERY_METHOD,
   PRODUCT_TYPE,
@@ -289,6 +295,29 @@ export default function ProductDetailPage() {
                   >
                     {data.name}
                   </Typography.Title>
+                  {/* 商品所在地 / 距您多远：放在标题正下方（买家第一眼要看"在哪、多远"）。
+                      距离由服务端算（坐标不下发）；两者都没有时不显示，别占一行空位 */}
+                  {data.distance_m != null || data.location ? (
+                    <Typography.Text
+                      type="secondary"
+                      style={{
+                        display: 'block',
+                        marginTop: -6,
+                        marginBottom: 10,
+                        fontSize: 13,
+                      }}
+                      data-testid="product-detail-location"
+                    >
+                      <EnvironmentOutlined />{' '}
+                      {formatDistance(data.distance_m)
+                        ? `距您 ${formatDistance(data.distance_m)}`
+                        : null}
+                      {formatDistance(data.distance_m) && data.location
+                        ? ' · '
+                        : null}
+                      {data.location ?? null}
+                    </Typography.Text>
+                  ) : null}
                   <Space
                     orientation="vertical"
                     size={14}
